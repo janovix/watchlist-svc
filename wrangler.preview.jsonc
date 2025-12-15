@@ -1,0 +1,23 @@
+{
+	"compatibility_date": "2025-10-08",
+	"main": "src/index.ts",
+	"name": "backend-template",
+	"upload_source_maps": true,
+	"workers_dev": true,
+	"observability": {
+		"enabled": true,
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "backend-template-preview",
+			"database_id": "f32ac4a8-38e0-4cdb-afba-908d999afae4",
+		},
+	],
+	"kv_namespaces": [
+		{
+			"binding": "TASKS_KV",
+			"id": "b13d5908c4634af18b44c54936fe464b",
+		},
+	],
+}

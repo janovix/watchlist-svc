@@ -1,0 +1,78 @@
+{
+	"name": "watchlist-svc",
+	"version": "1.1.0",
+	"description": "Complete backend API template using Hono + Chanfana + D1 + Vitest.",
+	"cloudflare": {
+		"label": "Backend OpenAPI Template",
+		"products": [
+			"Workers",
+			"D1"
+		],
+		"categories": [
+			"storage"
+		],
+		"docs_url": "https://chanfana.com",
+		"preview_icon_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/1b2805d9-e7fb-4576-5176-6b409e251800/public",
+		"preview_image_url": "https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/cbde46cf-20fa-4548-7f70-1ae8c2f48900/preview",
+		"publish": true
+	},
+	"dependencies": {
+		"chanfana": "2.8.3",
+		"hono": "4.10.7",
+		"zod": "3.25.67"
+	},
+	"devDependencies": {
+		"@cloudflare/vitest-pool-workers": "0.10.11",
+		"@commitlint/cli": "19.8.1",
+		"@commitlint/config-conventional": "19.8.1",
+		"@types/node": "24.10.1",
+		"@vitest/coverage-istanbul": "3.2.4",
+		"@eslint/js": "9.17.0",
+		"eslint": "9.17.0",
+		"eslint-config-prettier": "10.1.8",
+		"globals": "15.14.0",
+		"husky": "9.1.7",
+		"lint-staged": "15.2.11",
+		"prettier": "3.4.2",
+		"semantic-release": "24.2.1",
+		"@semantic-release/changelog": "6.0.3",
+		"@semantic-release/commit-analyzer": "13.0.1",
+		"@semantic-release/git": "10.0.1",
+		"@semantic-release/github": "11.0.6",
+		"@semantic-release/npm": "12.0.2",
+		"@semantic-release/release-notes-generator": "14.1.0",
+		"typescript-eslint": "8.49.0",
+		"typescript": "5.9.3",
+		"vitest": "3.2.4",
+		"wrangler": "4.51.0"
+	},
+	"private": true,
+	"scripts": {
+		"cf-typegen": "wrangler types",
+		"deploy": "wrangler deploy",
+		"deploy:prod": "wrangler deploy --config wrangler.prod.jsonc",
+		"deploy:dev": "wrangler deploy --config wrangler.jsonc",
+		"dev": "npm run seedLocalDb && wrangler dev",
+		"format": "prettier . --write",
+		"format:check": "prettier . --check",
+		"lint": "eslint .",
+		"predeploy": "wrangler d1 migrations apply DB --remote",
+		"predeploy:prod": "wrangler d1 migrations apply DB --remote --config wrangler.prod.jsonc",
+		"predeploy:dev": "wrangler d1 migrations apply DB --remote --config wrangler.jsonc",
+		"predeploy:preview": "wrangler d1 migrations apply DB --remote --config wrangler.preview.jsonc",
+		"versions:upload": "node ./scripts/versions-upload.mjs",
+		"prepare": "husky",
+		"schema": "npx chanfana",
+		"seedLocalDb": "wrangler d1 migrations apply DB --local",
+		"release": "semantic-release",
+		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
+		"vitest": "vitest --config tests/vitest.config.mts",
+		"vitest:coverage": "vitest run --coverage --config tests/vitest.config.mts",
+		"test": "npm run vitest"
+	},
+	"lint-staged": {
+		"**/*.{js,cjs,mjs,ts,tsx,cts,mts,json,md,yaml,yml}": [
+			"prettier --write"
+		]
+	}
+}
