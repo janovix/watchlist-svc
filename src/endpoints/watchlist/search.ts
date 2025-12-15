@@ -98,7 +98,9 @@ export class SearchEndpoint extends OpenAPIRoute {
 		});
 
 		// Create a map for quick lookup
-		const targetMap = new Map(targets.map((t) => [t.id, t]));
+		const targetMap = new Map(
+			targets.map((t: (typeof targets)[number]) => [t.id, t]),
+		);
 
 		// Combine results
 		const matches = vectorizeResults.matches
@@ -106,27 +108,29 @@ export class SearchEndpoint extends OpenAPIRoute {
 				const target = targetMap.get(match.id);
 				if (!target) return null;
 
+				const targetData = {
+					id: target.id,
+					schema: target.schema,
+					name: target.name,
+					aliases: parseJsonField<string[]>(target.aliases),
+					birthDate: target.birthDate,
+					countries: parseJsonField<string[]>(target.countries),
+					addresses: parseJsonField<string[]>(target.addresses),
+					identifiers: parseJsonField<string[]>(target.identifiers),
+					sanctions: parseJsonField<string[]>(target.sanctions),
+					phones: parseJsonField<string[]>(target.phones),
+					emails: parseJsonField<string[]>(target.emails),
+					programIds: parseJsonField<string[]>(target.programIds),
+					dataset: target.dataset,
+					firstSeen: target.firstSeen,
+					lastSeen: target.lastSeen,
+					lastChange: target.lastChange,
+					createdAt: target.createdAt.toISOString(),
+					updatedAt: target.updatedAt.toISOString(),
+				};
+
 				return {
-					target: {
-						id: target.id,
-						schema: target.schema,
-						name: target.name,
-						aliases: parseJsonField<string[]>(target.aliases),
-						birthDate: target.birthDate,
-						countries: parseJsonField<string[]>(target.countries),
-						addresses: parseJsonField<string[]>(target.addresses),
-						identifiers: parseJsonField<string[]>(target.identifiers),
-						sanctions: parseJsonField<string[]>(target.sanctions),
-						phones: parseJsonField<string[]>(target.phones),
-						emails: parseJsonField<string[]>(target.emails),
-						programIds: parseJsonField<string[]>(target.programIds),
-						dataset: target.dataset,
-						firstSeen: target.firstSeen,
-						lastSeen: target.lastSeen,
-						lastChange: target.lastChange,
-						createdAt: target.createdAt.toISOString(),
-						updatedAt: target.updatedAt.toISOString(),
-					},
+					target: targetData,
 					score: match.score || 0,
 				};
 			})

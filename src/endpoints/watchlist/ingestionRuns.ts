@@ -37,7 +37,7 @@ export class IngestionRunsListEndpoint extends OpenAPIRoute {
 
 		return {
 			success: true,
-			result: runs.map((run) => ({
+			result: runs.map((run: (typeof runs)[number]) => ({
 				id: run.id,
 				sourceUrl: run.sourceUrl,
 				status: run.status as "running" | "completed" | "failed",
