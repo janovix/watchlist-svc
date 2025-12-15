@@ -5,6 +5,9 @@ if (process.env.WORKERS_CI_BRANCH === "main") {
 	process.exit(0);
 }
 
+// Generate Prisma client before build
+execSync("pnpm exec prisma generate", { stdio: "inherit" });
+
 execSync("pnpm run predeploy:preview", { stdio: "inherit" });
 execSync("wrangler versions upload --config wrangler.preview.jsonc", {
 	stdio: "inherit",
