@@ -1,70 +1,93 @@
-# OpenAPI Template
+# Watchlist Ingestion + Search Service
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/algtools/backend-template)
+Watchlist ingestion and search service using Hono + Chanfana + D1 + Vectorize.
 
-<!-- dash-content-start -->
+## Features
 
-This is a Cloudflare Worker with OpenAPI 3.1 Auto Generation and Validation using [chanfana](https://github.com/cloudflare/chanfana) and [Hono](https://github.com/honojs/hono).
-
-This is an example project made to be used as a quick start into building OpenAPI compliant Workers that generates the
-`openapi.json` schema automatically from code and validates the incoming request to the defined parameters or request body.
-
-This template includes various endpoints, a D1 database, and integration tests using [Vitest](https://vitest.dev/) as examples. In endpoints, you will find [chanfana D1 AutoEndpoints](https://chanfana.com/endpoints/auto/d1) and a [normal endpoint](https://chanfana.com/endpoints/defining-endpoints) to serve as examples for your projects.
-
-Besides being able to see the OpenAPI schema (openapi.json) in the browser, you can also extract the schema locally no hassle by running this command `npm run schema`.
-
-<!-- dash-content-end -->
-
-> [!IMPORTANT]
-> When using C3 to create this project, select "no" when it asks if you want to deploy. You need to follow this project's [setup steps](https://github.com/cloudflare/templates/tree/main/openapi-template#setup-steps) before deploying.
-
-## Getting Started
-
-Outside of this repo, you can start a new project with this template using [C3](https://developers.cloudflare.com/pages/get-started/c3/) (the `create-cloudflare` CLI):
-
-```bash
-npm create cloudflare@latest -- --template=cloudflare/templates/openapi-template
-```
-
-A live public deployment of this template is available at [https://openapi-template.templates.workers.dev](https://openapi-template.templates.workers.dev)
+- CSV ingestion with idempotent upsert
+- Semantic search using Cloudflare Vectorize
+- Vector indexing with automatic sync
+- Admin endpoints for ingestion and reindexing
+- OpenAPI documentation
 
 ## Setup Steps
 
-1. Install the project dependencies with a package manager of your choice:
+1. Install dependencies:
+
    ```bash
-   npm install
+   pnpm install
    ```
-2. Create a [D1 database](https://developers.cloudflare.com/d1/get-started/) with the name "openapi-template-db":
+
+2. Create D1 databases for each environment:
+
    ```bash
-   npx wrangler d1 create openapi-template-db
+   # Dev (already configured in wrangler.jsonc)
+   # Preview (already configured in wrangler.preview.jsonc)
+   # Prod (already configured in wrangler.prod.jsonc)
    ```
-   ...and update the `database_id` field in `wrangler.json` with the new database ID.
-3. Run the following db migration to initialize the database (notice the `migrations` directory in this project):
+
+3. Create Vectorize indexes:
+
    ```bash
-   npx wrangler d1 migrations apply DB --remote
+   # Dev index
+   wrangler vectorize create watchlist-dev --dimensions=768 --metric=cosine --description="Watchlist semantic search index for dev"
+
+   # Preview index
+   wrangler vectorize create watchlist-preview --dimensions=768 --metric=cosine --description="Watchlist semantic search index for preview"
+
+   # Prod index
+   wrangler vectorize create watchlist --dimensions=768 --metric=cosine --description="Watchlist semantic search index for production"
    ```
-4. Deploy the project!
+
+4. Run migrations:
+
    ```bash
-   npx wrangler deploy
+   pnpm run seedLocalDb  # For local development
+   pnpm run predeploy:dev  # For remote dev
    ```
-5. Monitor your worker
+
+5. Generate Prisma client:
+
    ```bash
-   npx wrangler tail
+   pnpm exec prisma generate
    ```
+
+6. Start development server:
+   ```bash
+   pnpm run dev
+   ```
+
+## API Endpoints
+
+- `GET /health` - Health check
+- `POST /search` - Semantic search for watchlist targets
+- `GET /targets/:id` - Get target by ID
+- `GET /ingestion/runs` - List ingestion runs
+- `GET /ingestion/runs/:runId` - Get ingestion run details
+- `POST /admin/ingest` - Trigger CSV ingestion (requires ADMIN_API_KEY)
+- `POST /admin/reindex` - Reindex all vectors (requires ADMIN_API_KEY)
 
 ## Testing
 
-This template includes integration tests using [Vitest](https://vitest.dev/). To run the tests locally:
+Run tests with coverage:
 
 ```bash
-npm run test
+pnpm run test
+pnpm run vitest:coverage
 ```
 
-Test files are located in the `tests/` directory, with examples demonstrating how to test your endpoints and database interactions.
+## Deployment
 
-## Project structure
+Deploy to different environments:
 
-1. Your main router is defined in `src/index.ts`.
-2. Each endpoint has its own file in `src/endpoints/`.
-3. Integration tests are located in the `tests/` directory.
-4. For more information read the [chanfana documentation](https://chanfana.com/), [Hono documentation](https://hono.dev/docs), and [Vitest documentation](https://vitest.dev/guide/).
+```bash
+pnpm run deploy:dev      # Deploy to dev
+pnpm run deploy:prod     # Deploy to production
+```
+
+## Ingestion
+
+Ingest CSV files via GitHub Actions workflow or admin endpoint:
+
+- GitHub Actions: Use the manual workflow with `csv_url` input
+- Admin endpoint: `POST /admin/ingest` with `x-admin-api-key` header
