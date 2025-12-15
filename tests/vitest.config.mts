@@ -38,6 +38,10 @@ export default defineWorkersConfig({
 				singleWorker: true,
 				wrangler: {
 					configPath: "../wrangler.jsonc",
+					experimental: {
+						disableDevRegistry: true,
+						testMode: true,
+					},
 				},
 				miniflare: {
 					compatibilityFlags: ["experimental", "nodejs_compat"],

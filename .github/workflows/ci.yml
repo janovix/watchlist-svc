@@ -39,7 +39,12 @@ jobs:
       - name: Generate Prisma Client
         if: ${{ matrix.name == 'vitest-coverage' || matrix.name == 'typecheck' }}
         run: pnpm exec prisma generate
-      - run: ${{ matrix.cmd }}
+      - name: Run checks
+        env:
+          WRANGLER_LOCAL: "true"
+          CLOUDFLARE_ACCOUNT_ID: ""
+          CLOUDFLARE_API_TOKEN: ""
+        run: ${{ matrix.cmd }}
       - name: Upload coverage artifact
         if: ${{ matrix.name == 'vitest-coverage' }}
         uses: actions/upload-artifact@v4
