@@ -1,7 +1,7 @@
 {
 	"compatibility_date": "2025-10-08",
 	"main": "src/index.ts",
-	"name": "backend-template",
+	"name": "watchlist-svc-preview",
 	"upload_source_maps": true,
 	"workers_dev": true,
 	"observability": {
@@ -16,8 +16,14 @@
 	],
 	"kv_namespaces": [
 		{
-			"binding": "TASKS_KV",
+			"binding": "WATCHLIST_KV",
 			"id": "7671b1f049bc46a4b7534fa6d73ddd73",
+		},
+	],
+	"vectorize": [
+		{
+			"binding": "WATCHLIST_VECTORIZE",
+			"index_name": "watchlist-preview",
 		},
 	],
 }

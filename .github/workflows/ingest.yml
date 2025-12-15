@@ -1,0 +1,114 @@
+name: Manual CSV Ingestion
+
+on:
+  workflow_dispatch:
+    inputs:
+      csv_url:
+        description: "CSV URL to ingest"
+        required: true
+        type: string
+      environment:
+        description: "Environment to ingest into"
+        required: true
+        type: choice
+        options:
+          - dev
+          - preview
+          - prod
+        default: dev
+      reindex_all:
+        description: "Reindex all vectors (not just changed ones)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    name: Ingest CSV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run typecheck
+        run: pnpm run typecheck
+
+      - name: Run tests
+        run: pnpm run test
+
+      - name: Build
+        run: pnpm run build || echo "Build step not defined, skipping"
+
+      - name: Setup Cloudflare Wrangler
+        uses: cloudflare/setup-wrangler@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      - name: Determine config file
+        id: config
+        run: |
+          if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
+            echo "config_file=wrangler.prod.jsonc" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.environment }}" == "preview" ]; then
+            echo "config_file=wrangler.preview.jsonc" >> $GITHUB_OUTPUT
+          else
+            echo "config_file=wrangler.jsonc" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger ingestion via admin endpoint
+        env:
+          ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+        run: |
+          if [ -z "$WORKER_URL" ]; then
+            echo "Error: WORKER_URL secret not set"
+            echo "Please set the deployed worker URL in repository secrets"
+            exit 1
+          fi
+
+          if [ -z "$ADMIN_API_KEY" ]; then
+            echo "Error: ADMIN_API_KEY secret not set"
+            echo "Please set the admin API key in repository secrets"
+            exit 1
+          fi
+
+          echo "Triggering ingestion..."
+          response=$(curl -s -w "\n%{http_code}" -X POST "$WORKER_URL/admin/ingest" \
+            -H "Content-Type: application/json" \
+            -H "x-admin-api-key: $ADMIN_API_KEY" \
+            -d "{
+              \"csvUrl\": \"${{ github.event.inputs.csv_url }}\",
+              \"reindexAll\": ${{ github.event.inputs.reindex_all }}
+            }")
+
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "Ingestion started successfully:"
+            echo "$body" | jq .
+          else
+            echo "Error: HTTP $http_code"
+            echo "$body"
+            exit 1
+          fi
+
+      - name: Wait for ingestion to complete (optional)
+        if: false # Set to true if you want to wait and check status
+        run: |
+          echo "Note: Ingestion runs asynchronously. Check the /ingestion/runs endpoint for status."

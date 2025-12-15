@@ -15,8 +15,14 @@
 	],
 	"kv_namespaces": [
 		{
-			"binding": "TASKS_KV",
+			"binding": "WATCHLIST_KV",
 			"id": "c78007eeea624b8cad56346046d892ad",
+		},
+	],
+	"vectorize": [
+		{
+			"binding": "WATCHLIST_VECTORIZE",
+			"index_name": "watchlist",
 		},
 	],
 }

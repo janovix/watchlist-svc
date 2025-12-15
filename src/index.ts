@@ -1,10 +1,19 @@
 import { ApiException, fromHono } from "chanfana";
 import { Hono } from "hono";
-import { tasksRouter } from "./endpoints/tasks/router";
 import { ContentfulStatusCode } from "hono/utils/http-status";
-import { DummyEndpoint } from "./endpoints/dummyEndpoint";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
+import { HealthEndpoint } from "./endpoints/watchlist/health";
+import { SearchEndpoint } from "./endpoints/watchlist/search";
+import { TargetReadEndpoint } from "./endpoints/watchlist/targetRead";
+import {
+	IngestionRunsListEndpoint,
+	IngestionRunReadEndpoint,
+} from "./endpoints/watchlist/ingestionRuns";
+import {
+	AdminIngestEndpoint,
+	AdminReindexEndpoint,
+} from "./endpoints/watchlist/adminIngest";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -61,11 +70,14 @@ app.get("/docsz", (c) => {
 	return c.html(getScalarHtml(appMeta));
 });
 
-// Register Tasks Sub router
-openapi.route("/tasks", tasksRouter);
-
-// Register other endpoints
-openapi.post("/dummy/:slug", DummyEndpoint);
+// Register watchlist endpoints
+openapi.get("/health", HealthEndpoint);
+openapi.post("/search", SearchEndpoint);
+openapi.get("/targets/:id", TargetReadEndpoint);
+openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
+openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
+openapi.post("/admin/ingest", AdminIngestEndpoint);
+openapi.post("/admin/reindex", AdminReindexEndpoint);
 
 // Export the Hono app
 export default app;

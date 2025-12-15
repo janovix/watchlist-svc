@@ -1,0 +1,809 @@
+{
+	"openapi": "3.1.0",
+	"info": {
+		"title": "watchlist-svc",
+		"version": "1.1.0",
+		"description": "Watchlist ingestion + search service using Hono + Chanfana + D1 + Vectorize."
+	},
+	"components": {
+		"schemas": {},
+		"parameters": {}
+	},
+	"paths": {
+		"/health": {
+			"get": {
+				"tags": ["Health"],
+				"summary": "Health check endpoint",
+				"operationId": "health",
+				"responses": {
+					"200": {
+						"description": "Service is healthy",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"result": {
+											"type": "object",
+											"properties": {
+												"ok": {
+													"type": "boolean"
+												},
+												"timestamp": {
+													"type": "string",
+													"format": "date-time"
+												}
+											},
+											"required": ["ok", "timestamp"]
+										}
+									},
+									"required": ["success", "result"]
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/search": {
+			"post": {
+				"tags": ["Search"],
+				"summary": "Semantic search for watchlist targets",
+				"operationId": "searchTargets",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"query": {
+										"type": "string",
+										"minLength": 1
+									},
+									"schema": {
+										"type": "string"
+									},
+									"dataset": {
+										"type": "string"
+									},
+									"country": {
+										"type": "string"
+									},
+									"programId": {
+										"type": "string"
+									},
+									"topK": {
+										"type": "integer",
+										"minimum": 1,
+										"maximum": 100,
+										"default": 10
+									}
+								},
+								"required": ["query"]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Search results",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"result": {
+											"type": "object",
+											"properties": {
+												"matches": {
+													"type": "array",
+													"items": {
+														"type": "object",
+														"properties": {
+															"target": {
+																"type": "object",
+																"properties": {
+																	"id": {
+																		"type": "string"
+																	},
+																	"schema": {
+																		"type": ["string", "null"]
+																	},
+																	"name": {
+																		"type": ["string", "null"]
+																	},
+																	"aliases": {
+																		"type": ["array", "null"],
+																		"items": {
+																			"type": "string"
+																		}
+																	},
+																	"birthDate": {
+																		"type": ["string", "null"]
+																	},
+																	"countries": {
+																		"type": ["array", "null"],
+																		"items": {
+																			"type": "string"
+																		}
+																	},
+																	"addresses": {
+																		"type": ["array", "null"],
+																		"items": {
+																			"type": "string"
+																		}
+																	},
+																	"identifiers": {
+																		"type": ["array", "null"],
+																		"items": {
+																			"type": "string"
+																		}
+																	},
+																	"sanctions": {
+																		"type": ["array", "null"],
+																		"items": {
+																			"type": "string"
+																		}
+																	},
+																	"phones": {
+																		"type": ["array", "null"],
+																		"items": {
+																			"type": "string"
+																		}
+																	},
+																	"emails": {
+																		"type": ["array", "null"],
+																		"items": {
+																			"type": "string"
+																		}
+																	},
+																	"programIds": {
+																		"type": ["array", "null"],
+																		"items": {
+																			"type": "string"
+																		}
+																	},
+																	"dataset": {
+																		"type": ["string", "null"]
+																	},
+																	"firstSeen": {
+																		"type": ["string", "null"]
+																	},
+																	"lastSeen": {
+																		"type": ["string", "null"]
+																	},
+																	"lastChange": {
+																		"type": ["string", "null"]
+																	},
+																	"createdAt": {
+																		"type": "string",
+																		"format": "date-time"
+																	},
+																	"updatedAt": {
+																		"type": "string",
+																		"format": "date-time"
+																	}
+																},
+																"required": [
+																	"id",
+																	"schema",
+																	"name",
+																	"aliases",
+																	"birthDate",
+																	"countries",
+																	"addresses",
+																	"identifiers",
+																	"sanctions",
+																	"phones",
+																	"emails",
+																	"programIds",
+																	"dataset",
+																	"firstSeen",
+																	"lastSeen",
+																	"lastChange",
+																	"createdAt",
+																	"updatedAt"
+																]
+															},
+															"score": {
+																"type": "number"
+															}
+														},
+														"required": ["target", "score"]
+													}
+												},
+												"count": {
+													"type": "number"
+												}
+											},
+											"required": ["matches", "count"]
+										}
+									},
+									"required": ["success", "result"]
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/targets/{id}": {
+			"get": {
+				"tags": ["Targets"],
+				"summary": "Get a watchlist target by ID",
+				"operationId": "getTarget",
+				"parameters": [
+					{
+						"schema": {
+							"type": "string"
+						},
+						"required": true,
+						"name": "id",
+						"in": "path"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Target found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"result": {
+											"type": "object",
+											"properties": {
+												"id": {
+													"type": "string"
+												},
+												"schema": {
+													"type": ["string", "null"]
+												},
+												"name": {
+													"type": ["string", "null"]
+												},
+												"aliases": {
+													"type": ["array", "null"],
+													"items": {
+														"type": "string"
+													}
+												},
+												"birthDate": {
+													"type": ["string", "null"]
+												},
+												"countries": {
+													"type": ["array", "null"],
+													"items": {
+														"type": "string"
+													}
+												},
+												"addresses": {
+													"type": ["array", "null"],
+													"items": {
+														"type": "string"
+													}
+												},
+												"identifiers": {
+													"type": ["array", "null"],
+													"items": {
+														"type": "string"
+													}
+												},
+												"sanctions": {
+													"type": ["array", "null"],
+													"items": {
+														"type": "string"
+													}
+												},
+												"phones": {
+													"type": ["array", "null"],
+													"items": {
+														"type": "string"
+													}
+												},
+												"emails": {
+													"type": ["array", "null"],
+													"items": {
+														"type": "string"
+													}
+												},
+												"programIds": {
+													"type": ["array", "null"],
+													"items": {
+														"type": "string"
+													}
+												},
+												"dataset": {
+													"type": ["string", "null"]
+												},
+												"firstSeen": {
+													"type": ["string", "null"]
+												},
+												"lastSeen": {
+													"type": ["string", "null"]
+												},
+												"lastChange": {
+													"type": ["string", "null"]
+												},
+												"createdAt": {
+													"type": "string",
+													"format": "date-time"
+												},
+												"updatedAt": {
+													"type": "string",
+													"format": "date-time"
+												}
+											},
+											"required": [
+												"id",
+												"schema",
+												"name",
+												"aliases",
+												"birthDate",
+												"countries",
+												"addresses",
+												"identifiers",
+												"sanctions",
+												"phones",
+												"emails",
+												"programIds",
+												"dataset",
+												"firstSeen",
+												"lastSeen",
+												"lastChange",
+												"createdAt",
+												"updatedAt"
+											]
+										}
+									},
+									"required": ["success", "result"]
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Target not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"errors": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"code": {
+														"type": "number"
+													},
+													"message": {
+														"type": "string"
+													}
+												},
+												"required": ["code", "message"]
+											}
+										}
+									},
+									"required": ["success", "errors"]
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/ingestion/runs": {
+			"get": {
+				"tags": ["Ingestion"],
+				"summary": "List ingestion runs",
+				"operationId": "listIngestionRuns",
+				"parameters": [
+					{
+						"schema": {
+							"type": "integer",
+							"minimum": 1,
+							"maximum": 100,
+							"default": 10
+						},
+						"required": false,
+						"name": "limit",
+						"in": "query"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "List of ingestion runs",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"result": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"id": {
+														"type": "integer"
+													},
+													"sourceUrl": {
+														"type": "string"
+													},
+													"status": {
+														"type": "string",
+														"enum": ["running", "completed", "failed"]
+													},
+													"startedAt": {
+														"type": "string",
+														"format": "date-time"
+													},
+													"finishedAt": {
+														"type": ["string", "null"],
+														"format": "date-time"
+													},
+													"stats": {
+														"type": ["object", "null"],
+														"additionalProperties": {}
+													},
+													"errorMessage": {
+														"type": ["string", "null"]
+													},
+													"createdAt": {
+														"type": "string",
+														"format": "date-time"
+													}
+												},
+												"required": [
+													"id",
+													"sourceUrl",
+													"status",
+													"startedAt",
+													"finishedAt",
+													"stats",
+													"errorMessage",
+													"createdAt"
+												]
+											}
+										}
+									},
+									"required": ["success", "result"]
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/ingestion/runs/{runId}": {
+			"get": {
+				"tags": ["Ingestion"],
+				"summary": "Get an ingestion run by ID",
+				"operationId": "getIngestionRun",
+				"parameters": [
+					{
+						"schema": {
+							"type": ["integer", "null"]
+						},
+						"required": false,
+						"name": "runId",
+						"in": "path"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Ingestion run found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"result": {
+											"type": "object",
+											"properties": {
+												"id": {
+													"type": "integer"
+												},
+												"sourceUrl": {
+													"type": "string"
+												},
+												"status": {
+													"type": "string",
+													"enum": ["running", "completed", "failed"]
+												},
+												"startedAt": {
+													"type": "string",
+													"format": "date-time"
+												},
+												"finishedAt": {
+													"type": ["string", "null"],
+													"format": "date-time"
+												},
+												"stats": {
+													"type": ["object", "null"],
+													"additionalProperties": {}
+												},
+												"errorMessage": {
+													"type": ["string", "null"]
+												},
+												"createdAt": {
+													"type": "string",
+													"format": "date-time"
+												}
+											},
+											"required": [
+												"id",
+												"sourceUrl",
+												"status",
+												"startedAt",
+												"finishedAt",
+												"stats",
+												"errorMessage",
+												"createdAt"
+											]
+										}
+									},
+									"required": ["success", "result"]
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Ingestion run not found",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"errors": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"code": {
+														"type": "number"
+													},
+													"message": {
+														"type": "string"
+													}
+												},
+												"required": ["code", "message"]
+											}
+										}
+									},
+									"required": ["success", "errors"]
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/admin/ingest": {
+			"post": {
+				"tags": ["Admin"],
+				"summary": "Trigger CSV ingestion (admin only)",
+				"operationId": "adminIngest",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"csvUrl": {
+										"type": "string",
+										"format": "uri"
+									},
+									"reindexAll": {
+										"type": "boolean",
+										"default": false
+									}
+								},
+								"required": ["csvUrl"]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Ingestion started",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"result": {
+											"type": "object",
+											"properties": {
+												"id": {
+													"type": "integer"
+												},
+												"sourceUrl": {
+													"type": "string"
+												},
+												"status": {
+													"type": "string",
+													"enum": ["running", "completed", "failed"]
+												},
+												"startedAt": {
+													"type": "string",
+													"format": "date-time"
+												},
+												"finishedAt": {
+													"type": ["string", "null"],
+													"format": "date-time"
+												},
+												"stats": {
+													"type": ["object", "null"],
+													"additionalProperties": {}
+												},
+												"errorMessage": {
+													"type": ["string", "null"]
+												},
+												"createdAt": {
+													"type": "string",
+													"format": "date-time"
+												}
+											},
+											"required": [
+												"id",
+												"sourceUrl",
+												"status",
+												"startedAt",
+												"finishedAt",
+												"stats",
+												"errorMessage",
+												"createdAt"
+											]
+										}
+									},
+									"required": ["success", "result"]
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"errors": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"code": {
+														"type": "number"
+													},
+													"message": {
+														"type": "string"
+													}
+												},
+												"required": ["code", "message"]
+											}
+										}
+									},
+									"required": ["success", "errors"]
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/admin/reindex": {
+			"post": {
+				"tags": ["Admin"],
+				"summary": "Reindex all targets from D1 to Vectorize (admin only)",
+				"operationId": "adminReindex",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"batchSize": {
+										"type": "integer",
+										"minimum": 1,
+										"maximum": 100,
+										"default": 50
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Reindexing started",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"result": {
+											"type": "object",
+											"properties": {
+												"message": {
+													"type": "string"
+												},
+												"targetCount": {
+													"type": "number"
+												}
+											},
+											"required": ["message", "targetCount"]
+										}
+									},
+									"required": ["success", "result"]
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"errors": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"code": {
+														"type": "number"
+													},
+													"message": {
+														"type": "string"
+													}
+												},
+												"required": ["code", "message"]
+											}
+										}
+									},
+									"required": ["success", "errors"]
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"webhooks": {}
+}

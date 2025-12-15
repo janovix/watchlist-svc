@@ -3,3 +3,5 @@ dist
 coverage
 .wrangler
 CHANGELOG.md
+worker-configuration.d.ts
+pnpm-lock.yaml
