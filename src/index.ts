@@ -62,16 +62,12 @@ app.get("/", (c) => {
 	return c.json({ name: appMeta.name, version: appMeta.version });
 });
 
-app.get("/healthz", (c) => {
-	return c.json({ ok: true });
-});
-
 app.get("/docsz", (c) => {
 	return c.html(getScalarHtml(appMeta));
 });
 
 // Register watchlist endpoints
-openapi.get("/health", HealthEndpoint);
+openapi.get("/healthz", HealthEndpoint);
 openapi.post("/search", SearchEndpoint);
 openapi.get("/targets/:id", TargetReadEndpoint);
 openapi.get("/ingestion/runs", IngestionRunsListEndpoint);

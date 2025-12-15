@@ -59,7 +59,7 @@ Watchlist ingestion and search service using Hono + Chanfana + D1 + Vectorize.
 
 ## API Endpoints
 
-- `GET /health` - Health check
+- `GET /healthz` - Health check
 - `POST /search` - Semantic search for watchlist targets
 - `GET /targets/:id` - Get target by ID
 - `GET /ingestion/runs` - List ingestion runs

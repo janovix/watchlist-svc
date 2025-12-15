@@ -10,7 +10,7 @@
 		"parameters": {}
 	},
 	"paths": {
-		"/health": {
+		"/healthz": {
 			"get": {
 				"tags": ["Health"],
 				"summary": "Health check endpoint",

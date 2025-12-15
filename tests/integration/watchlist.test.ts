@@ -11,9 +11,9 @@ describe("Watchlist API Integration Tests", () => {
 		await prisma.watchlistVectorState.deleteMany({});
 	});
 
-	describe("GET /health", () => {
+	describe("GET /healthz", () => {
 		it("should return health status", async () => {
-			const response = await SELF.fetch("http://local.test/health");
+			const response = await SELF.fetch("http://local.test/healthz");
 			const body = await response.json<{
 				success: boolean;
 				result: { ok: boolean; timestamp: string };
