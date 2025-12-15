@@ -1,4 +1,4 @@
-import { OpenAPIRoute } from "chanfana";
+import { OpenAPIRoute, ApiException } from "chanfana";
 import { AppContext } from "../../types";
 import { contentJson } from "chanfana";
 import { z } from "zod";
@@ -48,7 +48,10 @@ export class SearchEndpoint extends OpenAPIRoute {
 
 		// Generate embedding for query
 		if (!c.env.AI) {
-			throw new Error("AI binding not available");
+			const error = new ApiException("AI binding not available");
+			error.status = 500;
+			error.code = 500;
+			throw error;
 		}
 
 		const queryResponse = (await c.env.AI.run("@cf/baai/bge-base-en-v1.5", {
@@ -60,7 +63,10 @@ export class SearchEndpoint extends OpenAPIRoute {
 			!Array.isArray(queryResponse.data) ||
 			queryResponse.data.length === 0
 		) {
-			throw new Error("Failed to generate query embedding");
+			const error = new ApiException("Failed to generate query embedding");
+			error.status = 500;
+			error.code = 500;
+			throw error;
 		}
 
 		const embedding = queryResponse.data[0] as number[];
