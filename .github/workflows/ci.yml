@@ -36,6 +36,9 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Generate Prisma Client
+        if: ${{ matrix.name == 'vitest-coverage' || matrix.name == 'typecheck' }}
+        run: pnpm exec prisma generate
       - run: ${{ matrix.cmd }}
       - name: Upload coverage artifact
         if: ${{ matrix.name == 'vitest-coverage' }}

@@ -7,6 +7,7 @@
 	"observability": {
 		"enabled": true,
 	},
+	"compatibility_flags": ["nodejs_compat"],
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -16,8 +17,14 @@
 	],
 	"kv_namespaces": [
 		{
-			"binding": "TASKS_KV",
+			"binding": "WATCHLIST_KV",
 			"id": "54315aed6339476a82f36c31ec23382c",
+		},
+	],
+	"vectorize": [
+		{
+			"binding": "WATCHLIST_VECTORIZE",
+			"index_name": "watchlist-dev",
 		},
 	],
 }

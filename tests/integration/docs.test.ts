@@ -25,10 +25,15 @@ describe("API docs", () => {
 
 	it("serves health check at /healthz", async () => {
 		const res = await SELF.fetch("http://local.test/healthz");
-		const body = (await res.json()) as { ok?: boolean };
+		const body = (await res.json()) as {
+			success?: boolean;
+			result?: { ok?: boolean; timestamp?: string };
+		};
 
 		expect(res.status).toBe(200);
-		expect(body.ok).toBe(true);
+		expect(body.success).toBe(true);
+		expect(body.result?.ok).toBe(true);
+		expect(body.result?.timestamp).toBeDefined();
 	});
 
 	it("returns a 500 JSON for unexpected errors", async () => {
