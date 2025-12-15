@@ -30,7 +30,7 @@ export function composeVectorText(row: WatchlistCSVRow): string {
 		parts.push(...row.identifiers);
 	}
 	if (row.countries && row.countries.length > 0) {
-		parts.push(...row.countries.join(", "));
+		parts.push(row.countries.join(", "));
 	}
 	if (row.addresses && row.addresses.length > 0) {
 		parts.push(...row.addresses);
