@@ -10,14 +10,14 @@
 	"d1_databases": [
 		{
 			"binding": "DB",
-			"database_name": "watchlist-svc-dev",
-			"database_id": "d341b8bf-0909-45c2-b03d-d0de604f3b3f",
+			"database_name": "watchlist-dev",
+			"database_id": "c699ebec-ec24-4e71-8138-8198d5503fb4",
 		},
 	],
 	"kv_namespaces": [
 		{
 			"binding": "TASKS_KV",
-			"id": "225825c81e9d4c7c85f11b328165eb18",
+			"id": "54315aed6339476a82f36c31ec23382c",
 		},
 	],
 }
