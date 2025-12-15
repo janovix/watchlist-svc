@@ -27,4 +27,7 @@
 			"index_name": "watchlist-dev",
 		},
 	],
+	"ai": {
+		"binding": "AI",
+	},
 }
