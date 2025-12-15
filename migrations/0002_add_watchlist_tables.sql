@@ -1,4 +1,7 @@
--- Migration number: 0001 	 2025-01-XX
+-- Migration number: 0002 	 2025-01-XX
+-- Remove the old tasks table from the template/demo app
+DROP TABLE IF EXISTS tasks;
+
 -- Create watchlist_target table (one row per CSV id)
 CREATE TABLE IF NOT EXISTS watchlist_target (
     id TEXT PRIMARY KEY NOT NULL,
