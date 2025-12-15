@@ -17,6 +17,8 @@
 		"publish": true
 	},
 	"dependencies": {
+		"@prisma/adapter-d1": "7.1.0",
+		"@prisma/client": "7.1.0",
 		"chanfana": "2.8.3",
 		"hono": "4.10.7",
 		"zod": "3.25.67"
