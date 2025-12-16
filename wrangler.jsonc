@@ -33,13 +33,13 @@
 	"queues": {
 		"producers": [
 			{
-				"queue": "ingestion-queue-dev",
+				"queue": "watchlist-ingestion-dev",
 				"binding": "INGESTION_QUEUE",
 			},
 		],
 		"consumers": [
 			{
-				"queue": "ingestion-queue-dev",
+				"queue": "watchlist-ingestion-dev",
 				"max_batch_size": 1,
 				"max_batch_timeout": 30,
 			},
