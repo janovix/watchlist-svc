@@ -14,6 +14,7 @@ import {
 	AdminIngestEndpoint,
 	AdminReindexEndpoint,
 } from "./endpoints/watchlist/adminIngest";
+import queueConsumer from "./queue-consumer";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -80,4 +81,4 @@ export default app;
 
 // Export queue consumer for background ingestion processing
 // Cloudflare Workers will automatically use this export for queue consumption
-export { default as queue } from "./queue-consumer";
+export const queue = queueConsumer;
