@@ -1,3 +1,11 @@
+# [1.1.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.1...v1.1.0-rc.2) (2025-12-16)
+
+
+### Features
+
+* Add CSV streaming and update queue names ([ac81d21](https://github.com/janovix/watchlist-svc/commit/ac81d218062cf46b6408933bddd079198fb8279b))
+* Implement background CSV ingestion via queues ([a21e2b5](https://github.com/janovix/watchlist-svc/commit/a21e2b51df84058daee4973a32842b74cf8be8b8))
+
 # [1.1.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.0.0...v1.1.0-rc.1) (2025-12-16)
 
 
