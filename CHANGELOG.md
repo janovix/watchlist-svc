@@ -1,3 +1,18 @@
+# 1.0.0 (2025-12-15)
+
+
+### Bug Fixes
+
+* add Prisma packages to dependencies ([19486fd](https://github.com/janovix/watchlist-svc/commit/19486fd7693adba444ab63fd4fb718c1d4a79f7e))
+* configure Prisma output path for Workers build ([d4d0b6a](https://github.com/janovix/watchlist-svc/commit/d4d0b6a7387711e373e26b9a046534534f71d81c))
+* ensure Prisma generates before build and adjust coverage threshold ([a836760](https://github.com/janovix/watchlist-svc/commit/a83676043fc9868d766fec766aa0801ace0b9765))
+* resolve typecheck and vitest-coverage CI issues ([3a1c89f](https://github.com/janovix/watchlist-svc/commit/3a1c89f12fed4185188847540c8bc3999474a0de))
+* use pnpm exec for prisma generate in CI ([ff0be61](https://github.com/janovix/watchlist-svc/commit/ff0be613cffcd7474ae49fb11d599954539fce19))
+
+### Features
+
+* Add prisma client and adapter dependencies ([fa75719](https://github.com/janovix/watchlist-svc/commit/fa757198d7c193242c3250aa2bb0b50f6db16fbf))
+
 # [1.0.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.0.0-rc.2...v1.0.0-rc.3) (2025-12-16)
 
 
