@@ -1,3 +1,10 @@
+# [1.0.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2025-12-16)
+
+
+### Features
+
+* Add runId description and example to schema ([64e1ec6](https://github.com/janovix/watchlist-svc/commit/64e1ec63e75ced53a81f913f58950aabac5751fb))
+
 # 1.0.0-rc.1 (2025-12-15)
 
 
