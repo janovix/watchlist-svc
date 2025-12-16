@@ -11,8 +11,8 @@ describe("Search API Tests", () => {
 			}),
 		});
 
-		// Should return 500 if AI binding is not available
-		expect(response.status).toBe(500);
+		// Should return 503 (Service Unavailable) if AI binding is not available
+		expect(response.status).toBe(503);
 	});
 
 	// Note: Search endpoint requires AI and Vectorize bindings which are difficult to mock

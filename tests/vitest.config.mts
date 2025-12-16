@@ -38,13 +38,14 @@ export default defineWorkersConfig({
 				singleWorker: true,
 				wrangler: {
 					configPath: "../wrangler.test.jsonc",
-					environment: undefined,
 				},
 				miniflare: {
 					compatibilityFlags: ["experimental", "nodejs_compat"],
 					bindings: {
 						MIGRATIONS: migrations,
 					},
+					// Mock AI binding - miniflare will create in-memory instances
+					// D1, KV, and Vectorize are automatically mocked via wrangler config
 				},
 			},
 		},

@@ -21,8 +21,5 @@
 			"binding": "WATCHLIST_VECTORIZE",
 			"index_name": "watchlist-dev",
 		},
-	],
-	"ai": {
-		"binding": "AI",
-	},
+	]
 }
