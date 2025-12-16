@@ -67,7 +67,10 @@ export class SearchEndpoint extends OpenAPIRoute {
 			!Array.isArray(queryResponse.data) ||
 			queryResponse.data.length === 0
 		) {
-			throw new Error("Failed to generate query embedding");
+			const error = new ApiException("Failed to generate query embedding");
+			error.status = 500;
+			error.code = 500;
+			throw error;
 		}
 
 		const embedding = queryResponse.data[0] as number[];

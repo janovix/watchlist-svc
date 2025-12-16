@@ -4,7 +4,7 @@ import { contentJson } from "chanfana";
 import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import { ingestCSV } from "../../lib/ingestion-service";
-import { watchlistIngestionRun } from "./base";
+import { watchlistIngestionRun, serializeJsonField } from "./base";
 
 /**
  * Check admin API key from header
@@ -94,7 +94,7 @@ export class AdminIngestEndpoint extends OpenAPIRoute {
 					data: {
 						status: "completed",
 						finishedAt: new Date(),
-						stats: JSON.stringify(stats),
+						stats: serializeJsonField(stats),
 					},
 				});
 			})
