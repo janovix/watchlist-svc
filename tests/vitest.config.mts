@@ -24,6 +24,7 @@ export default defineWorkersConfig({
 				"**/dist/**",
 				"**/coverage/**",
 				"src/lib/ingestion-service.ts", // Hard to test without external dependencies
+				"src/queue-consumer.ts", // Queue consumer requires queue infrastructure setup
 			],
 			thresholds: {
 				lines: 70,
