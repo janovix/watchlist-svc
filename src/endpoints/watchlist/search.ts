@@ -1,4 +1,4 @@
-import { OpenAPIRoute } from "chanfana";
+import { OpenAPIRoute, ApiException } from "chanfana";
 import { AppContext } from "../../types";
 import { contentJson } from "chanfana";
 import { z } from "zod";
@@ -47,8 +47,15 @@ export class SearchEndpoint extends OpenAPIRoute {
 		const prisma = createPrismaClient(c.env.DB);
 
 		// Generate embedding for query
+		// Workers AI binding should be automatically available
+		// If not available, it may need to be enabled in the Cloudflare dashboard
 		if (!c.env.AI) {
-			throw new Error("AI binding not available");
+			const error = new ApiException(
+				"AI binding not available. Please ensure Workers AI is enabled for your account.",
+			);
+			error.status = 503;
+			error.code = 503;
+			throw error;
 		}
 
 		const queryResponse = (await c.env.AI.run("@cf/baai/bge-base-en-v1.5", {
@@ -60,7 +67,10 @@ export class SearchEndpoint extends OpenAPIRoute {
 			!Array.isArray(queryResponse.data) ||
 			queryResponse.data.length === 0
 		) {
-			throw new Error("Failed to generate query embedding");
+			const error = new ApiException("Failed to generate query embedding");
+			error.status = 500;
+			error.code = 500;
+			throw error;
 		}
 
 		const embedding = queryResponse.data[0] as number[];

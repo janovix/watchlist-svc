@@ -1,12 +1,7 @@
 {
 	"compatibility_date": "2025-10-08",
 	"main": "src/index.ts",
-	"name": "watchlist-svc",
-	"upload_source_maps": true,
-	"workers_dev": true,
-	"observability": {
-		"enabled": true,
-	},
+	"name": "watchlist-svc-test",
 	"compatibility_flags": ["nodejs_compat"],
 	"d1_databases": [
 		{

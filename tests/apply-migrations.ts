@@ -3,4 +3,18 @@ import { applyD1Migrations, env } from "cloudflare:test";
 // Setup files run outside isolated storage, and may be run multiple times.
 // `applyD1Migrations()` only applies migrations that haven't already been
 // applied, therefore it is safe to call this function here.
+//
+// Note: env.DB is an in-memory D1 database created by miniflare for testing.
+// No real database connections are made - everything is mocked.
 await applyD1Migrations(env.DB, env.MIGRATIONS);
+
+// Mock AI binding if not provided by miniflare
+// This ensures tests don't try to connect to real Workers AI
+if (!("AI" in env) || !env.AI) {
+	// @ts-expect-error - Adding mock AI binding for tests
+	env.AI = {
+		run: async () => ({
+			data: [[0.1, 0.2, 0.3]], // Mock embedding vector
+		}),
+	};
+}
