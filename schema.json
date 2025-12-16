@@ -497,9 +497,9 @@
 				"parameters": [
 					{
 						"schema": {
-							"type": ["integer", "null"]
+							"type": "integer"
 						},
-						"required": false,
+						"required": true,
 						"name": "runId",
 						"in": "path"
 					}
