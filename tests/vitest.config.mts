@@ -36,16 +36,20 @@ export default defineWorkersConfig({
 		poolOptions: {
 			workers: {
 				singleWorker: true,
-				wrangler: {
-					configPath: "../wrangler.test.jsonc",
-				},
+				main: path.join(__dirname, "..", "src", "index.ts"),
 				miniflare: {
 					compatibilityFlags: ["experimental", "nodejs_compat"],
 					bindings: {
 						MIGRATIONS: migrations,
 					},
-					// Mock AI binding - miniflare will create in-memory instances
-					// D1, KV, and Vectorize are automatically mocked via wrangler config
+					// Configure D1 database directly (no wrangler dev needed)
+					// This prevents wrangler from trying to use remote mode
+					d1Databases: {
+						DB: "test-db",
+					},
+					kvNamespaces: {
+						WATCHLIST_KV: "test-kv",
+					},
 				},
 			},
 		},
