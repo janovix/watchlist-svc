@@ -501,7 +501,9 @@
 						},
 						"required": true,
 						"name": "runId",
-						"in": "path"
+						"in": "path",
+						"description": "The ID of the ingestion run",
+						"example": 1
 					}
 				],
 				"responses": {
