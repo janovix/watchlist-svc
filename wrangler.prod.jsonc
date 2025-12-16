@@ -26,7 +26,4 @@
 			"index_name": "watchlist",
 		},
 	],
-	"vars": {
-		"WORKER_URL": "https://watchlist-svc.algenium.tools",
-	},
 }

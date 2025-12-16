@@ -54,32 +54,28 @@ jobs:
       - name: Build
         run: pnpm run build || echo "Build step not defined, skipping"
 
-      - name: Determine config file and extract WORKER_URL
+      - name: Determine config file
         id: config
         run: |
           if [ "${{ github.event.inputs.environment }}" == "prod" ]; then
-            CONFIG_FILE="wrangler.prod.jsonc"
+            echo "config_file=wrangler.prod.jsonc" >> $GITHUB_OUTPUT
           elif [ "${{ github.event.inputs.environment }}" == "preview" ]; then
-            CONFIG_FILE="wrangler.preview.jsonc"
+            echo "config_file=wrangler.preview.jsonc" >> $GITHUB_OUTPUT
           else
-            CONFIG_FILE="wrangler.jsonc"
+            echo "config_file=wrangler.jsonc" >> $GITHUB_OUTPUT
           fi
-          echo "config_file=$CONFIG_FILE" >> $GITHUB_OUTPUT
-          
-          # Extract WORKER_URL from wrangler config file (JSONC format)
-          WORKER_URL=$(node -e "const fs=require('fs'); const content=fs.readFileSync('$CONFIG_FILE','utf8'); const json=JSON.parse(content.replace(/\/\/.*$/gm,'')); console.log(json.vars?.WORKER_URL || '')")
-          if [ -z "$WORKER_URL" ]; then
-            echo "Error: WORKER_URL not found in $CONFIG_FILE"
-            exit 1
-          fi
-          echo "worker_url=$WORKER_URL" >> $GITHUB_OUTPUT
-          echo "Using WORKER_URL: $WORKER_URL"
 
       - name: Trigger ingestion via admin endpoint
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-          WORKER_URL: ${{ steps.config.outputs.worker_url }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
         run: |
+          if [ -z "$WORKER_URL" ]; then
+            echo "Error: WORKER_URL secret not set"
+            echo "Please set the deployed worker URL in repository secrets"
+            exit 1
+          fi
+
           if [ -z "$ADMIN_API_KEY" ]; then
             echo "Error: ADMIN_API_KEY secret not set"
             echo "Please set the admin API key in repository secrets"
