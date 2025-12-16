@@ -42,6 +42,7 @@
 				"queue": "watchlist-ingestion-dev",
 				"max_batch_size": 1,
 				"max_batch_timeout": 30,
+				"deadLetterQueue": "watchlist-ingestion-preview-dlq",
 			},
 		],
 	},
