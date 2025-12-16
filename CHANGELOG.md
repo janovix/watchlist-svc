@@ -1,3 +1,14 @@
+# [1.1.0](https://github.com/janovix/watchlist-svc/compare/v1.0.0...v1.1.0) (2025-12-16)
+
+
+### Features
+
+* Add AI binding to wrangler config ([e6e98de](https://github.com/janovix/watchlist-svc/commit/e6e98debeb761fc70eba2695789db5e16506cac4))
+* Add runId description and example to schema ([64e1ec6](https://github.com/janovix/watchlist-svc/commit/64e1ec63e75ced53a81f913f58950aabac5751fb))
+* Configure Vitest for local development and CI ([1cf1589](https://github.com/janovix/watchlist-svc/commit/1cf1589b2fd2c19d444b46fb33a185bbf245db0f))
+* Improve AI binding error handling ([f5b7dcc](https://github.com/janovix/watchlist-svc/commit/f5b7dccda1df202a25f6fcde9e010bab554b8a28))
+* Improve error reporting for ingest failures ([87c32ec](https://github.com/janovix/watchlist-svc/commit/87c32ec09c4720e690d5b110da532105a083e2ce))
+
 # [1.1.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.0.0...v1.1.0-rc.1) (2025-12-16)
 
 
