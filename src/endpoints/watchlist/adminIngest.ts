@@ -99,13 +99,30 @@ export class AdminIngestEndpoint extends OpenAPIRoute {
 				});
 			})
 			.catch(async (error) => {
+				// Capture detailed error information
+				let errorMessage: string;
+				if (error instanceof Error) {
+					errorMessage = error.message;
+					// Include stack trace for debugging (first 500 chars to avoid DB limits)
+					if (error.stack) {
+						const stackPreview = error.stack.split("\n").slice(0, 5).join("\n");
+						errorMessage = `${errorMessage}\n\nStack trace:\n${stackPreview}`;
+					}
+				} else {
+					errorMessage = String(error);
+				}
+
+				// Truncate if too long (D1 has limits)
+				if (errorMessage.length > 1000) {
+					errorMessage = errorMessage.substring(0, 997) + "...";
+				}
+
 				await prisma.watchlistIngestionRun.update({
 					where: { id: run.id },
 					data: {
 						status: "failed",
 						finishedAt: new Date(),
-						errorMessage:
-							error instanceof Error ? error.message : String(error),
+						errorMessage,
 					},
 				});
 			});
