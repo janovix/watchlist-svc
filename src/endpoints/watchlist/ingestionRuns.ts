@@ -58,7 +58,11 @@ export class IngestionRunReadEndpoint extends OpenAPIRoute {
 		operationId: "getIngestionRun",
 		request: {
 			params: z.object({
-				runId: z.coerce.number().int(),
+				runId: z.coerce
+					.number()
+					.int()
+					.positive()
+					.describe("The ID of the ingestion run"),
 			}),
 		},
 		responses: {
