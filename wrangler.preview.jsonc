@@ -30,4 +30,20 @@
 	"ai": {
 		"binding": "AI",
 	},
+	"queues": {
+		"producers": [
+			{
+				"queue": "watchlist-ingestion-dev",
+				"binding": "INGESTION_QUEUE",
+			},
+		],
+		"consumers": [
+			{
+				"queue": "watchlist-ingestion-dev",
+				"max_batch_size": 1,
+				"max_batch_timeout": 30,
+				"deadLetterQueue": "watchlist-ingestion-preview-dlq",
+			},
+		],
+	},
 }

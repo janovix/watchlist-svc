@@ -9,6 +9,13 @@ interface Env extends Cloudflare.Env {
 		) => Promise<{ data: number[][] }>;
 	};
 	ADMIN_API_KEY?: string;
+	INGESTION_QUEUE?: Queue<IngestionJob>;
+}
+
+export interface IngestionJob {
+	runId: number;
+	csvUrl: string;
+	reindexAll: boolean;
 }
 
 export type AppContext = Context<{ Bindings: Env }>;

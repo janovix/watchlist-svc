@@ -167,3 +167,65 @@ function parseCSVLine(line: string): string[] {
 
 	return values.map((v) => v.trim());
 }
+
+/**
+ * Stream CSV parsing - processes CSV line by line without loading entire file into memory
+ * This is memory-efficient for large CSV files in Cloudflare Workers
+ */
+export async function* streamCSV(
+	response: Response,
+): AsyncGenerator<Record<string, string>, void, unknown> {
+	if (!response.body) {
+		throw new Error("Response body is null");
+	}
+
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = "";
+	let headers: string[] | null = null;
+
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			if (done) break;
+
+			buffer += decoder.decode(value, { stream: true });
+			const lines = buffer.split("\n");
+			buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+			for (const line of lines) {
+				const trimmed = line.trim();
+				if (!trimmed) continue;
+
+				if (!headers) {
+					// First line is headers
+					headers = parseCSVLine(trimmed);
+					continue;
+				}
+
+				const values = parseCSVLine(trimmed);
+				if (values.length === 0) continue;
+
+				const row: Record<string, string> = {};
+				for (let j = 0; j < headers.length; j++) {
+					row[headers[j]] = values[j] || "";
+				}
+				yield row;
+			}
+		}
+
+		// Process remaining buffer
+		if (buffer.trim() && headers) {
+			const values = parseCSVLine(buffer.trim());
+			if (values.length > 0) {
+				const row: Record<string, string> = {};
+				for (let j = 0; j < headers.length; j++) {
+					row[headers[j]] = values[j] || "";
+				}
+				yield row;
+			}
+		}
+	} finally {
+		reader.releaseLock();
+	}
+}

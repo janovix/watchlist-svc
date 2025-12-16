@@ -3,8 +3,8 @@ import { AppContext } from "../../types";
 import { contentJson } from "chanfana";
 import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
-import { ingestCSV } from "../../lib/ingestion-service";
-import { watchlistIngestionRun, serializeJsonField } from "./base";
+import { watchlistIngestionRun } from "./base";
+import type { IngestionJob } from "../../types";
 
 /**
  * Check admin API key from header
@@ -77,65 +77,47 @@ export class AdminIngestEndpoint extends OpenAPIRoute {
 			},
 		});
 
-		// Start ingestion asynchronously
-		const ingestionPromise = ingestCSV(
-			prisma,
-			c.env.WATCHLIST_VECTORIZE,
-			c.env.AI,
-			validatedData.body.csvUrl,
-			run.id,
-			{
-				reindexAll: validatedData.body.reindexAll,
-			},
-		)
-			.then(async (stats) => {
-				await prisma.watchlistIngestionRun.update({
-					where: { id: run.id },
-					data: {
-						status: "completed",
-						finishedAt: new Date(),
-						stats: serializeJsonField(stats),
-					},
-				});
-			})
-			.catch(async (error) => {
-				// Capture detailed error information
-				let errorMessage: string;
-				if (error instanceof Error) {
-					errorMessage = error.message;
-					// Include stack trace for debugging (first 500 chars to avoid DB limits)
-					if (error.stack) {
-						const stackPreview = error.stack.split("\n").slice(0, 5).join("\n");
-						errorMessage = `${errorMessage}\n\nStack trace:\n${stackPreview}`;
-					}
-				} else {
-					errorMessage = String(error);
-				}
+		// Send job to queue for background processing
+		if (!c.env.INGESTION_QUEUE) {
+			const error = new ApiException("Ingestion queue not configured");
+			error.status = 500;
+			error.code = 500;
+			throw error;
+		}
 
-				// Truncate if too long (D1 has limits)
-				if (errorMessage.length > 1000) {
-					errorMessage = errorMessage.substring(0, 997) + "...";
-				}
+		const job: IngestionJob = {
+			runId: run.id,
+			csvUrl: validatedData.body.csvUrl,
+			reindexAll: validatedData.body.reindexAll,
+		};
 
-				await prisma.watchlistIngestionRun.update({
-					where: { id: run.id },
-					data: {
-						status: "failed",
-						finishedAt: new Date(),
-						errorMessage,
-					},
-				});
+		try {
+			await c.env.INGESTION_QUEUE.send(job);
+			console.log(
+				`[AdminIngest] Queued ingestion job for runId: ${run.id}`,
+				job,
+			);
+		} catch (error) {
+			console.error(
+				`[AdminIngest] Failed to queue ingestion job for runId: ${run.id}`,
+				error,
+			);
+			// Update run status to failed
+			await prisma.watchlistIngestionRun.update({
+				where: { id: run.id },
+				data: {
+					status: "failed",
+					finishedAt: new Date(),
+					errorMessage: `Failed to queue job: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				},
 			});
 
-		// Use waitUntil if available, otherwise await (for testing)
-		const executionCtx = c.executionCtx as {
-			waitUntil?: (p: Promise<unknown>) => void;
-		};
-		if (executionCtx?.waitUntil) {
-			executionCtx.waitUntil(ingestionPromise);
-		} else {
-			// For testing, we might want to await
-			await ingestionPromise;
+			const apiError = new ApiException("Failed to queue ingestion job");
+			apiError.status = 500;
+			apiError.code = 500;
+			throw apiError;
 		}
 
 		return {
