@@ -1,7 +1,7 @@
 {
 	"compatibility_date": "2025-10-08",
 	"main": "src/index.ts",
-	"name": "watchlist-svc",
+	"name": "watchlist-svc-prod",
 	"upload_source_maps": true,
 	"workers_dev": true,
 	"observability": {
