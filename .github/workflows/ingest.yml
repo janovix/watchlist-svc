@@ -54,11 +54,6 @@ jobs:
       - name: Build
         run: pnpm run build || echo "Build step not defined, skipping"
 
-      - name: Setup Cloudflare Wrangler
-        uses: cloudflare/setup-wrangler@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-
       - name: Determine config file
         id: config
         run: |
@@ -73,11 +68,11 @@ jobs:
       - name: Trigger ingestion via admin endpoint
         env:
           ADMIN_API_KEY: ${{ secrets.ADMIN_API_KEY }}
-          WORKER_URL: ${{ secrets.WORKER_URL }}
+          WORKER_URL: ${{ vars.WORKER_URL }}
         run: |
           if [ -z "$WORKER_URL" ]; then
-            echo "Error: WORKER_URL secret not set"
-            echo "Please set the deployed worker URL in repository secrets"
+            echo "Error: WORKER_URL variable not set"
+            echo "Please set the deployed worker URL in repository variables"
             exit 1
           fi
 
