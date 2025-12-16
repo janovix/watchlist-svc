@@ -47,10 +47,14 @@ export class SearchEndpoint extends OpenAPIRoute {
 		const prisma = createPrismaClient(c.env.DB);
 
 		// Generate embedding for query
+		// Workers AI binding should be automatically available
+		// If not available, it may need to be enabled in the Cloudflare dashboard
 		if (!c.env.AI) {
-			const error = new ApiException("AI binding not available");
-			error.status = 500;
-			error.code = 500;
+			const error = new ApiException(
+				"AI binding not available. Please ensure Workers AI is enabled for your account.",
+			);
+			error.status = 503;
+			error.code = 503;
 			throw error;
 		}
 

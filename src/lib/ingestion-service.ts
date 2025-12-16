@@ -336,9 +336,14 @@ export async function ingestCSV(
 			}
 		}
 	} catch (error) {
-		throw new Error(
-			`Ingestion failed: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		// Provide more context about what failed
+		const baseMessage = error instanceof Error ? error.message : String(error);
+		const errorType =
+			error instanceof Error ? error.constructor.name : typeof error;
+
+		throw new Error(`Ingestion failed [${errorType}]: ${baseMessage}`, {
+			cause: error,
+		});
 	}
 
 	return stats;

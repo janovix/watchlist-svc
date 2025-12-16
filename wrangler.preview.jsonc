@@ -27,4 +27,7 @@
 			"index_name": "watchlist-preview",
 		},
 	],
+	"ai": {
+		"binding": "AI",
+	},
 }
