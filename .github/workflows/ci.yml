@@ -39,11 +39,7 @@ jobs:
       - name: Generate Prisma Client
         if: ${{ matrix.name == 'vitest-coverage' || matrix.name == 'typecheck' }}
         run: pnpm exec prisma generate
-      - name: Run checks
-        env:
-          WRANGLER_SEND_METRICS: "false"
-          NO_WRANGLER_LOGIN: "true"
-        run: ${{ matrix.cmd }}
+      - run: ${{ matrix.cmd }}
       - name: Upload coverage artifact
         if: ${{ matrix.name == 'vitest-coverage' }}
         uses: actions/upload-artifact@v4
