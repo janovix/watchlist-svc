@@ -27,4 +27,7 @@
 			"index_name": "watchlist-dev",
 		},
 	],
+	"vars": {
+		"WORKER_URL": "https://watchlist-svc.algtools.workers.dev",
+	},
 }
