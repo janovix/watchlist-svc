@@ -94,9 +94,11 @@ Ingest CSV files via GitHub Actions workflow or admin endpoint:
 
 ### GitHub Actions Setup
 
-The ingest workflow requires the following secrets to be configured in your repository:
+The ingest workflow requires the following to be configured in your repository:
 
-- `WORKER_URL` - The deployed Cloudflare Worker URL (e.g., `https://your-worker.your-subdomain.workers.dev`)
-- `ADMIN_API_KEY` - The admin API key used to authenticate requests to the `/admin/ingest` endpoint
+- `WORKER_URL` (variable) - The deployed Cloudflare Worker URL (e.g., `https://your-worker.your-subdomain.workers.dev`)
+- `ADMIN_API_KEY` (secret) - The admin API key used to authenticate requests to the `/admin/ingest` endpoint
 
-To set these secrets, go to your repository Settings → Secrets and variables → Actions → New repository secret.
+To set these:
+- For variables: Go to Settings → Secrets and variables → Actions → Variables tab → New repository variable
+- For secrets: Go to Settings → Secrets and variables → Actions → Secrets tab → New repository secret
