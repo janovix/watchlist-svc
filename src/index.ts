@@ -77,8 +77,7 @@ openapi.post("/admin/reindex", AdminReindexEndpoint);
 
 // Export queue consumer for background ingestion processing
 // Cloudflare Workers will automatically use this export for queue consumption
-import queueConsumer from "./queue-consumer";
-export const queue = queueConsumer.queue;
+export { queue } from "./queue-consumer";
 
 // Export the Hono app
 export default app;
