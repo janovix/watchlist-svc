@@ -1,3 +1,10 @@
+# [1.1.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.3...v1.1.0-rc.4) (2025-12-17)
+
+
+### Features
+
+* Set pnpm as package manager ([96ec1c3](https://github.com/janovix/watchlist-svc/commit/96ec1c3cc6adce10bee2ab7fc65494379fcc1525))
+
 # [1.1.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.2...v1.1.0-rc.3) (2025-12-17)
 
 
