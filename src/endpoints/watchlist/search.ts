@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import { watchlistTarget } from "./base";
 import { parseJsonField } from "./base";
+import { GrokService } from "../../lib/grok-service";
 
 export class SearchEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -149,6 +150,40 @@ export class SearchEndpoint extends OpenAPIRoute {
 					m: { target: unknown; score: number } | null,
 				): m is { target: unknown; score: number } => m !== null,
 			);
+
+		// If no results from D1, try Grok API as fallback
+		if (matches.length === 0 && c.env.GROK_API_KEY) {
+			try {
+				const grokService = new GrokService({
+					apiKey: c.env.GROK_API_KEY,
+				});
+
+				const grokResponse = await grokService.queryPEPStatus(data.body.query);
+
+				if (grokResponse && grokResponse.pepStatus) {
+					const grokTarget = grokService.convertToWatchlistTarget(
+						grokResponse,
+						data.body.query,
+					);
+
+					return {
+						success: true,
+						result: {
+							matches: [
+								{
+									target: grokTarget,
+									score: 0.5, // Default score for Grok API results
+								},
+							],
+							count: 1,
+						},
+					};
+				}
+			} catch (error) {
+				// Log error but don't fail the request
+				console.error("Grok API fallback error:", error);
+			}
+		}
 
 		return {
 			success: true,
