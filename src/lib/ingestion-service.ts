@@ -5,7 +5,6 @@
 
 import { PrismaClient } from "@prisma/client";
 import {
-	parseCSV,
 	parseCSVRow,
 	streamCSV,
 	type WatchlistCSVRow,
@@ -37,19 +36,6 @@ export interface IngestionRun {
 	finishedAt: Date | null;
 	stats: IngestionStats | null;
 	errorMessage: string | null;
-}
-
-/**
- * Download CSV from URL
- */
-async function downloadCSV(url: string): Promise<string> {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(
-			`Failed to download CSV: ${response.status} ${response.statusText}`,
-		);
-	}
-	return await response.text();
 }
 
 /**
@@ -174,180 +160,6 @@ async function updateVectorState(
 			lastIndexedChange: lastChange,
 		},
 	});
-}
-
-/**
- * Main ingestion function
- */
-export async function ingestCSV(
-	prisma: PrismaClient,
-	vectorize: VectorizeIndex,
-	ai:
-		| {
-				run: (
-					model: string,
-					input: { text: string[] },
-				) => Promise<{ data: number[][] }>;
-		  }
-		| undefined,
-	sourceUrl: string,
-	runId: number,
-	options: {
-		reindexAll?: boolean;
-		batchSize?: number;
-	} = {},
-): Promise<IngestionStats> {
-	const stats: IngestionStats = {
-		totalRows: 0,
-		parsedRows: 0,
-		insertedRows: 0,
-		updatedRows: 0,
-		indexedRows: 0,
-		errors: [],
-		parseErrors: 0,
-		indexErrors: 0,
-	};
-
-	try {
-		// Download CSV
-		const csvText = await downloadCSV(sourceUrl);
-		const csvRows = parseCSV(csvText);
-		stats.totalRows = csvRows.length;
-
-		// Process rows in batches
-		const batchSize = options.batchSize || 50;
-		const vectorsToIndex: Array<{
-			id: string;
-			values: number[];
-			metadata: Record<string, string | number | boolean | string[]>;
-			row: WatchlistCSVRow;
-		}> = [];
-
-		for (let i = 0; i < csvRows.length; i += batchSize) {
-			const batch = csvRows.slice(i, i + batchSize);
-
-			for (const csvRow of batch) {
-				const parseErrors: ParseError[] = [];
-				const row = parseCSVRow(csvRow, parseErrors);
-
-				if (parseErrors.length > 0) {
-					stats.errors.push(...parseErrors);
-					stats.parseErrors += parseErrors.length;
-				}
-
-				if (!row) continue;
-				stats.parsedRows++;
-
-				try {
-					// Upsert to D1
-					const { inserted } = await upsertTarget(prisma, row);
-					if (inserted) {
-						stats.insertedRows++;
-					} else {
-						stats.updatedRows++;
-					}
-
-					// Check if needs indexing
-					const needsIndex =
-						options.reindexAll ||
-						(await needsReindexing(prisma, row.id, row.lastChange));
-
-					if (needsIndex) {
-						// Generate embedding
-						const vectorText = composeVectorText(row);
-						if (vectorText) {
-							try {
-								const embedding = await generateEmbedding(ai, vectorText);
-								const metadata = composeVectorMetadata(row);
-
-								vectorsToIndex.push({
-									id: row.id,
-									values: embedding,
-									metadata: metadata as Record<
-										string,
-										string | number | boolean | string[]
-									>,
-									row,
-								});
-							} catch (error) {
-								stats.indexErrors++;
-								console.warn(
-									`Failed to generate embedding for ${row.id}:`,
-									error,
-								);
-							}
-						}
-					}
-				} catch (error) {
-					stats.errors.push({
-						rowId: row.id,
-						field: "database",
-						error: error instanceof Error ? error.message : String(error),
-					});
-					console.warn(`Failed to upsert target ${row.id}:`, error);
-				}
-			}
-
-			// Batch upsert vectors
-			if (vectorsToIndex.length > 0) {
-				try {
-					await upsertVectors(
-						vectorize,
-						vectorsToIndex.map((v) => ({
-							id: v.id,
-							values: v.values,
-							metadata: v.metadata,
-						})),
-					);
-
-					// Update vector states
-					for (const v of vectorsToIndex) {
-						await updateVectorState(prisma, v.row.id, v.row.lastChange);
-					}
-
-					stats.indexedRows += vectorsToIndex.length;
-					vectorsToIndex.length = 0; // Clear batch
-				} catch (error) {
-					stats.indexErrors += vectorsToIndex.length;
-					console.warn("Failed to upsert vectors batch:", error);
-				}
-			}
-		}
-
-		// Process any remaining vectors
-		if (vectorsToIndex.length > 0) {
-			try {
-				await upsertVectors(
-					vectorize,
-					vectorsToIndex.map((v) => ({
-						id: v.id,
-						values: v.values,
-						metadata: v.metadata,
-					})),
-				);
-
-				for (const v of vectorsToIndex) {
-					await updateVectorState(prisma, v.row.id, v.row.lastChange);
-				}
-
-				stats.indexedRows += vectorsToIndex.length;
-			} catch (error) {
-				stats.indexErrors += vectorsToIndex.length;
-				console.warn("Failed to upsert final vectors batch:", error);
-			}
-		}
-	} catch (error) {
-		// Provide more context about what failed
-		const baseMessage = error instanceof Error ? error.message : String(error);
-		const errorType =
-			error instanceof Error ? error.constructor.name : typeof error;
-
-		throw new Error(`Ingestion failed [${errorType}]: ${baseMessage}`, {
-			cause: error,
-		});
-	}
-
-	return stats;
 }
 
 /**

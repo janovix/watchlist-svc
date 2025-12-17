@@ -5,28 +5,8 @@ import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import { watchlistIngestionRun } from "./base";
 import type { IngestionJob } from "../../types";
-
-/**
- * Check admin API key from header
- */
-function checkAdminAuth(c: AppContext): void {
-	const apiKey = c.req.header("x-admin-api-key");
-	const expectedKey = c.env.ADMIN_API_KEY;
-
-	if (!expectedKey) {
-		const error = new ApiException("Admin API key not configured");
-		error.status = 500;
-		error.code = 500;
-		throw error;
-	}
-
-	if (!apiKey || apiKey !== expectedKey) {
-		const error = new ApiException("Unauthorized");
-		error.status = 401;
-		error.code = 401;
-		throw error;
-	}
-}
+import { checkAdminAuth } from "../../lib/auth";
+import { transformIngestionRun } from "../../lib/transformers";
 
 export class AdminIngestEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -122,16 +102,7 @@ export class AdminIngestEndpoint extends OpenAPIRoute {
 
 		return {
 			success: true,
-			result: {
-				id: run.id,
-				sourceUrl: run.sourceUrl,
-				status: run.status as "running" | "completed" | "failed",
-				startedAt: run.startedAt.toISOString(),
-				finishedAt: run.finishedAt?.toISOString() || null,
-				stats: null,
-				errorMessage: null,
-				createdAt: run.createdAt.toISOString(),
-			},
+			result: transformIngestionRun(run),
 		};
 	}
 }
