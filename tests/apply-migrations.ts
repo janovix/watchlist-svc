@@ -18,3 +18,13 @@ if (!("AI" in env) || !env.AI) {
 		}),
 	};
 }
+
+// Mock Vectorize binding if not provided by miniflare
+if (!("WATCHLIST_VECTORIZE" in env) || !env.WATCHLIST_VECTORIZE) {
+	// @ts-expect-error - Adding mock Vectorize binding for tests
+	env.WATCHLIST_VECTORIZE = {
+		query: async (_embedding: number[], options?: { topK?: number }) => ({
+			matches: [],
+		}),
+	} as unknown as typeof env.WATCHLIST_VECTORIZE;
+}
