@@ -1,3 +1,11 @@
+# [1.1.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.2...v1.1.0-rc.3) (2025-12-17)
+
+
+### Features
+
+* Add Grok API as a fallback for watchlist search ([e04f054](https://github.com/janovix/watchlist-svc/commit/e04f054b4589725dd9171640c0c896c722abede4))
+* Add unit tests for GrokService and mock Vectorize ([9adb28a](https://github.com/janovix/watchlist-svc/commit/9adb28a7d856f4060e472e649a2f13e9f45fc4dc))
+
 # [1.1.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.1...v1.1.0-rc.2) (2025-12-16)
 
 
