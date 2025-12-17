@@ -14,7 +14,6 @@ import {
 	AdminIngestEndpoint,
 	AdminReindexEndpoint,
 } from "./endpoints/watchlist/adminIngest";
-import { queue } from "./queue-consumer";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -75,11 +74,6 @@ openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
 openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
 openapi.post("/admin/ingest", AdminIngestEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
-
-// Export queue consumer for background ingestion processing
-// The handler field in wrangler.jsonc consumer configuration maps this export
-// to the "watchlist-ingestion-dev" queue name
-export { queue };
 
 // Export the Hono app
 export default app;
