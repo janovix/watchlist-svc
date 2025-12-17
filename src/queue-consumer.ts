@@ -18,7 +18,7 @@ interface QueueEnv extends Env {
 	};
 }
 
-export async function queue(
+async function queueHandler(
 	batch: MessageBatch<IngestionJob>,
 	env: QueueEnv,
 	_ctx: ExecutionContext,
@@ -127,3 +127,8 @@ export async function queue(
 		}
 	}
 }
+
+// Export the queue handler
+// Cloudflare Workers will match this export to the queue name specified in wrangler.jsonc
+// The handler field in the consumer configuration maps this export to "watchlist-ingestion-dev"
+export { queueHandler as queue };

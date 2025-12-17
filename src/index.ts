@@ -14,6 +14,7 @@ import {
 	AdminIngestEndpoint,
 	AdminReindexEndpoint,
 } from "./endpoints/watchlist/adminIngest";
+import { queue } from "./queue-consumer";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -76,8 +77,9 @@ openapi.post("/admin/ingest", AdminIngestEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
 
 // Export queue consumer for background ingestion processing
-// Cloudflare Workers will automatically use this export for queue consumption
-export { queue } from "./queue-consumer";
+// The handler field in wrangler.jsonc consumer configuration maps this export
+// to the "watchlist-ingestion-dev" queue name
+export { queue };
 
 // Export the Hono app
 export default app;
