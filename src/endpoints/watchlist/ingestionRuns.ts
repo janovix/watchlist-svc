@@ -3,7 +3,8 @@ import { AppContext } from "../../types";
 import { contentJson } from "chanfana";
 import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
-import { watchlistIngestionRun, parseJsonField } from "./base";
+import { watchlistIngestionRun } from "./base";
+import { transformIngestionRun } from "../../lib/transformers";
 
 export class IngestionRunsListEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -37,16 +38,9 @@ export class IngestionRunsListEndpoint extends OpenAPIRoute {
 
 		return {
 			success: true,
-			result: runs.map((run: (typeof runs)[number]) => ({
-				id: run.id,
-				sourceUrl: run.sourceUrl,
-				status: run.status as "running" | "completed" | "failed",
-				startedAt: run.startedAt.toISOString(),
-				finishedAt: run.finishedAt?.toISOString() || null,
-				stats: parseJsonField<Record<string, unknown>>(run.stats),
-				errorMessage: run.errorMessage,
-				createdAt: run.createdAt.toISOString(),
-			})),
+			result: runs.map((run: (typeof runs)[number]) =>
+				transformIngestionRun(run),
+			),
 		};
 	}
 }
@@ -105,16 +99,7 @@ export class IngestionRunReadEndpoint extends OpenAPIRoute {
 
 		return {
 			success: true,
-			result: {
-				id: run.id,
-				sourceUrl: run.sourceUrl,
-				status: run.status as "running" | "completed" | "failed",
-				startedAt: run.startedAt.toISOString(),
-				finishedAt: run.finishedAt?.toISOString() || null,
-				stats: parseJsonField<Record<string, unknown>>(run.stats),
-				errorMessage: run.errorMessage,
-				createdAt: run.createdAt.toISOString(),
-			},
+			result: transformIngestionRun(run),
 		};
 	}
 }
