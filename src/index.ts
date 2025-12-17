@@ -75,9 +75,5 @@ openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
 openapi.post("/admin/ingest", AdminIngestEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
 
-// Export queue consumer for background ingestion processing
-// Cloudflare Workers will automatically use this export for queue consumption
-export { queue } from "./queue-consumer";
-
 // Export the Hono app
 export default app;
