@@ -47,10 +47,19 @@ export class SearchEndpoint extends OpenAPIRoute {
 		const data = await this.getValidatedData<typeof this.schema>();
 		const prisma = createPrismaClient(c.env.DB);
 
+		console.log("[Search] Starting search", {
+			query: data.body.query,
+			schema: data.body.schema,
+			dataset: data.body.dataset,
+			country: data.body.country,
+			topK: data.body.topK,
+		});
+
 		// Generate embedding for query
 		// Workers AI binding should be automatically available
 		// If not available, it may need to be enabled in the Cloudflare dashboard
 		if (!c.env.AI) {
+			console.error("[Search] AI binding not available");
 			const error = new ApiException(
 				"AI binding not available. Please ensure Workers AI is enabled for your account.",
 			);
@@ -59,6 +68,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 			throw error;
 		}
 
+		console.log("[Search] Generating embedding for query");
 		const queryResponse = (await c.env.AI.run("@cf/baai/bge-base-en-v1.5", {
 			text: [data.body.query],
 		})) as { data: number[][] };
@@ -68,6 +78,9 @@ export class SearchEndpoint extends OpenAPIRoute {
 			!Array.isArray(queryResponse.data) ||
 			queryResponse.data.length === 0
 		) {
+			console.error("[Search] Failed to generate query embedding", {
+				queryResponse: queryResponse ? "exists" : "null",
+			});
 			const error = new ApiException("Failed to generate query embedding");
 			error.status = 500;
 			error.code = 500;
@@ -75,6 +88,9 @@ export class SearchEndpoint extends OpenAPIRoute {
 		}
 
 		const embedding = queryResponse.data[0] as number[];
+		console.log("[Search] Embedding generated", {
+			embeddingLength: embedding.length,
+		});
 
 		// Build metadata filter
 		const filter: Record<string, string | { $in: string[] }> = {};
@@ -90,6 +106,12 @@ export class SearchEndpoint extends OpenAPIRoute {
 		// Note: programId filtering would need to be handled differently
 		// as Vectorize metadata filters work on top-level fields
 
+		console.log("[Search] Querying Vectorize", {
+			topK: data.body.topK,
+			hasFilter: Object.keys(filter).length > 0,
+			filter,
+		});
+
 		// Query Vectorize
 		const vectorizeResults = await c.env.WATCHLIST_VECTORIZE.query(embedding, {
 			topK: data.body.topK,
@@ -100,12 +122,22 @@ export class SearchEndpoint extends OpenAPIRoute {
 					: undefined,
 		});
 
+		console.log("[Search] Vectorize query completed", {
+			vectorizeMatchesCount: vectorizeResults.matches.length,
+			targetIds: vectorizeResults.matches.map((m) => m.id),
+		});
+
 		// Fetch full records from D1
 		const targetIds = vectorizeResults.matches.map((m) => m.id);
 		const targets = await prisma.watchlistTarget.findMany({
 			where: {
 				id: { in: targetIds },
 			},
+		});
+
+		console.log("[Search] D1 query completed", {
+			targetIdsRequested: targetIds.length,
+			targetsFound: targets.length,
 		});
 
 		// Create a map for quick lookup
@@ -151,16 +183,38 @@ export class SearchEndpoint extends OpenAPIRoute {
 				): m is { target: unknown; score: number } => m !== null,
 			);
 
+		console.log("[Search] D1 results processed", {
+			matchesCount: matches.length,
+			hasGrokApiKey: !!c.env.GROK_API_KEY,
+		});
+
 		// If no results from D1, try Grok API as fallback
 		if (matches.length === 0 && c.env.GROK_API_KEY) {
+			console.log(
+				"[Search] No D1 results found, attempting Grok API fallback",
+				{
+					query: data.body.query,
+				},
+			);
 			try {
 				const grokService = new GrokService({
 					apiKey: c.env.GROK_API_KEY,
 				});
 
+				console.log("[Search] Calling Grok API for PEP status check");
 				const grokResponse = await grokService.queryPEPStatus(data.body.query);
 
+				console.log("[Search] Grok API response received", {
+					hasResponse: !!grokResponse,
+					pepStatus: grokResponse?.pepStatus,
+					hasName: !!grokResponse?.name,
+				});
+
 				if (grokResponse && grokResponse.pepStatus) {
+					console.log("[Search] Grok API found PEP status, returning result", {
+						name: grokResponse.name,
+						pepDetails: grokResponse.pepDetails,
+					});
 					const grokTarget = grokService.convertToWatchlistTarget(
 						grokResponse,
 						data.body.query,
@@ -178,12 +232,35 @@ export class SearchEndpoint extends OpenAPIRoute {
 							count: 1,
 						},
 					};
+				} else {
+					console.log(
+						"[Search] Grok API did not find PEP status or returned no results",
+						{
+							hasResponse: !!grokResponse,
+							pepStatus: grokResponse?.pepStatus,
+						},
+					);
 				}
 			} catch (error) {
 				// Log error but don't fail the request
-				console.error("Grok API fallback error:", error);
+				console.error("[Search] Grok API fallback error:", error);
+			}
+		} else {
+			if (matches.length === 0) {
+				console.log("[Search] No D1 results and Grok API key not configured", {
+					hasGrokApiKey: !!c.env.GROK_API_KEY,
+				});
+			} else {
+				console.log("[Search] Returning D1 results, skipping Grok fallback", {
+					matchesCount: matches.length,
+				});
 			}
 		}
+
+		console.log("[Search] Search completed", {
+			finalMatchesCount: matches.length,
+			source: matches.length > 0 ? "D1" : "none",
+		});
 
 		return {
 			success: true,

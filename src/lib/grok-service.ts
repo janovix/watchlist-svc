@@ -35,19 +35,19 @@ export class GrokService {
 	 * Returns structured data matching our watchlist target format
 	 */
 	async queryPEPStatus(query: string): Promise<GrokPEPResponse | null> {
+		console.log("[GrokService] Starting PEP status query", {
+			query,
+			baseUrl: this.baseUrl,
+			hasApiKey: !!this.apiKey,
+		});
+
 		try {
-			const response = await fetch(`${this.baseUrl}/chat/completions`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${this.apiKey}`,
-				},
-				body: JSON.stringify({
-					model: "grok-2-1212",
-					messages: [
-						{
-							role: "system",
-							content: `You are a PEP (Politically Exposed Person) status checker. Analyze the provided query and return structured JSON data about the person's PEP status and related information.
+			const requestBody = {
+				model: "grok-2-1212",
+				messages: [
+					{
+						role: "system",
+						content: `You are a PEP (Politically Exposed Person) status checker. Analyze the provided query and return structured JSON data about the person's PEP status and related information.
 
 Return a JSON object with the following structure:
 {
@@ -68,20 +68,43 @@ Return a JSON object with the following structure:
 
 If no information is found, return null for all fields except pepStatus (which should be false).
 Only include information you can confidently extract from the query.`,
-						},
-						{
-							role: "user",
-							content: `Check PEP status for: ${query}`,
-						},
-					],
-					temperature: 0.1,
-					response_format: { type: "json_object" },
-				}),
+					},
+					{
+						role: "user",
+						content: `Check PEP status for: ${query}`,
+					},
+				],
+				temperature: 0.1,
+				response_format: { type: "json_object" },
+			};
+
+			console.log("[GrokService] Sending request to Grok API", {
+				url: `${this.baseUrl}/chat/completions`,
+				model: requestBody.model,
+			});
+
+			const response = await fetch(`${this.baseUrl}/chat/completions`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${this.apiKey}`,
+				},
+				body: JSON.stringify(requestBody),
+			});
+
+			console.log("[GrokService] Received response from Grok API", {
+				status: response.status,
+				statusText: response.statusText,
+				ok: response.ok,
 			});
 
 			if (!response.ok) {
 				const errorText = await response.text();
-				console.error(`Grok API error: ${response.status} - ${errorText}`);
+				console.error("[GrokService] Grok API error", {
+					status: response.status,
+					statusText: response.statusText,
+					errorText,
+				});
 				return null;
 			}
 
@@ -92,15 +115,33 @@ Only include information you can confidently extract from the query.`,
 					};
 				}>;
 			};
+
+			console.log("[GrokService] Parsing Grok API response", {
+				hasChoices: !!data.choices,
+				choicesCount: data.choices?.length || 0,
+			});
+
 			const content = data.choices?.[0]?.message?.content;
 
 			if (!content) {
-				console.error("Grok API returned no content");
+				console.error("[GrokService] Grok API returned no content", {
+					dataStructure: Object.keys(data),
+				});
 				return null;
 			}
 
+			console.log("[GrokService] Parsing JSON content from Grok response", {
+				contentLength: content.length,
+			});
+
 			// Parse the JSON response
 			const parsed = JSON.parse(content) as GrokPEPResponse;
+
+			console.log("[GrokService] Successfully parsed Grok response", {
+				hasName: !!parsed.name,
+				pepStatus: parsed.pepStatus,
+				hasPepDetails: !!parsed.pepDetails,
+			});
 
 			// Validate and normalize the response
 			return {
@@ -121,7 +162,10 @@ Only include information you can confidently extract from the query.`,
 				pepDetails: parsed.pepDetails || undefined,
 			};
 		} catch (error) {
-			console.error("Error querying Grok API:", error);
+			console.error("[GrokService] Error querying Grok API", {
+				error: error instanceof Error ? error.message : String(error),
+				stack: error instanceof Error ? error.stack : undefined,
+			});
 			return null;
 		}
 	}

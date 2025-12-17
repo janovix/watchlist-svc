@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { GrokService, type GrokPEPResponse } from "../../src/lib/grok-service";
-import { WatchlistTarget } from "../../src/endpoints/watchlist/base";
 
 // Mock fetch globally
 global.fetch = vi.fn();
