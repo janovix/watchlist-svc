@@ -33,16 +33,15 @@
 	"queues": {
 		"producers": [
 			{
-				"queue": "watchlist-ingestion-dev",
+				"queue": "watchlist-ingestion-preview",
 				"binding": "INGESTION_QUEUE",
 			},
 		],
 		"consumers": [
 			{
-				"queue": "watchlist-ingestion-dev",
+				"queue": "watchlist-ingestion-preview",
 				"max_batch_size": 1,
 				"max_batch_timeout": 30,
-				"deadLetterQueue": "watchlist-ingestion-preview-dlq",
 			},
 		],
 	},

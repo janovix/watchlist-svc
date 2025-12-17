@@ -74,6 +74,15 @@
 		"vitest:coverage": "vitest run --coverage --config tests/vitest.config.mts",
 		"test": "npm run vitest"
 	},
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"@prisma/engines",
+			"esbuild",
+			"prisma",
+			"sharp",
+			"workerd"
+		]
+	},
 	"lint-staged": {
 		"**/*.{js,cjs,mjs,ts,tsx,cts,mts,json,md,yaml,yml}": [
 			"prettier --write"
