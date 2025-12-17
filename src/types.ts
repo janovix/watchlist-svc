@@ -9,6 +9,7 @@ interface Env extends Cloudflare.Env {
 		) => Promise<{ data: number[][] }>;
 	};
 	ADMIN_API_KEY?: string;
+	GROK_API_KEY?: string;
 	INGESTION_QUEUE?: Queue<IngestionJob>;
 }
 

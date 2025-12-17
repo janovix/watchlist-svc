@@ -18,3 +18,12 @@ if (!("AI" in env) || !env.AI) {
 		}),
 	};
 }
+
+// Mock Vectorize binding if not provided by miniflare
+if (!("WATCHLIST_VECTORIZE" in env) || !env.WATCHLIST_VECTORIZE) {
+	env.WATCHLIST_VECTORIZE = {
+		query: async (_embedding: number[], _options?: { topK?: number }) => ({
+			matches: [],
+		}),
+	} as unknown as typeof env.WATCHLIST_VECTORIZE;
+}

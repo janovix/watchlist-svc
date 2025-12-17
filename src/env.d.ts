@@ -14,5 +14,6 @@ declare namespace Cloudflare {
 			) => Promise<{ data: number[][] }>;
 		};
 		ADMIN_API_KEY?: string;
+		GROK_API_KEY?: string;
 	}
 }
