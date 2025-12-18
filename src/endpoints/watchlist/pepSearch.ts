@@ -29,6 +29,7 @@ export class PepSearchEndpoint extends OpenAPIRoute {
 						target: watchlistTarget,
 						pepStatus: z.boolean(),
 						pepDetails: z.string().optional(),
+						matchConfidence: z.enum(["exact", "possible"]),
 					}),
 				}),
 			},
@@ -126,6 +127,15 @@ export class PepSearchEndpoint extends OpenAPIRoute {
 			// If we found matches in Vectorize, return the first match
 			if (vectorizeResults.matches.length > 0) {
 				const prisma = createPrismaClient(c.env.DB);
+				const firstMatch = vectorizeResults.matches[0];
+				const matchScore = firstMatch.score || 0;
+
+				// Determine if this is an exact match based on similarity score
+				// Vectorize scores typically range from 0-1, with higher scores being better matches
+				// Using 0.8 as threshold for "exact" match
+				const matchConfidence: "exact" | "possible" =
+					matchScore >= 0.8 ? "exact" : "possible";
+
 				const targetIds = vectorizeResults.matches.map((m) => m.id);
 				const targets = await prisma.watchlistTarget.findMany({
 					where: {
@@ -143,6 +153,8 @@ export class PepSearchEndpoint extends OpenAPIRoute {
 							pepStatus,
 							targetId: target.id,
 							schema: target.schema,
+							matchScore,
+							matchConfidence,
 						},
 					);
 
@@ -154,6 +166,7 @@ export class PepSearchEndpoint extends OpenAPIRoute {
 							pepDetails: pepStatus
 								? `Found in watchlist with schema: ${target.schema}`
 								: undefined,
+							matchConfidence,
 						},
 					};
 				}
@@ -214,6 +227,7 @@ export class PepSearchEndpoint extends OpenAPIRoute {
 					target,
 					pepStatus: grokResponse.pepStatus,
 					pepDetails: grokResponse.pepDetails,
+					matchConfidence: "possible" as const, // Grok fallback is always a possible match
 				},
 			};
 		} catch (error) {

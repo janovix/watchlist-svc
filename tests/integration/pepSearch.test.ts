@@ -86,6 +86,7 @@ describe("PEP Search API Integration Tests", () => {
 						};
 						pepStatus: boolean;
 						pepDetails?: string;
+						matchConfidence: "exact" | "possible";
 					};
 				}>();
 
@@ -95,6 +96,7 @@ describe("PEP Search API Integration Tests", () => {
 				expect(body.result.target.schema).toBe("PEP");
 				expect(body.result.target.id).toMatch(/^grok_/);
 				expect(body.result.pepDetails).toBe("PEP status confirmed");
+				expect(body.result.matchConfidence).toBe("possible"); // Grok fallback is always "possible"
 			} else {
 				// AI binding not available in test environment
 				expect(response.status).toBe(503);
@@ -152,11 +154,13 @@ describe("PEP Search API Integration Tests", () => {
 					result: {
 						target: unknown;
 						pepStatus: boolean;
+						matchConfidence: "exact" | "possible";
 					};
 				}>();
 
 				expect(body.success).toBe(true);
 				expect(body.result.pepStatus).toBe(false);
+				expect(body.result.matchConfidence).toBe("possible"); // Grok fallback is always "possible"
 			} else {
 				// AI binding not available in test environment
 				expect(response.status).toBe(503);

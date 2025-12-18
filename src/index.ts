@@ -20,22 +20,29 @@ import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
 
-// Configure CORS to allow requests from janovix.workers.dev subdomains
+// Configure CORS to allow requests from configured domain subdomains
 app.use(
 	"*",
 	cors({
-		origin: (origin) => {
-			// Allow requests from any subdomain of janovix.workers.dev
+		origin: (origin, c) => {
+			// Get allowed domain from environment variable
+			const allowedDomain = c.env.CORS_ALLOWED_DOMAIN;
+			if (!allowedDomain) {
+				// If no domain configured, allow all origins (for development)
+				return "*";
+			}
+
 			if (!origin) return "*";
+
 			try {
 				const url = new URL(origin);
 				const hostname = url.hostname;
 				// Allow exact match
-				if (hostname === "janovix.workers.dev") {
+				if (hostname === allowedDomain) {
 					return origin;
 				}
 				// Allow any subdomain (e.g., watchlist.janovix.workers.dev)
-				if (hostname.endsWith(".janovix.workers.dev")) {
+				if (hostname.endsWith(`.${allowedDomain}`)) {
 					return origin;
 				}
 			} catch {
