@@ -1,3 +1,12 @@
+# [1.1.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.4...v1.1.0-rc.5) (2025-12-18)
+
+
+### Features
+
+* Add PEP search endpoint using Grok API ([88eeb69](https://github.com/janovix/watchlist-svc/commit/88eeb699ecac0ad9ffced9e408da481a24146508))
+* Use grok-3 model for AI requests ([91ccad6](https://github.com/janovix/watchlist-svc/commit/91ccad61fee519e4d39e23eccca06be3c6f99ac0))
+* Use grok-4-fast-non-reasoning model ([c8b30af](https://github.com/janovix/watchlist-svc/commit/c8b30afa1f4d74e6a68d12f460decaf13050d18d))
+
 # [1.1.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.3...v1.1.0-rc.4) (2025-12-17)
 
 
