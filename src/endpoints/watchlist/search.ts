@@ -229,7 +229,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 					matches: [
 						{
 							target: grokTarget,
-							score: 0.5, // Default score for Grok API results
+							score: 0.8, // High confidence score for Grok API results (external match)
 						},
 					],
 					count: 1,
