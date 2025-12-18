@@ -1,5 +1,6 @@
 import { ApiException, fromHono } from "chanfana";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
@@ -18,6 +19,41 @@ import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
+
+// Configure CORS to allow requests from janovix.workers.dev subdomains
+app.use(
+	"*",
+	cors({
+		origin: (origin) => {
+			// Allow requests from any subdomain of janovix.workers.dev
+			if (!origin) return "*";
+			try {
+				const url = new URL(origin);
+				const hostname = url.hostname;
+				// Allow exact match
+				if (hostname === "janovix.workers.dev") {
+					return origin;
+				}
+				// Allow any subdomain (e.g., watchlist.janovix.workers.dev)
+				if (hostname.endsWith(".janovix.workers.dev")) {
+					return origin;
+				}
+			} catch {
+				// Invalid origin, deny
+			}
+			return null;
+		},
+		allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+		allowHeaders: [
+			"Content-Type",
+			"Authorization",
+			"X-Requested-With",
+			"Accept",
+		],
+		exposeHeaders: ["Content-Length", "Content-Type"],
+		credentials: true,
+	}),
+);
 
 const appMeta: AppMeta = {
 	name: pkg.name,
