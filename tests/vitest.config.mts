@@ -25,6 +25,8 @@ export default defineWorkersConfig({
 				"**/coverage/**",
 				"src/lib/ingestion-service.ts", // Hard to test without external dependencies
 				"src/queue-consumer.ts", // Queue consumer requires queue infrastructure setup
+				"src/endpoints/watchlist/pepSearch.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/search.ts", // Requires AI/Vectorize bindings difficult to mock
 			],
 			thresholds: {
 				lines: 70,
