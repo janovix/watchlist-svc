@@ -43,7 +43,7 @@ export class GrokService {
 
 		try {
 			const requestBody = {
-				model: "grok-2-1212",
+				model: "grok-4-fast-non-reasoning",
 				messages: [
 					{
 						role: "system",
