@@ -1,3 +1,13 @@
+# [1.1.0-rc.6](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.5...v1.1.0-rc.6) (2025-12-18)
+
+
+### Features
+
+* Add CORS_ALLOWED_DOMAIN to wrangler configs and update mocks ([340e560](https://github.com/janovix/watchlist-svc/commit/340e5605403b29b003be6bb78a51691f20df7f59))
+* Add PEP search endpoint and CORS configuration ([0f937fb](https://github.com/janovix/watchlist-svc/commit/0f937fba95ff5a4ba2440cc41829b0cac8108965))
+* Add Vectorize search as PEP lookup fallback ([4d2f420](https://github.com/janovix/watchlist-svc/commit/4d2f42064c59519cd8196ac6e93b1ffcb0ea6680))
+* Configure CORS for janovix.workers.dev subdomains ([655a92a](https://github.com/janovix/watchlist-svc/commit/655a92a5943dccc0e89c98a11527af2ec764ea00))
+
 # [1.1.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.4...v1.1.0-rc.5) (2025-12-18)
 
 
