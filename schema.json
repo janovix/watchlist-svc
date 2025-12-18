@@ -233,6 +233,226 @@
 				}
 			}
 		},
+		"/pep/search": {
+			"post": {
+				"tags": ["PEP"],
+				"summary": "Search for PEP (Politically Exposed Person) status using Grok API",
+				"operationId": "searchPEP",
+				"requestBody": {
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"query": {
+										"type": "string",
+										"minLength": 1
+									}
+								},
+								"required": ["query"]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "PEP search results",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"result": {
+											"type": "object",
+											"properties": {
+												"target": {
+													"type": "object",
+													"properties": {
+														"id": {
+															"type": "string"
+														},
+														"schema": {
+															"type": ["string", "null"]
+														},
+														"name": {
+															"type": ["string", "null"]
+														},
+														"aliases": {
+															"type": ["array", "null"],
+															"items": {
+																"type": "string"
+															}
+														},
+														"birthDate": {
+															"type": ["string", "null"]
+														},
+														"countries": {
+															"type": ["array", "null"],
+															"items": {
+																"type": "string"
+															}
+														},
+														"addresses": {
+															"type": ["array", "null"],
+															"items": {
+																"type": "string"
+															}
+														},
+														"identifiers": {
+															"type": ["array", "null"],
+															"items": {
+																"type": "string"
+															}
+														},
+														"sanctions": {
+															"type": ["array", "null"],
+															"items": {
+																"type": "string"
+															}
+														},
+														"phones": {
+															"type": ["array", "null"],
+															"items": {
+																"type": "string"
+															}
+														},
+														"emails": {
+															"type": ["array", "null"],
+															"items": {
+																"type": "string"
+															}
+														},
+														"programIds": {
+															"type": ["array", "null"],
+															"items": {
+																"type": "string"
+															}
+														},
+														"dataset": {
+															"type": ["string", "null"]
+														},
+														"firstSeen": {
+															"type": ["string", "null"]
+														},
+														"lastSeen": {
+															"type": ["string", "null"]
+														},
+														"lastChange": {
+															"type": ["string", "null"]
+														},
+														"createdAt": {
+															"type": "string",
+															"format": "date-time"
+														},
+														"updatedAt": {
+															"type": "string",
+															"format": "date-time"
+														}
+													},
+													"required": [
+														"id",
+														"schema",
+														"name",
+														"aliases",
+														"birthDate",
+														"countries",
+														"addresses",
+														"identifiers",
+														"sanctions",
+														"phones",
+														"emails",
+														"programIds",
+														"dataset",
+														"firstSeen",
+														"lastSeen",
+														"lastChange",
+														"createdAt",
+														"updatedAt"
+													]
+												},
+												"pepStatus": {
+													"type": "boolean"
+												},
+												"pepDetails": {
+													"type": "string"
+												}
+											},
+											"required": ["target", "pepStatus"]
+										}
+									},
+									"required": ["success", "result"]
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad request",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"errors": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"code": {
+														"type": "number"
+													},
+													"message": {
+														"type": "string"
+													}
+												},
+												"required": ["code", "message"]
+											}
+										}
+									},
+									"required": ["success", "errors"]
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "Service unavailable - Grok API not configured",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"errors": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"code": {
+														"type": "number"
+													},
+													"message": {
+														"type": "string"
+													}
+												},
+												"required": ["code", "message"]
+											}
+										}
+									},
+									"required": ["success", "errors"]
+								}
+							}
+						}
+					}
+				}
+			}
+		},
 		"/targets/{id}": {
 			"get": {
 				"tags": ["Targets"],

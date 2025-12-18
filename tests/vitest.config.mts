@@ -42,6 +42,7 @@ export default defineWorkersConfig({
 					compatibilityFlags: ["experimental", "nodejs_compat"],
 					bindings: {
 						MIGRATIONS: migrations,
+						GROK_API_KEY: "test-grok-api-key",
 					},
 					// Configure D1 database directly (no wrangler dev needed)
 					// This prevents wrangler from trying to use remote mode
