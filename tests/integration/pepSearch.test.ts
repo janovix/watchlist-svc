@@ -351,7 +351,6 @@ describe("PEP Search API Integration Tests", () => {
 			};
 
 			// Mock Vectorize to return high-score match (exact match)
-			// @ts-expect-error - Mocking Vectorize binding
 			env.WATCHLIST_VECTORIZE = {
 				query: async () => ({
 					matches: [
@@ -360,8 +359,9 @@ describe("PEP Search API Integration Tests", () => {
 							score: 0.85, // High score = exact match
 						},
 					],
+					count: 1,
 				}),
-			};
+			} as unknown as typeof env.WATCHLIST_VECTORIZE;
 
 			const response = await SELF.fetch("http://local.test/pep/search", {
 				method: "POST",
@@ -435,7 +435,6 @@ describe("PEP Search API Integration Tests", () => {
 			};
 
 			// Mock Vectorize to return low-score match (possible match)
-			// @ts-expect-error - Mocking Vectorize binding
 			env.WATCHLIST_VECTORIZE = {
 				query: async () => ({
 					matches: [
@@ -444,8 +443,9 @@ describe("PEP Search API Integration Tests", () => {
 							score: 0.65, // Low score = possible match
 						},
 					],
+					count: 1,
 				}),
-			};
+			} as unknown as typeof env.WATCHLIST_VECTORIZE;
 
 			const response = await SELF.fetch("http://local.test/pep/search", {
 				method: "POST",
@@ -529,12 +529,12 @@ describe("PEP Search API Integration Tests", () => {
 			};
 
 			// Mock Vectorize binding
-			// @ts-expect-error - Mocking Vectorize binding
 			env.WATCHLIST_VECTORIZE = {
 				query: async () => ({
 					matches: [],
+					count: 0,
 				}),
-			};
+			} as unknown as typeof env.WATCHLIST_VECTORIZE;
 
 			const response = await SELF.fetch("http://local.test/pep/search", {
 				method: "POST",
@@ -585,12 +585,12 @@ describe("PEP Search API Integration Tests", () => {
 			};
 
 			// Mock Vectorize to return no matches
-			// @ts-expect-error - Mocking Vectorize binding
 			env.WATCHLIST_VECTORIZE = {
 				query: async () => ({
 					matches: [],
+					count: 0,
 				}),
-			};
+			} as unknown as typeof env.WATCHLIST_VECTORIZE;
 
 			// Mock Grok API
 			(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({

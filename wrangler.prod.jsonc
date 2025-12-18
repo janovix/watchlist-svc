@@ -37,4 +37,7 @@
 			},
 		],
 	},
+	"vars": {
+		"CORS_ALLOWED_DOMAIN": "janovix.ai",
+	},
 }
