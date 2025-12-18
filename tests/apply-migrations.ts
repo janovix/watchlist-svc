@@ -14,7 +14,7 @@ if (!("AI" in env) || !env.AI) {
 	// @ts-expect-error - Adding mock AI binding for tests
 	env.AI = {
 		run: async () => ({
-			data: [[0.1, 0.2, 0.3]], // Mock embedding vector
+			data: [new Array(768).fill(0.1)], // Mock embedding vector (768 dimensions for bge-base-en-v1.5)
 		}),
 	};
 }
