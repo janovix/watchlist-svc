@@ -18,7 +18,7 @@ import {
 import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
 
 // Start a Hono app
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: { session?: unknown } }>();
 
 // Configure CORS to allow requests from configured domain subdomains
 app.use(
@@ -112,13 +112,19 @@ app.get("/docsz", (c) => {
 
 // Register watchlist endpoints
 openapi.get("/healthz", HealthEndpoint);
+// Protected endpoints require authentication
 openapi.post("/search", SearchEndpoint);
 openapi.post("/pep/search", PepSearchEndpoint);
 openapi.get("/targets/:id", TargetReadEndpoint);
 openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
 openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
+// Admin endpoints still use admin API key
 openapi.post("/admin/ingest", AdminIngestEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
 
-// Export the Hono app
+// Export the Hono app as default export (for HTTP requests)
 export default app;
+
+// Export service binding interface for use by other workers
+// This allows other workers to call this service directly via service binding
+export { app as watchlistService };

@@ -40,4 +40,10 @@
 	"vars": {
 		"CORS_ALLOWED_DOMAIN": "janovix.ai",
 	},
+	"services": [
+		{
+			"binding": "AUTH_SERVICE",
+			"service": "auth-svc",
+		},
+	],
 }

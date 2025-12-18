@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import { watchlistIngestionRun } from "./base";
 import { transformIngestionRun } from "../../lib/transformers";
+import { requireAuth } from "../../lib/auth";
 
 export class IngestionRunsListEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -24,10 +25,24 @@ export class IngestionRunsListEndpoint extends OpenAPIRoute {
 					result: z.array(watchlistIngestionRun),
 				}),
 			},
+			"401": {
+				description: "Unauthorized - Invalid or missing session",
+				...contentJson({
+					success: Boolean,
+					errors: z.array(
+						z.object({
+							code: z.number(),
+							message: z.string(),
+						}),
+					),
+				}),
+			},
 		},
 	};
 
 	public async handle(c: AppContext) {
+		// Require authentication
+		await requireAuth(c);
 		const data = await this.getValidatedData<typeof this.schema>();
 		const prisma = createPrismaClient(c.env.DB);
 
@@ -67,6 +82,18 @@ export class IngestionRunReadEndpoint extends OpenAPIRoute {
 					result: watchlistIngestionRun,
 				}),
 			},
+			"401": {
+				description: "Unauthorized - Invalid or missing session",
+				...contentJson({
+					success: Boolean,
+					errors: z.array(
+						z.object({
+							code: z.number(),
+							message: z.string(),
+						}),
+					),
+				}),
+			},
 			"404": {
 				description: "Ingestion run not found",
 				...contentJson({
@@ -83,6 +110,8 @@ export class IngestionRunReadEndpoint extends OpenAPIRoute {
 	};
 
 	public async handle(c: AppContext) {
+		// Require authentication
+		await requireAuth(c);
 		const data = await this.getValidatedData<typeof this.schema>();
 		const prisma = createPrismaClient(c.env.DB);
 

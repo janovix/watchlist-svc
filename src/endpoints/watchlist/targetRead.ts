@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import { watchlistTarget } from "./base";
 import { transformWatchlistTarget } from "../../lib/transformers";
+import { requireAuth } from "../../lib/auth";
 
 export class TargetReadEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -24,6 +25,18 @@ export class TargetReadEndpoint extends OpenAPIRoute {
 					result: watchlistTarget,
 				}),
 			},
+			"401": {
+				description: "Unauthorized - Invalid or missing session",
+				...contentJson({
+					success: Boolean,
+					errors: z.array(
+						z.object({
+							code: z.number(),
+							message: z.string(),
+						}),
+					),
+				}),
+			},
 			"404": {
 				description: "Target not found",
 				...contentJson({
@@ -40,6 +53,8 @@ export class TargetReadEndpoint extends OpenAPIRoute {
 	};
 
 	public async handle(c: AppContext) {
+		// Require authentication
+		await requireAuth(c);
 		const data = await this.getValidatedData<typeof this.schema>();
 		const prisma = createPrismaClient(c.env.DB);
 

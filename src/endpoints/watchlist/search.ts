@@ -6,6 +6,7 @@ import { createPrismaClient } from "../../lib/prisma";
 import { watchlistTarget } from "./base";
 import { GrokService } from "../../lib/grok-service";
 import { transformWatchlistTarget } from "../../lib/transformers";
+import { requireAuth } from "../../lib/auth";
 
 export class SearchEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -49,6 +50,18 @@ export class SearchEndpoint extends OpenAPIRoute {
 					),
 				}),
 			},
+			"401": {
+				description: "Unauthorized - Invalid or missing session",
+				...contentJson({
+					success: Boolean,
+					errors: z.array(
+						z.object({
+							code: z.number(),
+							message: z.string(),
+						}),
+					),
+				}),
+			},
 			"503": {
 				description: "Service unavailable - Required services not configured",
 				...contentJson({
@@ -65,6 +78,8 @@ export class SearchEndpoint extends OpenAPIRoute {
 	};
 
 	public async handle(c: AppContext) {
+		// Require authentication
+		await requireAuth(c);
 		const data = await this.getValidatedData<typeof this.schema>();
 
 		console.log("[Search] Starting search", {

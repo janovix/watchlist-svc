@@ -15,5 +15,7 @@ declare namespace Cloudflare {
 		};
 		ADMIN_API_KEY?: string;
 		GROK_API_KEY?: string;
+		AUTH_SERVICE?: Fetcher; // Service binding to auth-svc worker
+		AUTH_SERVICE_URL?: string; // Fallback URL for auth service (for local dev or HTTP)
 	}
 }
