@@ -57,7 +57,7 @@ MISIÓN: Realizar una BÚSQUEDA EXHAUSTIVA usando search-tools (web search y X s
 2. DEBES realizar búsquedas web usando search-tools para encontrar información actualizada
 3. DEBES buscar en X/Twitter usando search-tools para encontrar cuentas oficiales y menciones
 4. Si no encuentras información en la primera búsqueda, intenta variaciones del nombre y términos relacionados
-5. Busca específicamente términos como "[nombre] CONADE", "[nombre] director", "[nombre] funcionario público", "[nombre] México gobierno"
+5. Busca información sobre la persona usando su nombre y analiza los resultados cuidadosamente
 
 METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
 
@@ -72,9 +72,8 @@ METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
    ⚠️ DEBES usar search-tools para realizar búsquedas web y en X/Twitter. NO asumas información sin buscar.
    
    Realiza búsquedas usando search-tools en:
-   - Web: "[nombre] México" para encontrar información general
-   - Web: "[nombre] CONADE" o "[nombre] [organismo]" para encontrar cargos específicos
-   - Web: "[nombre] gobernador" o "[nombre] alcalde" o "[nombre] director" para encontrar cargos
+   - Web: "[nombre]" para encontrar información general
+   - Web: "[nombre] México" para encontrar información específica de México
    - X/Twitter: "[nombre]" para encontrar cuentas oficiales y menciones
    - Sitios oficiales gubernamentales (gob.mx, portales estatales y municipales)
    - Noticias y medios de comunicación confiables
@@ -109,8 +108,8 @@ METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
    - Y puedes confirmar con alta confianza que es la misma persona
    - Y el cargo está dentro del período de los últimos 5 años (hasta diciembre 2025)
    
-   EJEMPLO: "Director Técnico Nacional de Natación en CONADE" ES PEP porque:
-   - CONADE es organismo descentralizado bajo Secretaría de Educación Pública
+   EJEMPLO: "Director Técnico Nacional" en un organismo descentralizado bajo Secretaría de Estado ES PEP porque:
+   - El organismo descentralizado está bajo una Secretaría de Estado
    - "Director Técnico Nacional" está dentro de los tres niveles jerárquicos inferiores
    - Por lo tanto, aunque no esté explícitamente listado, califica como PEP
 
@@ -130,8 +129,8 @@ METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
    IMPORTANTE: Los directores, titulares y hasta dos niveles jerárquicos inferiores en organismos descentralizados y órganos desconcentrados de las Secretarías de Estado SON PEP.
    
    Ejemplos de organismos descentralizados bajo Secretarías que incluyen cargos PEP:
-   - CONADE (Comisión Nacional de Cultura Física y Deporte) bajo Secretaría de Educación Pública: Directores, Subdirectores, Coordinadores Nacionales, Directores Técnicos Nacionales
-   - CONACYT bajo Secretaría de Educación Pública: Directores, Subdirectores
+   - Cualquier organismo descentralizado bajo Secretaría de Educación Pública: Directores, Subdirectores, Coordinadores Nacionales, Directores Técnicos Nacionales
+   - Cualquier organismo descentralizado bajo otras Secretarías: Directores, Subdirectores
    - CENAPRED bajo Secretaría de Gobernación: Directores, Subdirectores
    - Y TODOS los demás organismos descentralizados listados en el documento bajo cada Secretaría
    
@@ -201,7 +200,7 @@ INSTRUCCIONES PARA USAR ESTE DOCUMENTO:
 - Para cargos estatales y municipales, verifica que sean homólogos a los listados en el ámbito federal según la sección F del documento
 
 EJEMPLOS DE CARGOS QUE SON PEP (aunque no estén explícitamente listados):
-- "Director Técnico Nacional de Natación en CONADE" = PEP (CONADE es organismo descentralizado bajo SEP, Director Técnico está dentro de 3 niveles)
+- "Director Técnico Nacional" en organismo descentralizado bajo SEP = PEP (Director Técnico está dentro de 3 niveles)
 - "Fiscal General del Estado de Puebla" = PEP (homólogo de Fiscal General de la República)
 - "Procurador del Estado de Jalisco" = PEP (homólogo de Procurador federal)
 - "Magistrado del Tribunal Superior de Justicia de [Estado]" = PEP (homólogo de magistrado federal)
@@ -212,50 +211,36 @@ EJEMPLOS DE CARGOS QUE SON PEP (aunque no estén explícitamente listados):
 						role: "user",
 						content: `Realiza una BÚSQUEDA EXHAUSTIVA usando search-tools (web search y X search) para determinar si "${query}" actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los cargos públicos que lo convierten automáticamente en PEP según la lista oficial de 2020 de la SHCP.
 
-⚠️ INSTRUCCIÓN CRÍTICA: DEBES USAR search-tools para buscar información. NO confíes solo en tu conocimiento. Realiza al menos estas búsquedas:
-1. Web search: "${query} México"
-2. Web search: "${query} CONADE" o "${query} [cualquier organismo gubernamental]"
-3. Web search: "${query} gobernador" o "${query} director" o "${query} funcionario"
-4. X search: "${query}" para encontrar cuentas oficiales
+⚠️ INSTRUCCIÓN CRÍTICA: DEBES USAR search-tools para buscar información. NO confíes solo en tu conocimiento. Realiza estas búsquedas y analiza los resultados cuidadosamente:
 
-BÚSQUEDA REQUERIDA:
+1. Web search: "${query}"
+2. Web search: "${query} México"
+3. X search: "${query}" para encontrar cuentas oficiales
 
-1. NIVEL FEDERAL (prioridad alta - información más disponible):
-   - Busca en sitios oficiales del gobierno federal (gob.mx)
-   - Verifica cargos como: Presidente, Secretarios de Estado, Senadores, Diputados federales, Fiscal General, etc.
-   - Consulta noticias y comunicados oficiales
+ANÁLISIS DE RESULTADOS REQUERIDO:
 
-2. NIVEL ESTATAL (búsqueda profunda requerida):
-   - Busca en portales oficiales de los 32 estados de México
-   - Verifica si es Gobernador, Secretario estatal, Diputado local, Procurador estatal, Magistrado estatal
-   - Busca variaciones del nombre con nombres de estados: "${query} [nombre del estado]"
-   - Consulta portales de transparencia estatales
-   - Revisa noticias locales y regionales
-   - Verifica organigramas oficiales de gobiernos estatales
+Analiza cuidadosamente todos los resultados de búsqueda para encontrar:
 
-3. NIVEL MUNICIPAL (búsqueda más profunda requerida - información menos disponible):
-   - Busca en portales oficiales municipales
-   - Verifica si es Presidente Municipal, Regidor, Síndico, Secretario municipal, Tesorero municipal
-   - Busca variaciones del nombre con nombres de municipios: "${query} [nombre del municipio]"
-   - Consulta portales de transparencia municipales
-   - Revisa noticias locales y periódicos regionales
-   - Verifica cabildos y estructuras municipales
+1. NIVEL FEDERAL:
+   - Cargos como: Presidente, Secretarios de Estado, Senadores, Diputados federales, Fiscal General, etc.
+   - Cualquier posición en organismos federales o Secretarías de Estado
+
+2. NIVEL ESTATAL:
+   - Gobernador, Secretario estatal, Diputado local, Procurador estatal, Magistrado estatal
+   - Cualquier posición en gobiernos estatales
+
+3. NIVEL MUNICIPAL:
+   - Presidente Municipal, Regidor, Síndico, Secretario municipal, Tesorero municipal
+   - Cualquier posición en gobiernos municipales
 
 4. PARTIDOS POLÍTICOS:
-   - Verifica si es candidato a cualquier cargo público
-   - Busca si es líder nacional de partido político
-   - Verifica si es responsable de finanzas de partido político
+   - Candidatos a cualquier cargo público
+   - Líderes nacionales de partido político
+   - Responsables de finanzas de partido político
 
-5. VARIACIONES DE BÚSQUEDA:
-   Busca usando múltiples variaciones:
-   - "${query}"
-   - "${query} México"
-   - "${query} gobernador"
-   - "${query} alcalde"
-   - "${query} diputado"
-   - "${query} secretario"
-   - "${query} [cualquier estado de México]"
-   - "${query} [cualquier municipio]"
+5. ORGANISMOS DESCENTRALIZADOS:
+   - Cualquier posición en organismos descentralizados bajo Secretarías de Estado
+   - Directores, Subdirectores, Coordinadores (hasta 3 niveles jerárquicos inferiores)
 
 CRITERIOS DE MATCHING ESTRICTOS:
 - Solo retorna pepStatus: true si el nombre coincide exactamente o con variaciones menores (no parciales)
@@ -263,7 +248,7 @@ CRITERIOS DE MATCHING ESTRICTOS:
 - Verifica que sea la misma persona con evidencia clara antes de retornar positivo
 - El cargo debe ser PEP según el documento: explícitamente listado, homólogo, o dentro de 3 niveles jerárquicos inferiores
 - En caso de duda sobre el nombre, retorna pepStatus: false
-- PERO: Si el nombre coincide y encuentras un cargo en organismo descentralizado/órgano desconcentrado (como CONADE, CONACYT, etc.), ese cargo SÍ es PEP aunque no esté explícitamente listado
+- PERO: Si el nombre coincide y encuentras un cargo en organismo descentralizado/órgano desconcentrado bajo una Secretaría de Estado, ese cargo SÍ es PEP aunque no esté explícitamente listado
 
 IMPORTANTE: Realiza búsquedas exhaustivas en múltiples fuentes. No te limites solo a resultados obvios. Los cargos estatales y municipales requieren búsquedas más profundas ya que la información puede estar menos disponible públicamente.`,
 					},

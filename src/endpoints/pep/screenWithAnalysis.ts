@@ -118,32 +118,18 @@ export class PepScreenWithAnalysisEndpoint extends OpenAPIRoute {
 			const maxAnalysisTurns = data.body.max_analysis_turns || 8;
 			const searchDepth = data.body.search_depth || "standard";
 
-			// Define search queries based on depth
+			// Define search queries based on depth - simple searches with just the name
 			const searchQueries: string[] = [];
 			if (searchDepth === "quick") {
-				searchQueries.push(
-					`"${fullName} México"`,
-					`"${fullName} gobierno"`,
-					`"${fullName}"`,
-				);
+				searchQueries.push(`"${fullName}"`);
 			} else if (searchDepth === "standard") {
-				searchQueries.push(
-					`"${fullName} México"`,
-					`"${fullName} gobierno"`,
-					`"${fullName} funcionario"`,
-					`"${fullName} director"`,
-					`"${fullName}"`,
-				);
+				searchQueries.push(`"${fullName}"`, `"${fullName} México"`);
 			} else {
-				// deep
+				// deep - multiple searches with name variations
 				searchQueries.push(
-					`"${fullName} México"`,
-					`"${fullName} gobierno"`,
-					`"${fullName} funcionario público"`,
-					`"${fullName} director"`,
-					`"${fullName} secretario"`,
-					`"${fullName} gobernador"`,
 					`"${fullName}"`,
+					`"${fullName} México"`,
+					`${fullName}`, // without quotes for broader results
 				);
 			}
 
@@ -160,7 +146,7 @@ export class PepScreenWithAnalysisEndpoint extends OpenAPIRoute {
 CRITICAL RULES FOR SOURCES/URLs:
 - ONLY include URLs that you ACTUALLY found in search results
 - DO NOT make up, invent, or hallucinate URLs
-- DO NOT create URLs based on patterns (e.g., don't create "https://www.gob.mx/conade/prensa/..." if you didn't actually find it)
+- DO NOT create URLs based on patterns (e.g., don't create URLs based on organization names if you didn't actually find them)
 - ONLY cite URLs that were returned by search-tools
 - If a URL was found in search results, include it. If not, don't include it.
 
@@ -181,12 +167,19 @@ Be thorough and search multiple sources. Always cite your REAL sources - never i
 Name: ${fullName}
 Birth date: ${birthDate || "not provided"}
 
-Perform these searches (be efficient, focus on finding government positions):
-${searchQueries.map((q, i) => `${i + 1}. ${q.includes("X") || q.includes("Twitter") ? `X/Twitter` : `Web`}: ${q}`).join("\n")}
+Perform these searches and analyze the results thoroughly:
+${searchQueries.map((q, i) => `${i + 1}. Web search: ${q}`).join("\n")}
+${searchQueries.length > 0 ? `${searchQueries.length + 1}. X/Twitter search: "${fullName}"` : ""}
+
+Analyze all search results carefully to find:
+- Government positions (federal, state, or municipal)
+- Political roles
+- Organizations they work/worked for
+- Dates of positions
 
 Compile a concise summary with CLEAR structure. For each government position found, include:
 - Position title (exact title as stated, e.g., "Director de Alto Rendimiento", "Fiscal General del Estado de Puebla")
-- Organization name (exact name, e.g., "CONADE", "Comisión Nacional de Cultura Física y Deporte", "Estado de Puebla", "Municipio de Guadalajara")
+- Organization name (exact name, e.g., "Comisión Nacional de Cultura Física y Deporte", "Estado de Puebla", "Municipio de Guadalajara")
 - Start date (if mentioned, format: YYYY-MM-DD)
 - End date (if mentioned, format: YYYY-MM-DD, or note if current)
 - Source URL where this position information was found (ONLY if you actually found this URL in search results)
@@ -199,7 +192,7 @@ CRITICAL: For source URLs:
 
 Format example:
 "Position: Director de Alto Rendimiento
-Organization: CONADE (Comisión Nacional de Cultura Física y Deporte)
+Organization: Comisión Nacional de Cultura Física y Deporte
 Start date: 2022-09-01
 End date: null (current)
 Source: [ONLY include if search-tools actually returned this URL]"
@@ -213,6 +206,7 @@ Include:
 
 IMPORTANT: 
 - Be precise with position titles and organization names. Use exact wording from sources.
+- Analyze search results thoroughly - look for any government or political positions mentioned.
 - NEVER invent URLs. Only include URLs that search-tools actually returned.
 
 Keep the summary focused and efficient. Return ONLY the summary text, no JSON.`,
@@ -311,7 +305,7 @@ ANALYSIS PROCESS:
 1. Read and understand the Lista PEPS 2020 document carefully
 2. Extract ALL government positions from the person's summary with ACCURATE details:
    - Extract the EXACT position title as mentioned in the summary
-   - Extract the EXACT organization name (e.g., "CONADE", "Secretaría de Educación Pública", "Estado de Puebla", etc.)
+   - Extract the EXACT organization name (e.g., "Secretaría de Educación Pública", "Estado de Puebla", "Municipio de Guadalajara", etc.)
    - Determine jurisdiction: "federal", "estatal", or "municipal" based on the organization
    - Extract start_date and end_date if mentioned in the summary (format: YYYY-MM-DD or null)
    - Extract the EXACT URL/source where this position was mentioned
@@ -329,12 +323,12 @@ ANALYSIS PROCESS:
 
 5. CRITICAL FOR POSITIONS AND SOURCES:
    - Extract positions EXACTLY as stated in the summary - do not infer or guess
-   - If the summary says "Director de Alto Rendimiento en CONADE", extract exactly that
+   - Extract positions exactly as stated in the summary - do not modify or infer
    - If the summary mentions dates, extract them accurately
    - For evidence URLs: ONLY use URLs that are ACTUALLY mentioned in the summary
    - DO NOT invent, create, or guess URLs - if no URL is mentioned, use a description like "Found in search results" or "Mentioned in web search"
-   - NEVER create URLs based on organization names or patterns (e.g., don't create "https://www.gob.mx/conade/..." if it wasn't actually in the summary)
-   - Map organization names correctly: "CONADE" = federal, "Estado de [X]" = estatal, "[Municipio]" = municipal
+   - NEVER create URLs based on organization names or patterns
+   - Map organization names correctly: federal agencies = "federal", "Estado de [X]" = "estatal", "[Municipio]" = "municipal"
    - Be precise with position titles - use the exact wording from the summary
 
 6. Use your intelligence to match positions found in the summary against the rules and positions listed in the document. Do not rely on hardcoded examples - read the document and apply its rules.
@@ -357,7 +351,7 @@ ANALYSIS TASK:
    - Read the summary carefully and identify EVERY government position mentioned
    - For each position, extract:
      * Title: Use the EXACT title as stated in the summary (e.g., "Director de Alto Rendimiento", "Fiscal General del Estado de Puebla")
-     * Organization: Extract the EXACT organization name (e.g., "CONADE", "Comisión Nacional de Cultura Física y Deporte", "Estado de Puebla", "Municipio de Guadalajara")
+     * Organization: Extract the EXACT organization name (e.g., "Comisión Nacional de Cultura Física y Deporte", "Estado de Puebla", "Municipio de Guadalajara")
      * Jurisdiction: Determine based on organization - "federal" for federal agencies, "estatal" for state-level, "municipal" for municipal
      * Dates: Extract start_date and end_date if mentioned (format YYYY-MM-DD, or null if not mentioned or current)
      * Evidence: Extract the URL ONLY if it was actually mentioned in the summary. If no URL was mentioned, use a description like "Found in search results" or "Mentioned in web search" - DO NOT invent URLs
@@ -392,12 +386,12 @@ ANALYSIS TASK:
   "positions_found": [
     {
       "title": "EXACT position title as stated in summary (e.g., 'Director de Alto Rendimiento', 'Fiscal General del Estado de Puebla')",
-      "organization": "EXACT organization name as stated in summary (e.g., 'CONADE', 'Comisión Nacional de Cultura Física y Deporte', 'Estado de Puebla')",
+      "organization": "EXACT organization name as stated in summary (e.g., 'Comisión Nacional de Cultura Física y Deporte', 'Estado de Puebla', 'Municipio de Guadalajara')",
       "jurisdiction": "federal/estatal/municipal (determine based on organization level)",
       "start_date": "YYYY-MM-DD format if mentioned in summary, otherwise null",
       "end_date": "YYYY-MM-DD format if mentioned in summary, 'null' if current position, or null if not mentioned",
       "evidence": "ONLY include URL if it was actually found in search results. If no real URL was found, use a description like 'Found in search results' or 'Mentioned in [source type]' - DO NOT invent URLs",
-      "pep_basis": "Detailed explanation of why this position is PEP, referencing specific sections/rules from Lista PEPS 2020 document (e.g., 'Within 3 hierarchical levels in CONADE under SEP per Section E', 'Homologous to federal Fiscal General per Section F')"
+      "pep_basis": "Detailed explanation of why this position is PEP, referencing specific sections/rules from Lista PEPS 2020 document (e.g., 'Within 3 hierarchical levels in decentralized body under SEP per Section E', 'Homologous to federal Fiscal General per Section F')"
     }
   ]
 }`,

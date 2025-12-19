@@ -92,8 +92,7 @@ ANALYSIS PROCESS:
    - Is it within "three hierarchical levels below" in a decentralized body/desconcentrated organ?
 
 3. Key rules:
-   - CONADE is a decentralized body under Secretaría de Educación Pública
-   - "Director", "Subdirector", "Coordinador Nacional", "Director Técnico Nacional" in CONADE ARE PEP (within 3 levels)
+   - Directors, Subdirectors, Coordinators in decentralized bodies under Secretarías ARE PEP (within 3 levels)
    - "Fiscal General del Estado" = PEP (homologous to federal Fiscal General)
    - "Procurador Estatal" = PEP (homologous to federal Procurador)
    - "Magistrado Estatal" = PEP (homologous to federal magistrates)

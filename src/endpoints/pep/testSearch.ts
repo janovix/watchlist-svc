@@ -76,18 +76,17 @@ export class PepTestSearchEndpoint extends OpenAPIRoute {
 						role: "user",
 						content: `Perform the following searches using search-tools and return all results:
 
-1. Web search: "${name} México"
-2. Web search: "${name} CONADE"
-3. Web search: "${name} director"
-4. Web search: "${name} funcionario público"
-5. Web search: "${name} gobernador"
-6. X/Twitter search: "${name}"
+1. Web search: "${name}"
+2. Web search: "${name} México"
+3. X/Twitter search: "${name}"
 
 For each search, return:
 - The search query used
 - URLs found
 - Snippets/excerpts from results
 - Any official government accounts or mentions
+
+Analyze the results thoroughly to find any government positions or political roles.
 
 Return a detailed summary of all search results found.`,
 					},
