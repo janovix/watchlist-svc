@@ -47,50 +47,25 @@ export class GrokService {
 				messages: [
 					{
 						role: "system",
-						content: `You are a PEP (Politically Exposed Person) status checker. Analyze the provided query and return structured JSON data about the person's PEP status and related information.
+						content: `Eres un verificador oficial de Personas Políticamente Expuestas (PEP) en México según la "Lista de Personas Políticamente Expuestas Nacionales 2020" de la SHCP.
 
-IMPORTANT: For Mexico, the following positions qualify as PEP (Politically Exposed Persons):
+Revisa si la persona actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los siguientes cargos públicos que lo convierten automáticamente en PEP nacional:
 
-FEDERAL LEVEL:
-- Executive Power: President of the Republic, all Secretaries of State and their dependencies, decentralized organs, and administrative entities including:
-  * Secretaría de Gobernación
-  * Secretaría de Relaciones Exteriores
-  * Secretaría de la Defensa Nacional
-  * Secretaría de Marina
-  * Secretaría de Seguridad y Protección Ciudadana
-  * Secretaría de Hacienda y Crédito Público
-  * Secretaría de Bienestar
-  * Secretaría del Medio Ambiente y Recursos Naturales
-  * Secretaría de Energía
-  * Secretaría de Economía
-  * Secretaría de Agricultura y Desarrollo Rural
-  * Secretaría de Comunicaciones y Transportes
-  * Secretaría de Educación Pública
-  * Secretaría de Salud
-  * Secretaría de Trabajo y Previsión Social
-  * Secretaría de Desarrollo Agrario, Territorial y Urbano
-  * Secretaría de Turismo
-  * Secretaría de Cultura
-- Legal Counsel of the Executive Federal
-- Coordinated Regulatory Bodies in Energy Matters
-- Attorney General of the Republic (Fiscalía General de la República)
-- Judicial Power: All federal judges and judicial officials
-- Legislative Power: Senators, Deputies, and legislative officials
-- Decentralized Public Administration: State Productive Companies, non-sectorized and sectorized organisms, state majority participation companies, public funds and trusts
-- Autonomous Bodies and Others
+- Presidente de la República
+- Secretarios de Estado (todas las secretarías federales: Gobernación, Hacienda, Defensa, Marina, SRE, etc.)
+- Titulares de órganos desconcentrados, descentralizados, reguladores energéticos
+- Fiscal General de la República
+- Senadores y Diputados federales
+- Gobernadores, Jefes de Gobierno de CDMX, Presidentes Municipales
+- Procuradores o Fiscales Generales estatales
+- Magistrados y Jueces de alto nivel (Suprema Corte, Tribunales federales y estatales)
+- Titulares de organismos autónomos (INE, INAI, CNDH, Banco de México, etc.)
+- Directores generales de empresas productivas del Estado (Pemex, CFE, etc.) y empresas de participación estatal mayoritaria
+- Altos mandos militares (generales de división, almirantes)
+- Líderes o directores nacionales de partidos políticos
+- Titulares de fondos y fideicomisos públicos relevantes
 
-STATE LEVEL:
-- State Executive Power: Governors and state executive officials
-- State Attorney General (Procuraduría General de Justicia)
-- State Judicial Power: State judges and judicial officials
-- State Legislative Power: State legislators
-- Autonomous Bodies and Others
-
-MUNICIPAL LEVEL:
-- Municipal Executive Power: Mayors and municipal executive officials
-
-POLITICAL PARTIES:
-- Leaders and high-ranking officials of political parties
+Usa búsqueda web, X y fuentes oficiales para confirmar su cargo actual y últimos 5 años.
 
 Return a JSON object with the following structure:
 {
@@ -109,13 +84,13 @@ Return a JSON object with the following structure:
   "pepDetails": "string describing PEP status details"
 }
 
+For pepStatus: return true if the person is PEP according to the official 2020 list (currently holds or held any of the above positions in the last 5 years until December 2025), false otherwise.
 If no information is found, return null for all fields except pepStatus (which should be false).
-Only include information you can confidently extract from the query.
-When determining PEP status for Mexico, consider if the person holds or has held any of the positions listed above.`,
+Only include information you can confidently extract from the query.`,
 					},
 					{
 						role: "user",
-						content: `Check PEP status for: ${query}`,
+						content: `Revisa si ${query} actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los cargos públicos que lo convierten automáticamente en PEP nacional según la lista oficial de 2020 de la SHCP.`,
 					},
 				],
 				temperature: 0.1,

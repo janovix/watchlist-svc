@@ -225,17 +225,30 @@ describe("GrokService", () => {
 				.calls[0][1] as { body: string };
 			const requestBody = JSON.parse(fetchCall.body);
 			const systemPrompt = requestBody.messages[0].content;
+			const userMessage = requestBody.messages[1].content;
 
-			// Verify Mexico PEP information is included
-			expect(systemPrompt).toContain("Mexico");
-			expect(systemPrompt).toContain("Secretaría de Gobernación");
+			// Verify Mexico PEP information is included (Spanish official prompt)
 			expect(systemPrompt).toContain(
-				"Secretaría de Hacienda y Crédito Público",
+				"verificador oficial de Personas Políticamente Expuestas",
 			);
-			expect(systemPrompt).toContain("FEDERAL LEVEL");
-			expect(systemPrompt).toContain("STATE LEVEL");
-			expect(systemPrompt).toContain("MUNICIPAL LEVEL");
-			expect(systemPrompt).toContain("POLITICAL PARTIES");
+			expect(systemPrompt).toContain(
+				"Lista de Personas Políticamente Expuestas Nacionales 2020",
+			);
+			expect(systemPrompt).toContain("SHCP");
+			expect(systemPrompt).toContain("últimos 5 años");
+			expect(systemPrompt).toContain("diciembre 2025");
+			expect(systemPrompt).toContain("Presidente de la República");
+			expect(systemPrompt).toContain("Secretarios de Estado");
+			expect(systemPrompt).toContain("Fiscal General de la República");
+			expect(systemPrompt).toContain("Senadores y Diputados federales");
+			expect(systemPrompt).toContain("Gobernadores");
+			expect(systemPrompt).toContain("Presidentes Municipales");
+
+			// Verify user message uses Spanish format
+			expect(userMessage).toContain("Revisa si");
+			expect(userMessage).toContain("Test Person");
+			expect(userMessage).toContain("últimos 5 años");
+			expect(userMessage).toContain("diciembre 2025");
 		});
 	});
 
