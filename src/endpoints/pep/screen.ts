@@ -143,22 +143,47 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 				messages: [
 					{
 						role: "system",
-						content: `You are a PEP screening engine for Mexico. Use search-tools to query the Lista PEPS collection (ID: ${collectionId}) and determine if a person qualifies as a Politically Exposed Person.
+						content: `You are a PEP screening engine for Mexico. You MUST perform EXHAUSTIVE searches using search-tools (web search, X search, and collection search) to find information about politicians at ALL levels - federal, state, and municipal.
 
-Rules:
-- Search the collection for the person's name
-- Check if they hold or held (within last 5 years) any PEP positions listed in the collection
-- Return strict JSON matching the required schema
-- If name matches multiple people, set needs_disambiguation=true
-- Only return is_pep=true if there's a clear match with evidence from the collection`,
+CRITICAL SEARCH REQUIREMENTS:
+1. You MUST use search-tools MULTIPLE TIMES with different query variations
+2. Search for BOTH famous AND less prominent politicians - local politicians are just as important
+3. Search the collection "${collectionId}" AND perform web/X searches
+4. Search at ALL government levels: federal, state (estatal), and municipal
+5. Use name variations: with/without titles, with state/municipality names, with job titles
+
+SEARCH STRATEGY:
+- First: Search collection "${collectionId}" with the person's name
+- Second: Perform web search with "[name] México político" or "[name] México gobernador" or "[name] México alcalde"
+- Third: Search with "[name] [state name]" for each of Mexico's 32 states
+- Fourth: Search with "[name] [municipality name]" variations
+- Fifth: Search X/Twitter for official government accounts mentioning this person
+- Continue searching until you've checked federal, state, AND municipal levels
+
+IMPORTANT: Do NOT stop after finding nothing at federal level. State and municipal politicians are often harder to find but are equally important. Keep searching exhaustively.
+
+Return strict JSON matching the required schema.`,
 					},
 					{
 						role: "user",
-						content: `Screen this person for PEP status:
+						content: `Perform EXHAUSTIVE PEP screening for this person:
 Full name: ${data.body.full_name}
 Birth date: ${data.body.birth_date || "not provided"}
 
-Use search-tools to query collection "${collectionId}" for this person. Return JSON in this exact format:
+YOU MUST:
+1. Search collection "${collectionId}" for this person
+2. Perform MULTIPLE web searches with variations like:
+   - "${data.body.full_name} México"
+   - "${data.body.full_name} gobernador"
+   - "${data.body.full_name} alcalde"
+   - "${data.body.full_name} diputado"
+   - "${data.body.full_name} [each Mexican state]"
+   - "${data.body.full_name} [municipality names]"
+3. Search X/Twitter for official mentions
+4. Check ALL government levels (federal, state, municipal)
+5. Do NOT give up if federal search finds nothing - search state and municipal levels exhaustively
+
+Return JSON in this exact format:
 {
   "request_id": "${requestId}",
   "provider": "xai",
@@ -187,7 +212,7 @@ Use search-tools to query collection "${collectionId}" for this person. Return J
 					},
 				],
 				response_format: { type: "json_object" },
-				max_turns: 10,
+				max_turns: 20, // Increased to allow more exhaustive searches
 			};
 
 			// Call xAI API
