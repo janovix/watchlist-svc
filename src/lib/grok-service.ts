@@ -93,9 +93,17 @@ METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
 
 5. VERIFICACIÓN ESTRICTA: Solo retorna pepStatus: true si:
    - El nombre coincide exactamente o con variaciones menores (como acentos, orden de apellidos)
-   - Y existe evidencia clara y verificable de que la persona ocupa o ocupó uno de los cargos PEP listados en el documento oficial
+   - Y existe evidencia clara y verificable de que la persona ocupa o ocupó uno de los cargos PEP:
+     * Explícitamente listados en el documento oficial, O
+     * Homólogos (equivalentes estatales/municipales de cargos federales), O
+     * Dentro de los "tres niveles jerárquicos inferiores" de organismos descentralizados/órganos desconcentrados
    - Y puedes confirmar con alta confianza que es la misma persona
    - Y el cargo está dentro del período de los últimos 5 años (hasta diciembre 2025)
+   
+   EJEMPLO: "Director Técnico Nacional de Natación en CONADE" ES PEP porque:
+   - CONADE es organismo descentralizado bajo Secretaría de Educación Pública
+   - "Director Técnico Nacional" está dentro de los tres niveles jerárquicos inferiores
+   - Por lo tanto, aunque no esté explícitamente listado, califica como PEP
 
 6. CUANDO DUDAR: Si hay cualquier incertidumbre, similitud parcial, o falta de evidencia clara:
    - DEBES retornar pepStatus: false
@@ -105,9 +113,25 @@ METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
 7. REFERENCIA AL DOCUMENTO OFICIAL:
    El documento oficial de la SHCP que se te proporciona contiene la lista completa de cargos públicos que convierten a una persona en PEP. Debes:
    - Consultar TODAS las secciones del documento (Federal, Estatal, Municipal, Partidos Políticos)
-   - Verificar que el cargo encontrado esté listado en el documento
+   - Verificar que el cargo encontrado esté listado EXPLÍCITAMENTE en el documento, O sea un cargo HOMÓLOGO (equivalente estatal/municipal), O esté dentro de los "tres niveles jerárquicos inferiores"
    - Aplicar los criterios y factores de riesgo mencionados en el documento
    - Considerar los tres niveles jerárquicos inferiores cuando aplique según el documento
+
+8. CARGOS EN ORGANISMOS DESCENTRALIZADOS Y ÓRGANOS DESCONCENTRADOS:
+   IMPORTANTE: Los directores, titulares y hasta dos niveles jerárquicos inferiores en organismos descentralizados y órganos desconcentrados de las Secretarías de Estado SON PEP.
+   
+   Ejemplos de organismos descentralizados bajo Secretarías que incluyen cargos PEP:
+   - CONADE (Comisión Nacional de Cultura Física y Deporte) bajo Secretaría de Educación Pública: Directores, Subdirectores, Coordinadores Nacionales, Directores Técnicos Nacionales
+   - CONACYT bajo Secretaría de Educación Pública: Directores, Subdirectores
+   - CENAPRED bajo Secretaría de Gobernación: Directores, Subdirectores
+   - Y TODOS los demás organismos descentralizados listados en el documento bajo cada Secretaría
+   
+   REGLA: Si encuentras a una persona como "Director", "Subdirector", "Coordinador Nacional", "Director Técnico Nacional", "Jefe de Unidad", etc. en CUALQUIER organismo descentralizado u órgano desconcentrado de una Secretaría de Estado, esa persona ES PEP, incluso si el cargo específico no está explícitamente listado.
+   
+   Los "tres niveles jerárquicos inferiores" se aplican a:
+   - Titulares de organismos descentralizados (nivel 1)
+   - Subdirectores, Directores Generales, Coordinadores (nivel 2)
+   - Directores de área, Jefes de departamento, Directores Técnicos (nivel 3)
 
 Return a JSON object with the following structure:
 {
@@ -159,10 +183,21 @@ ${LISTA_PEPS_2020_TEXT}
 
 INSTRUCCIONES PARA USAR ESTE DOCUMENTO:
 - Consulta TODAS las secciones (Federal, Estatal, Municipal, Partidos Políticos)
-- Verifica que cualquier cargo encontrado esté listado en el documento
+- Un cargo es PEP si está:
+  * Explícitamente listado en el documento, O
+  * Es un cargo homólogo (equivalente estatal/municipal de cargo federal), O
+  * Está dentro de los "tres niveles jerárquicos inferiores" de organismos descentralizados/órganos desconcentrados
 - Aplica los criterios de "tres niveles jerárquicos inferiores" cuando corresponda
 - Considera los factores de riesgo mencionados en la sección E del documento
-- Para cargos estatales y municipales, verifica que sean homólogos a los listados en el ámbito federal según la sección F del documento`,
+- Para cargos estatales y municipales, verifica que sean homólogos a los listados en el ámbito federal según la sección F del documento
+
+EJEMPLOS DE CARGOS QUE SON PEP (aunque no estén explícitamente listados):
+- "Director Técnico Nacional de Natación en CONADE" = PEP (CONADE es organismo descentralizado bajo SEP, Director Técnico está dentro de 3 niveles)
+- "Fiscal General del Estado de Puebla" = PEP (homólogo de Fiscal General de la República)
+- "Procurador del Estado de Jalisco" = PEP (homólogo de Procurador federal)
+- "Magistrado del Tribunal Superior de Justicia de [Estado]" = PEP (homólogo de magistrado federal)
+- "Presidente Municipal de [Municipio]" = PEP (homólogo de cargo ejecutivo federal)
+- Cualquier "Director", "Subdirector", "Coordinador Nacional" en organismos descentralizados bajo Secretarías = PEP`,
 					},
 					{
 						role: "user",
@@ -211,8 +246,9 @@ CRITERIOS DE MATCHING ESTRICTOS:
 - Solo retorna pepStatus: true si el nombre coincide exactamente o con variaciones menores (no parciales)
 - Si solo hay coincidencia parcial del nombre, retorna pepStatus: false
 - Verifica que sea la misma persona con evidencia clara antes de retornar positivo
-- El cargo debe estar claramente listado en el documento oficial de la SHCP
-- En caso de duda, retorna pepStatus: false
+- El cargo debe ser PEP según el documento: explícitamente listado, homólogo, o dentro de 3 niveles jerárquicos inferiores
+- En caso de duda sobre el nombre, retorna pepStatus: false
+- PERO: Si el nombre coincide y encuentras un cargo en organismo descentralizado/órgano desconcentrado (como CONADE, CONACYT, etc.), ese cargo SÍ es PEP aunque no esté explícitamente listado
 
 IMPORTANTE: Realiza búsquedas exhaustivas en múltiples fuentes. No te limites solo a resultados obvios. Los cargos estatales y municipales requieren búsquedas más profundas ya que la información puede estar menos disponible públicamente.`,
 					},
