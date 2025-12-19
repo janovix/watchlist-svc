@@ -244,17 +244,17 @@ describe("GrokService", () => {
 			expect(systemPrompt).toContain("SHCP");
 			expect(systemPrompt).toContain("últimos 5 años");
 			expect(systemPrompt).toContain("diciembre 2025");
-			expect(systemPrompt).toContain("Presidente de la República");
-			expect(systemPrompt).toContain("Secretarios de Estado");
-			expect(systemPrompt).toContain("Fiscal General de la República");
-			expect(systemPrompt).toContain("Senadores y Diputados federales");
-			expect(systemPrompt).toContain("Gobernadores");
-			expect(systemPrompt).toContain("Presidentes Municipales");
+
+			// Verify exhaustive search methodology is included
+			expect(systemPrompt).toContain("BÚSQUEDA EXHAUSTIVA");
+			expect(systemPrompt).toContain("NIVEL FEDERAL");
+			expect(systemPrompt).toContain("NIVEL ESTATAL");
+			expect(systemPrompt).toContain("NIVEL MUNICIPAL");
+			expect(systemPrompt).toContain("FUENTES MÚLTIPLES");
+			expect(systemPrompt).toContain("VARIACIONES DE NOMBRE");
 
 			// Verify strict matching criteria are included
-			expect(systemPrompt).toContain(
-				"CRITERIOS ESTRICTOS PARA EVITAR FALSOS POSITIVOS",
-			);
+			expect(systemPrompt).toContain("CRITERIOS ESTRICTOS DE MATCHING");
 			expect(systemPrompt).toContain("COINCIDENCIA DE NOMBRES");
 			expect(systemPrompt).toContain("coincidencia parcial");
 
@@ -265,12 +265,20 @@ describe("GrokService", () => {
 			expect(listaPepsMessage).toContain("SHCP");
 			expect(listaPepsMessage).toContain("LISTA DE PERSONAS");
 			expect(listaPepsMessage).toContain("POLÍTICAMENTE EXPUESTAS");
+			expect(listaPepsMessage).toContain("SECCIÓN I");
+			expect(listaPepsMessage).toContain("SECCIÓN II");
+			expect(listaPepsMessage).toContain("SECCIÓN III");
+			expect(listaPepsMessage).toContain("SECCIÓN IV");
 
-			// Verify query message uses Spanish format
-			expect(queryMessage).toContain("Revisa si");
+			// Verify query message includes exhaustive search instructions
+			expect(queryMessage).toContain("BÚSQUEDA EXHAUSTIVA");
 			expect(queryMessage).toContain("Test Person");
 			expect(queryMessage).toContain("últimos 5 años");
 			expect(queryMessage).toContain("diciembre 2025");
+			expect(queryMessage).toContain("NIVEL FEDERAL");
+			expect(queryMessage).toContain("NIVEL ESTATAL");
+			expect(queryMessage).toContain("NIVEL MUNICIPAL");
+			expect(queryMessage).toContain("VARIACIONES DE BÚSQUEDA");
 			expect(queryMessage).toContain("coincidencia parcial");
 		});
 	});
