@@ -50,7 +50,24 @@ export class GrokService {
 						role: "system",
 						content: `Eres un verificador oficial de Personas Políticamente Expuestas (PEP) en México según la "Lista de Personas Políticamente Expuestas Nacionales 2020" de la SHCP.
 
-Revisa si la persona actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los siguientes cargos públicos que lo convierten automáticamente en PEP nacional:
+IMPORTANTE - CRITERIOS ESTRICTOS PARA EVITAR FALSOS POSITIVOS:
+
+1. COINCIDENCIA DE NOMBRES: El nombre debe ser una coincidencia exacta o muy cercana con el PEP real. 
+   - Coincidencias parciales NO son suficientes para determinar que es PEP
+   - Si solo hay similitud parcial en el nombre, debes retornar pepStatus: false
+   - Ejemplo: Si buscas "Juan Pérez" y encuentras "Juan Carlos Pérez López", esto es solo coincidencia parcial y NO debe considerarse PEP a menos que haya evidencia adicional clara
+
+2. VERIFICACIÓN ESTRICTA: Solo retorna pepStatus: true si:
+   - El nombre coincide exactamente o con variaciones menores (como acentos, orden de apellidos)
+   - Y existe evidencia clara y verificable de que la persona ocupa o ocupó uno de los cargos PEP listados
+   - Y puedes confirmar con alta confianza que es la misma persona
+
+3. CUANDO DUDAR: Si hay cualquier incertidumbre, similitud parcial, o falta de evidencia clara:
+   - DEBES retornar pepStatus: false
+   - Es preferible un falso negativo que un falso positivo
+   - Las coincidencias parciales de nombres deben tratarse como negativas por defecto
+
+4. CARGOS PÚBLICOS PEP: La persona debe ocupar o haber ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los siguientes cargos:
 
 - Presidente de la República
 - Secretarios de Estado (todas las secretarías federales: Gobernación, Hacienda, Defensa, Marina, SRE, etc.)
@@ -66,7 +83,7 @@ Revisa si la persona actualmente ocupa o ha ocupado en los últimos 5 años (has
 - Líderes o directores nacionales de partidos políticos
 - Titulares de fondos y fideicomisos públicos relevantes
 
-Usa búsqueda web, X y fuentes oficiales para confirmar su cargo actual y últimos 5 años.
+Usa búsqueda web, X y fuentes oficiales para confirmar su cargo actual y últimos 5 años, pero solo retorna positivo si la evidencia es clara y el nombre coincide.
 
 Return a JSON object with the following structure:
 {
@@ -85,9 +102,13 @@ Return a JSON object with the following structure:
   "pepDetails": "string describing PEP status details"
 }
 
-For pepStatus: return true if the person is PEP according to the official 2020 list (currently holds or held any of the above positions in the last 5 years until December 2025), false otherwise.
-If no information is found, return null for all fields except pepStatus (which should be false).
-Only include information you can confidently extract from the query.`,
+REGLAS PARA pepStatus:
+- Retorna true SOLO si hay coincidencia exacta o muy cercana del nombre Y evidencia clara de cargo PEP
+- Retorna false si hay coincidencia parcial del nombre (incluso si hay similitud)
+- Retorna false si no hay evidencia suficiente o hay incertidumbre
+- Retorna false si no se encuentra información
+- Si no hay información encontrada, retorna null para todos los campos excepto pepStatus (que debe ser false)
+- Solo incluye información que puedas extraer con confianza de la consulta`,
 					},
 					{
 						role: "user",
@@ -103,7 +124,13 @@ Usa este documento oficial como referencia principal para verificar si una perso
 					},
 					{
 						role: "user",
-						content: `Revisa si ${query} actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los cargos públicos que lo convierten automáticamente en PEP nacional según la lista oficial de 2020 de la SHCP.`,
+						content: `Revisa si ${query} actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los cargos públicos que lo convierten automáticamente en PEP nacional según la lista oficial de 2020 de la SHCP.
+
+IMPORTANTE: 
+- Solo retorna pepStatus: true si el nombre coincide exactamente o con variaciones menores (no parciales)
+- Si solo hay coincidencia parcial del nombre, retorna pepStatus: false
+- Verifica que sea la misma persona con evidencia clara antes de retornar positivo
+- En caso de duda, retorna pepStatus: false`,
 					},
 				],
 				temperature: 0.1,
