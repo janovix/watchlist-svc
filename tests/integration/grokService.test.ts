@@ -200,6 +200,43 @@ describe("GrokService", () => {
 				expect.any(Object),
 			);
 		});
+
+		it("should include Mexico PEP list in the system prompt", async () => {
+			(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+				ok: true,
+				json: async () => ({
+					choices: [
+						{
+							message: {
+								content: JSON.stringify({
+									name: "Test",
+									pepStatus: true,
+								}),
+							},
+						},
+					],
+				}),
+			});
+
+			const service = new GrokService({ apiKey: "test-key" });
+			await service.queryPEPStatus("Test Person");
+
+			const fetchCall = (global.fetch as ReturnType<typeof vi.fn>).mock
+				.calls[0][1] as { body: string };
+			const requestBody = JSON.parse(fetchCall.body);
+			const systemPrompt = requestBody.messages[0].content;
+
+			// Verify Mexico PEP information is included
+			expect(systemPrompt).toContain("Mexico");
+			expect(systemPrompt).toContain("Secretaría de Gobernación");
+			expect(systemPrompt).toContain(
+				"Secretaría de Hacienda y Crédito Público",
+			);
+			expect(systemPrompt).toContain("FEDERAL LEVEL");
+			expect(systemPrompt).toContain("STATE LEVEL");
+			expect(systemPrompt).toContain("MUNICIPAL LEVEL");
+			expect(systemPrompt).toContain("POLITICAL PARTIES");
+		});
 	});
 
 	describe("convertToWatchlistTarget", () => {
