@@ -38,7 +38,14 @@
 			},
 		],
 	},
+	"services": [
+		{
+			"binding": "AUTH_SERVICE",
+			"service": "auth-svc",
+		},
+	],
 	"vars": {
 		"CORS_ALLOWED_DOMAIN": "janovix.workers.dev",
+		"AUTH_JWKS_CACHE_TTL": "3600",
 	},
 }

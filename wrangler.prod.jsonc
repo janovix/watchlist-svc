@@ -37,7 +37,14 @@
 			},
 		],
 	},
+	"services": [
+		{
+			"binding": "AUTH_SERVICE",
+			"service": "auth-svc-prod",
+		},
+	],
 	"vars": {
 		"CORS_ALLOWED_DOMAIN": "janovix.ai",
+		"AUTH_JWKS_CACHE_TTL": "3600",
 	},
 }

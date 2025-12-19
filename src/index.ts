@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
+import { authMiddleware } from "./lib/auth-middleware";
 import { HealthEndpoint } from "./endpoints/watchlist/health";
 import { SearchEndpoint } from "./endpoints/watchlist/search";
 import { TargetReadEndpoint } from "./endpoints/watchlist/targetRead";
@@ -109,6 +110,13 @@ app.get("/", (c) => {
 app.get("/docsz", (c) => {
 	return c.html(getScalarHtml(appMeta));
 });
+
+// Apply auth middleware to protected routes
+// Pattern: Apply middleware to specific paths before registering endpoints
+app.use("/search", authMiddleware());
+app.use("/pep/search", authMiddleware());
+app.use("/targets/*", authMiddleware());
+app.use("/ingestion/*", authMiddleware());
 
 // Register watchlist endpoints
 openapi.get("/healthz", HealthEndpoint);

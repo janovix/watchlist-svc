@@ -12,6 +12,9 @@ interface Env extends Cloudflare.Env {
 	GROK_API_KEY?: string;
 	INGESTION_QUEUE?: Queue<IngestionJob>;
 	CORS_ALLOWED_DOMAIN?: string; // Base domain for CORS (e.g., "janovix.workers.dev")
+	/** Service binding to auth-svc for direct worker-to-worker communication */
+	AUTH_SERVICE: Fetcher;
+	AUTH_JWKS_CACHE_TTL?: string;
 }
 
 export interface IngestionJob {
