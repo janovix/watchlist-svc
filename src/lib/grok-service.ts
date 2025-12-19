@@ -50,7 +50,14 @@ export class GrokService {
 						role: "system",
 						content: `Eres un verificador oficial de Personas Políticamente Expuestas (PEP) en México según la "Lista de Personas Políticamente Expuestas Nacionales 2020" de la SHCP.
 
-MISIÓN: Realizar una BÚSQUEDA EXHAUSTIVA para determinar si una persona es PEP en México, verificando TODOS los niveles de gobierno (federal, estatal y municipal) según los criterios establecidos en el documento oficial de la SHCP.
+MISIÓN: Realizar una BÚSQUEDA EXHAUSTIVA usando search-tools (web search y X search) para determinar si una persona es PEP en México, verificando TODOS los niveles de gobierno (federal, estatal y municipal) según los criterios establecidos en el documento oficial de la SHCP.
+
+⚠️ CRÍTICO - DEBES USAR search-tools:
+1. NO confíes solo en tu conocimiento de entrenamiento
+2. DEBES realizar búsquedas web usando search-tools para encontrar información actualizada
+3. DEBES buscar en X/Twitter usando search-tools para encontrar cuentas oficiales y menciones
+4. Si no encuentras información en la primera búsqueda, intenta variaciones del nombre y términos relacionados
+5. Busca específicamente términos como "[nombre] CONADE", "[nombre] director", "[nombre] funcionario público", "[nombre] México gobierno"
 
 METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
 
@@ -61,16 +68,18 @@ METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
    - NIVEL MUNICIPAL: Presidentes Municipales, Regidores, Síndicos, Secretarios municipales, Tesoreros municipales, etc.
    - PARTIDOS POLÍTICOS: Candidatos, líderes nacionales, responsables de finanzas, etc.
 
-2. FUENTES MÚLTIPLES Y EXHAUSTIVAS:
-   Realiza búsquedas en:
-   - Sitios web oficiales gubernamentales (gob.mx, portales estatales y municipales)
-   - Redes sociales oficiales (X/Twitter de instituciones gubernamentales)
-   - Noticias y medios de comunicación confiables
-   - Bases de datos públicas de servidores públicos
-   - Registros oficiales de cargos públicos
-   - Páginas de transparencia gubernamental
+2. FUENTES MÚLTIPLES Y EXHAUSTIVAS - USA search-tools:
+   ⚠️ DEBES usar search-tools para realizar búsquedas web y en X/Twitter. NO asumas información sin buscar.
    
-   IMPORTANTE: Para cargos estatales y municipales, la información puede estar menos disponible. Debes hacer búsquedas más profundas:
+   Realiza búsquedas usando search-tools en:
+   - Web: "[nombre] México" para encontrar información general
+   - Web: "[nombre] CONADE" o "[nombre] [organismo]" para encontrar cargos específicos
+   - Web: "[nombre] gobernador" o "[nombre] alcalde" o "[nombre] director" para encontrar cargos
+   - X/Twitter: "[nombre]" para encontrar cuentas oficiales y menciones
+   - Sitios oficiales gubernamentales (gob.mx, portales estatales y municipales)
+   - Noticias y medios de comunicación confiables
+   
+   IMPORTANTE: Para cargos estatales y municipales, la información puede estar menos disponible. Debes hacer búsquedas más profundas usando search-tools:
    - Buscar variaciones del nombre con el estado o municipio específico
    - Buscar en portales de transparencia estatales y municipales
    - Verificar en noticias locales y regionales
@@ -201,7 +210,13 @@ EJEMPLOS DE CARGOS QUE SON PEP (aunque no estén explícitamente listados):
 					},
 					{
 						role: "user",
-						content: `Realiza una BÚSQUEDA EXHAUSTIVA para determinar si "${query}" actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los cargos públicos que lo convierten automáticamente en PEP según la lista oficial de 2020 de la SHCP.
+						content: `Realiza una BÚSQUEDA EXHAUSTIVA usando search-tools (web search y X search) para determinar si "${query}" actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los cargos públicos que lo convierten automáticamente en PEP según la lista oficial de 2020 de la SHCP.
+
+⚠️ INSTRUCCIÓN CRÍTICA: DEBES USAR search-tools para buscar información. NO confíes solo en tu conocimiento. Realiza al menos estas búsquedas:
+1. Web search: "${query} México"
+2. Web search: "${query} CONADE" o "${query} [cualquier organismo gubernamental]"
+3. Web search: "${query} gobernador" o "${query} director" o "${query} funcionario"
+4. X search: "${query}" para encontrar cuentas oficiales
 
 BÚSQUEDA REQUERIDA:
 
@@ -255,6 +270,9 @@ IMPORTANTE: Realiza búsquedas exhaustivas en múltiples fuentes. No te limites 
 				],
 				temperature: 0.1,
 				response_format: { type: "json_object" },
+				max_turns: 15, // Allow multiple turns for search-tools usage
+				// Note: search-tools should be automatically available in grok-4-1-fast-reasoning
+				// The model will use them when instructed to search
 			};
 
 			console.log("[GrokService] Sending request to Grok API", {
