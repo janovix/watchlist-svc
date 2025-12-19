@@ -18,6 +18,7 @@ import {
 import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
 import { PepScreenEndpoint } from "./endpoints/pep/screen";
 import { PepTestSearchEndpoint } from "./endpoints/pep/testSearch";
+import { PepAnalyzeSearchEndpoint } from "./endpoints/pep/analyzeSearch";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -118,6 +119,7 @@ openapi.post("/search", SearchEndpoint);
 openapi.post("/pep/search", PepSearchEndpoint);
 openapi.post("/pep/screen", PepScreenEndpoint);
 openapi.post("/pep/test-search", PepTestSearchEndpoint);
+openapi.post("/pep/analyze-search", PepAnalyzeSearchEndpoint);
 openapi.get("/targets/:id", TargetReadEndpoint);
 openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
 openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
