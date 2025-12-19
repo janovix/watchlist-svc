@@ -179,13 +179,28 @@ Birth date: ${birthDate || "not provided"}
 Perform these searches (be efficient, focus on finding government positions):
 ${searchQueries.map((q, i) => `${i + 1}. ${q.includes("X") || q.includes("Twitter") ? `X/Twitter` : `Web`}: ${q}`).join("\n")}
 
-Compile a concise summary focusing on:
-- Full name and aliases
-- Government positions (current and past, with dates if available)
-- Organizations (government agencies, secretarías, estados, municipios)
-- Sources/URLs for each piece of information (include URLs where you found each fact)
+Compile a concise summary with CLEAR structure. For each government position found, include:
+- Position title (exact title as stated, e.g., "Director de Alto Rendimiento", "Fiscal General del Estado de Puebla")
+- Organization name (exact name, e.g., "CONADE", "Comisión Nacional de Cultura Física y Deporte", "Estado de Puebla", "Municipio de Guadalajara")
+- Start date (if mentioned, format: YYYY-MM-DD)
+- End date (if mentioned, format: YYYY-MM-DD, or note if current)
+- Source URL where this position information was found
 
-IMPORTANT: Include all source URLs where you found information. Format sources clearly in the summary.
+Format example:
+"Position: Director de Alto Rendimiento
+Organization: CONADE (Comisión Nacional de Cultura Física y Deporte)
+Start date: 2022-09-01
+End date: null (current)
+Source: https://www.gob.mx/conade/prensa/..."
+
+Include:
+- Full name and aliases
+- ALL government positions found (current and past)
+- Organizations with full names
+- Dates for each position (if available)
+- Source URLs for each position
+
+IMPORTANT: Be precise with position titles and organization names. Use exact wording from sources.
 
 Keep the summary focused and efficient. Return ONLY the summary text, no JSON.`,
 					},
@@ -266,7 +281,13 @@ Keep the summary focused and efficient. Return ONLY the summary text, no JSON.`,
 
 ANALYSIS PROCESS:
 1. Read and understand the Lista PEPS 2020 document carefully
-2. Extract ALL government positions from the person's summary
+2. Extract ALL government positions from the person's summary with ACCURATE details:
+   - Extract the EXACT position title as mentioned in the summary
+   - Extract the EXACT organization name (e.g., "CONADE", "Secretaría de Educación Pública", "Estado de Puebla", etc.)
+   - Determine jurisdiction: "federal", "estatal", or "municipal" based on the organization
+   - Extract start_date and end_date if mentioned in the summary (format: YYYY-MM-DD or null)
+   - Extract the EXACT URL/source where this position was mentioned
+   
 3. For each position found, check if it matches PEP criteria according to Lista PEPS 2020:
    - Is it explicitly listed in the document? OR
    - Is it a homologous position (state/municipal equivalent of federal position listed in the document)? OR
@@ -278,7 +299,15 @@ ANALYSIS PROCESS:
    - Check all sections (Federal, State, Municipal, Political Parties) for explicit matches
    - Consider decentralized bodies and desconcentrated organs under Secretarías
 
-5. Use your intelligence to match positions found in the summary against the rules and positions listed in the document. Do not rely on hardcoded examples - read the document and apply its rules.
+5. CRITICAL FOR POSITIONS:
+   - Extract positions EXACTLY as stated in the summary - do not infer or guess
+   - If the summary says "Director de Alto Rendimiento en CONADE", extract exactly that
+   - If the summary mentions dates, extract them accurately
+   - If the summary provides URLs, use those as evidence
+   - Map organization names correctly: "CONADE" = federal, "Estado de [X]" = estatal, "[Municipio]" = municipal
+   - Be precise with position titles - use the exact wording from the summary
+
+6. Use your intelligence to match positions found in the summary against the rules and positions listed in the document. Do not rely on hardcoded examples - read the document and apply its rules.
 
 Return JSON only.`,
 					},
@@ -294,8 +323,16 @@ ${LISTA_PEPS_2020_TEXT.substring(0, 50000)}${LISTA_PEPS_2020_TEXT.length > 50000
 
 ANALYSIS TASK:
 1. Read the complete Lista PEPS 2020 document above
-2. Extract all government positions mentioned in the person's summary
-3. For each position found, check if it qualifies as PEP by:
+2. Extract ALL government positions from the person's summary with PRECISE details:
+   - Read the summary carefully and identify EVERY government position mentioned
+   - For each position, extract:
+     * Title: Use the EXACT title as stated in the summary (e.g., "Director de Alto Rendimiento", "Fiscal General del Estado de Puebla")
+     * Organization: Extract the EXACT organization name (e.g., "CONADE", "Comisión Nacional de Cultura Física y Deporte", "Estado de Puebla", "Municipio de Guadalajara")
+     * Jurisdiction: Determine based on organization - "federal" for federal agencies, "estatal" for state-level, "municipal" for municipal
+     * Dates: Extract start_date and end_date if mentioned (format YYYY-MM-DD, or null if not mentioned or current)
+     * Evidence: Extract the URL or source where this position was found in the summary
+   
+3. For each position extracted, check if it qualifies as PEP by:
    - Reading the document to see if the position is explicitly listed, OR
    - Checking if it's a homologous position (state/municipal equivalent) according to Section F, OR
    - Checking if it's within "three hierarchical levels below" according to Section E and the document's rules
@@ -307,22 +344,30 @@ ANALYSIS TASK:
    - Decentralized bodies and "three levels below" criteria (Section E and throughout)
    - Risk factors and prominent functions (Section E)
 
-5. Match positions from the summary against the document's criteria - use your intelligence to understand the rules, not hardcoded examples.
+5. IMPORTANT - Position extraction accuracy:
+   - Extract positions EXACTLY as they appear in the summary
+   - Do not modify or abbreviate position titles
+   - Do not infer organizations - use what's stated
+   - If dates are mentioned, extract them precisely
+   - If multiple positions are mentioned, extract ALL of them
+   - Map jurisdiction correctly based on the organization level
 
-6. Return JSON:
+6. Match positions from the summary against the document's criteria - use your intelligence to understand the rules, not hardcoded examples.
+
+7. Return JSON:
 {
   "is_pep": boolean,
   "confidence": number (0.0-1.0),
   "analysis": "Detailed explanation of why this person is or isn't PEP, referencing specific positions found, how they match PEP criteria from Lista PEPS 2020, and which sections/rules of the document apply",
   "positions_found": [
     {
-      "title": "exact position title",
-      "organization": "organization name",
-      "jurisdiction": "federal/estatal/municipal",
-      "start_date": "YYYY-MM-DD or null",
-      "end_date": "YYYY-MM-DD or null",
-      "evidence": "URL or source",
-      "pep_basis": "Detailed explanation of why this position is PEP, referencing specific sections/rules from Lista PEPS 2020 document"
+      "title": "EXACT position title as stated in summary (e.g., 'Director de Alto Rendimiento', 'Fiscal General del Estado de Puebla')",
+      "organization": "EXACT organization name as stated in summary (e.g., 'CONADE', 'Comisión Nacional de Cultura Física y Deporte', 'Estado de Puebla')",
+      "jurisdiction": "federal/estatal/municipal (determine based on organization level)",
+      "start_date": "YYYY-MM-DD format if mentioned in summary, otherwise null",
+      "end_date": "YYYY-MM-DD format if mentioned in summary, 'null' if current position, or null if not mentioned",
+      "evidence": "EXACT URL or source from summary where this position was found",
+      "pep_basis": "Detailed explanation of why this position is PEP, referencing specific sections/rules from Lista PEPS 2020 document (e.g., 'Within 3 hierarchical levels in CONADE under SEP per Section E', 'Homologous to federal Fiscal General per Section F')"
     }
   ]
 }`,
