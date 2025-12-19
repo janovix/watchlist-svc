@@ -155,9 +155,14 @@ export class PepScreenWithAnalysisEndpoint extends OpenAPIRoute {
 				messages: [
 					{
 						role: "system",
-						content: `You are a research assistant. Use search-tools (web search and X search) to gather comprehensive information about a person. 
+						content: `You are a research assistant. Use search-tools (web search and X search) to gather comprehensive information about a person.
 
-IMPORTANT: Include ALL sources/URLs where you found information. For each piece of information, note the source URL.
+CRITICAL RULES FOR SOURCES/URLs:
+- ONLY include URLs that you ACTUALLY found in search results
+- DO NOT make up, invent, or hallucinate URLs
+- DO NOT create URLs based on patterns (e.g., don't create "https://www.gob.mx/conade/prensa/..." if you didn't actually find it)
+- ONLY cite URLs that were returned by search-tools
+- If a URL was found in search results, include it. If not, don't include it.
 
 Return a detailed summary including:
 - Full name and any aliases
@@ -165,9 +170,9 @@ Return a detailed summary including:
 - Organizations they work/worked for
 - Dates of positions (start/end dates if available)
 - Any political roles
-- Sources/URLs where information was found (include URLs for each fact)
+- REAL sources/URLs ONLY - only include URLs you actually found in search results
 
-Be thorough and search multiple sources. Always cite your sources.`,
+Be thorough and search multiple sources. Always cite your REAL sources - never invent URLs.`,
 					},
 					{
 						role: "user",
@@ -184,23 +189,31 @@ Compile a concise summary with CLEAR structure. For each government position fou
 - Organization name (exact name, e.g., "CONADE", "Comisión Nacional de Cultura Física y Deporte", "Estado de Puebla", "Municipio de Guadalajara")
 - Start date (if mentioned, format: YYYY-MM-DD)
 - End date (if mentioned, format: YYYY-MM-DD, or note if current)
-- Source URL where this position information was found
+- Source URL where this position information was found (ONLY if you actually found this URL in search results)
+
+CRITICAL: For source URLs:
+- ONLY include URLs that search-tools ACTUALLY returned
+- DO NOT invent or guess URLs
+- DO NOT create URLs based on organization names or patterns
+- If search results show a URL, include it. If not, don't include a URL.
 
 Format example:
 "Position: Director de Alto Rendimiento
 Organization: CONADE (Comisión Nacional de Cultura Física y Deporte)
 Start date: 2022-09-01
 End date: null (current)
-Source: https://www.gob.mx/conade/prensa/..."
+Source: [ONLY include if search-tools actually returned this URL]"
 
 Include:
 - Full name and aliases
 - ALL government positions found (current and past)
 - Organizations with full names
 - Dates for each position (if available)
-- Source URLs for each position
+- REAL source URLs ONLY - only URLs actually found in search results
 
-IMPORTANT: Be precise with position titles and organization names. Use exact wording from sources.
+IMPORTANT: 
+- Be precise with position titles and organization names. Use exact wording from sources.
+- NEVER invent URLs. Only include URLs that search-tools actually returned.
 
 Keep the summary focused and efficient. Return ONLY the summary text, no JSON.`,
 					},
@@ -229,38 +242,53 @@ Keep the summary focused and efficient. Return ONLY the summary text, no JSON.`,
 					message?: {
 						content?: string;
 						tool_calls?: Array<{
+							id?: string;
+							type?: string;
 							function?: {
+								name?: string;
 								arguments?: string;
 							};
 						}>;
 					};
+					tool_calls?: Array<{
+						id?: string;
+						type?: string;
+						function?: {
+							name?: string;
+							arguments?: string;
+						};
+					}>;
 				}>;
 				model?: string;
 			};
 
 			const personSummary = summaryData.choices?.[0]?.message?.content || "";
 
-			// Extract URLs/sources from the summary text and tool calls
+			// Extract REAL URLs from summary text (only http/https URLs that look valid)
 			const searchSources: string[] = [];
+			const urlRegex = /https?:\/\/[^\s)"']+/g;
+			const urlsInSummary = personSummary.match(urlRegex) || [];
 
-			// Extract from tool calls (search queries performed)
-			summaryData.choices?.[0]?.message?.tool_calls?.forEach((call) => {
-				if (call.function?.arguments) {
-					try {
-						const args = JSON.parse(call.function.arguments);
-						if (args.query) {
-							searchSources.push(`search:${args.query}`);
-						}
-					} catch {
-						// Ignore parse errors
-					}
+			// Filter out obviously fake/hallucinated URLs
+			// Keep only URLs that look like real domains (have TLD, not just patterns)
+			const validUrls = urlsInSummary.filter((url) => {
+				try {
+					const urlObj = new URL(url);
+					const hostname = urlObj.hostname;
+					// Check if it has a valid domain structure (has TLD)
+					return (
+						hostname.includes(".") &&
+						hostname.split(".").length >= 2 &&
+						hostname.length > 4 &&
+						!hostname.startsWith("example.") &&
+						!hostname.startsWith("test.")
+					);
+				} catch {
+					return false;
 				}
 			});
 
-			// Extract URLs from summary text (http/https URLs)
-			const urlRegex = /https?:\/\/[^\s\)]+/g;
-			const urlsInSummary = personSummary.match(urlRegex) || [];
-			searchSources.push(...urlsInSummary);
+			searchSources.push(...validUrls);
 
 			console.log("[PepScreenWithAnalysis] Summary obtained", {
 				summaryLength: personSummary.length,
@@ -299,11 +327,13 @@ ANALYSIS PROCESS:
    - Check all sections (Federal, State, Municipal, Political Parties) for explicit matches
    - Consider decentralized bodies and desconcentrated organs under Secretarías
 
-5. CRITICAL FOR POSITIONS:
+5. CRITICAL FOR POSITIONS AND SOURCES:
    - Extract positions EXACTLY as stated in the summary - do not infer or guess
    - If the summary says "Director de Alto Rendimiento en CONADE", extract exactly that
    - If the summary mentions dates, extract them accurately
-   - If the summary provides URLs, use those as evidence
+   - For evidence URLs: ONLY use URLs that are ACTUALLY mentioned in the summary
+   - DO NOT invent, create, or guess URLs - if no URL is mentioned, use a description like "Found in search results" or "Mentioned in web search"
+   - NEVER create URLs based on organization names or patterns (e.g., don't create "https://www.gob.mx/conade/..." if it wasn't actually in the summary)
    - Map organization names correctly: "CONADE" = federal, "Estado de [X]" = estatal, "[Municipio]" = municipal
    - Be precise with position titles - use the exact wording from the summary
 
@@ -330,7 +360,7 @@ ANALYSIS TASK:
      * Organization: Extract the EXACT organization name (e.g., "CONADE", "Comisión Nacional de Cultura Física y Deporte", "Estado de Puebla", "Municipio de Guadalajara")
      * Jurisdiction: Determine based on organization - "federal" for federal agencies, "estatal" for state-level, "municipal" for municipal
      * Dates: Extract start_date and end_date if mentioned (format YYYY-MM-DD, or null if not mentioned or current)
-     * Evidence: Extract the URL or source where this position was found in the summary
+     * Evidence: Extract the URL ONLY if it was actually mentioned in the summary. If no URL was mentioned, use a description like "Found in search results" or "Mentioned in web search" - DO NOT invent URLs
    
 3. For each position extracted, check if it qualifies as PEP by:
    - Reading the document to see if the position is explicitly listed, OR
@@ -366,7 +396,7 @@ ANALYSIS TASK:
       "jurisdiction": "federal/estatal/municipal (determine based on organization level)",
       "start_date": "YYYY-MM-DD format if mentioned in summary, otherwise null",
       "end_date": "YYYY-MM-DD format if mentioned in summary, 'null' if current position, or null if not mentioned",
-      "evidence": "EXACT URL or source from summary where this position was found",
+      "evidence": "ONLY include URL if it was actually found in search results. If no real URL was found, use a description like 'Found in search results' or 'Mentioned in [source type]' - DO NOT invent URLs",
       "pep_basis": "Detailed explanation of why this position is PEP, referencing specific sections/rules from Lista PEPS 2020 document (e.g., 'Within 3 hierarchical levels in CONADE under SEP per Section E', 'Homologous to federal Fiscal General per Section F')"
     }
   ]
@@ -446,22 +476,55 @@ ANALYSIS TASK:
 				positionsCount: analysis.positions_found?.length || 0,
 			});
 
-			// Extract sources from analysis response, summary URLs, or search queries
+			// Extract REAL sources - validate URLs before including
 			const allSources: string[] = [];
 
-			// Add sources from analysis if provided
+			// Validate and add sources from analysis if provided
 			if (Array.isArray(analysis.sources) && analysis.sources.length > 0) {
-				allSources.push(...analysis.sources);
+				analysis.sources.forEach((source) => {
+					if (source.startsWith("http")) {
+						try {
+							const urlObj = new URL(source);
+							const hostname = urlObj.hostname;
+							// Only add if it looks like a real domain
+							if (
+								hostname.includes(".") &&
+								hostname.split(".").length >= 2 &&
+								hostname.length > 4 &&
+								!hostname.startsWith("example.") &&
+								!hostname.startsWith("test.")
+							) {
+								allSources.push(source);
+							}
+						} catch {
+							// Invalid URL, skip
+						}
+					}
+				});
 			}
 
-			// Add URLs found in summary
-			const summaryUrls = searchSources.filter((s) => s.startsWith("http"));
-			allSources.push(...summaryUrls);
+			// Add validated URLs found in summary
+			allSources.push(...searchSources);
 
-			// Add URLs from positions evidence
+			// Validate and add URLs from positions evidence
 			analysis.positions_found?.forEach((pos) => {
 				if (pos.evidence && pos.evidence.startsWith("http")) {
-					allSources.push(pos.evidence);
+					try {
+						const urlObj = new URL(pos.evidence);
+						const hostname = urlObj.hostname;
+						// Only add if it looks like a real domain
+						if (
+							hostname.includes(".") &&
+							hostname.split(".").length >= 2 &&
+							hostname.length > 4 &&
+							!hostname.startsWith("example.") &&
+							!hostname.startsWith("test.")
+						) {
+							allSources.push(pos.evidence);
+						}
+					} catch {
+						// Invalid URL, skip
+					}
 				}
 			});
 
