@@ -225,7 +225,14 @@ describe("GrokService", () => {
 				.calls[0][1] as { body: string };
 			const requestBody = JSON.parse(fetchCall.body);
 			const systemPrompt = requestBody.messages[0].content;
-			const userMessage = requestBody.messages[1].content;
+			const listaPepsMessage = requestBody.messages[1].content;
+			const queryMessage = requestBody.messages[2].content;
+
+			// Verify we have 3 messages: system, lista PEPS document, and query
+			expect(requestBody.messages).toHaveLength(3);
+			expect(requestBody.messages[0].role).toBe("system");
+			expect(requestBody.messages[1].role).toBe("user");
+			expect(requestBody.messages[2].role).toBe("user");
 
 			// Verify Mexico PEP information is included (Spanish official prompt)
 			expect(systemPrompt).toContain(
@@ -244,11 +251,27 @@ describe("GrokService", () => {
 			expect(systemPrompt).toContain("Gobernadores");
 			expect(systemPrompt).toContain("Presidentes Municipales");
 
-			// Verify user message uses Spanish format
-			expect(userMessage).toContain("Revisa si");
-			expect(userMessage).toContain("Test Person");
-			expect(userMessage).toContain("últimos 5 años");
-			expect(userMessage).toContain("diciembre 2025");
+			// Verify strict matching criteria are included
+			expect(systemPrompt).toContain(
+				"CRITERIOS ESTRICTOS PARA EVITAR FALSOS POSITIVOS",
+			);
+			expect(systemPrompt).toContain("COINCIDENCIA DE NOMBRES");
+			expect(systemPrompt).toContain("coincidencia parcial");
+
+			// Verify Lista PEPS document is included in second message
+			expect(listaPepsMessage).toContain(
+				"Lista de Personas Políticamente Expuestas Nacionales 2020",
+			);
+			expect(listaPepsMessage).toContain("SHCP");
+			expect(listaPepsMessage).toContain("LISTA DE PERSONAS");
+			expect(listaPepsMessage).toContain("POLÍTICAMENTE EXPUESTAS");
+
+			// Verify query message uses Spanish format
+			expect(queryMessage).toContain("Revisa si");
+			expect(queryMessage).toContain("Test Person");
+			expect(queryMessage).toContain("últimos 5 años");
+			expect(queryMessage).toContain("diciembre 2025");
+			expect(queryMessage).toContain("coincidencia parcial");
 		});
 	});
 
