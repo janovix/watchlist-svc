@@ -1,3 +1,10 @@
+# [1.1.0-rc.8](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.7...v1.1.0-rc.8) (2025-12-19)
+
+
+### Features
+
+* **auth:** add JWT authentication middleware using service binding ([0ce7798](https://github.com/janovix/watchlist-svc/commit/0ce7798ea2431a01b73918c773dacb1c308be1cd))
+
 # [1.1.0-rc.7](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.6...v1.1.0-rc.7) (2025-12-19)
 
 
