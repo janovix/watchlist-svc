@@ -122,10 +122,10 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 		});
 
 		// Validate environment variables
-		if (!c.env.XAI_API_KEY) {
-			console.error("[PepScreen] XAI_API_KEY not configured");
+		if (!c.env.GROK_API_KEY) {
+			console.error("[PepScreen] GROK_API_KEY not configured");
 			const error = new ApiException(
-				"XAI API key not configured. Please ensure XAI_API_KEY is set in your environment.",
+				"Grok API key not configured. Please ensure GROK_API_KEY is set in your environment.",
 			);
 			error.status = 503;
 			error.code = 503;
@@ -145,7 +145,7 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 		try {
 			// Create screening service
 			const screeningService = new PepScreeningService({
-				xaiApiKey: c.env.XAI_API_KEY,
+				xaiApiKey: c.env.GROK_API_KEY,
 				xaiBaseUrl: c.env.XAI_BASE_URL,
 				xaiModel: c.env.XAI_MODEL,
 				xaiMaxTurns: c.env.XAI_MAX_TURNS
