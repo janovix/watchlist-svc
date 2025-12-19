@@ -43,11 +43,29 @@ export class GrokService {
 
 		try {
 			const requestBody = {
-				model: "grok-4-fast-non-reasoning",
+				model: "grok-4-1-fast-reasoning",
 				messages: [
 					{
 						role: "system",
-						content: `You are a PEP (Politically Exposed Person) status checker. Analyze the provided query and return structured JSON data about the person's PEP status and related information.
+						content: `Eres un verificador oficial de Personas Políticamente Expuestas (PEP) en México según la "Lista de Personas Políticamente Expuestas Nacionales 2020" de la SHCP.
+
+Revisa si la persona actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los siguientes cargos públicos que lo convierten automáticamente en PEP nacional:
+
+- Presidente de la República
+- Secretarios de Estado (todas las secretarías federales: Gobernación, Hacienda, Defensa, Marina, SRE, etc.)
+- Titulares de órganos desconcentrados, descentralizados, reguladores energéticos
+- Fiscal General de la República
+- Senadores y Diputados federales
+- Gobernadores, Jefes de Gobierno de CDMX, Presidentes Municipales
+- Procuradores o Fiscales Generales estatales
+- Magistrados y Jueces de alto nivel (Suprema Corte, Tribunales federales y estatales)
+- Titulares de organismos autónomos (INE, INAI, CNDH, Banco de México, etc.)
+- Directores generales de empresas productivas del Estado (Pemex, CFE, etc.) y empresas de participación estatal mayoritaria
+- Altos mandos militares (generales de división, almirantes)
+- Líderes o directores nacionales de partidos políticos
+- Titulares de fondos y fideicomisos públicos relevantes
+
+Usa búsqueda web, X y fuentes oficiales para confirmar su cargo actual y últimos 5 años.
 
 Return a JSON object with the following structure:
 {
@@ -66,12 +84,13 @@ Return a JSON object with the following structure:
   "pepDetails": "string describing PEP status details"
 }
 
+For pepStatus: return true if the person is PEP according to the official 2020 list (currently holds or held any of the above positions in the last 5 years until December 2025), false otherwise.
 If no information is found, return null for all fields except pepStatus (which should be false).
 Only include information you can confidently extract from the query.`,
 					},
 					{
 						role: "user",
-						content: `Check PEP status for: ${query}`,
+						content: `Revisa si ${query} actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los cargos públicos que lo convierten automáticamente en PEP nacional según la lista oficial de 2020 de la SHCP.`,
 					},
 				],
 				temperature: 0.1,
