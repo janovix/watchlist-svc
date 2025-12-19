@@ -1,4 +1,5 @@
 import { WatchlistTarget } from "../endpoints/watchlist/base";
+import { LISTA_PEPS_2020_TEXT } from "./lista-peps-2020";
 
 export interface GrokPEPResponse {
 	name: string | null;
@@ -87,6 +88,18 @@ Return a JSON object with the following structure:
 For pepStatus: return true if the person is PEP according to the official 2020 list (currently holds or held any of the above positions in the last 5 years until December 2025), false otherwise.
 If no information is found, return null for all fields except pepStatus (which should be false).
 Only include information you can confidently extract from the query.`,
+					},
+					{
+						role: "user",
+						content: `A continuación se incluye el texto completo de la versión oficial del documento "Lista de Personas Políticamente Expuestas Nacionales 2020" emitido por la Secretaría de Hacienda y Crédito Público (SHCP) de México. Este es el documento oficial de referencia que debes usar para determinar si una persona es PEP según los cargos públicos listados:
+
+---
+
+${LISTA_PEPS_2020_TEXT}
+
+---
+
+Usa este documento oficial como referencia principal para verificar si una persona ocupa o ha ocupado alguno de los cargos públicos mencionados que la convierten en PEP nacional.`,
 					},
 					{
 						role: "user",
