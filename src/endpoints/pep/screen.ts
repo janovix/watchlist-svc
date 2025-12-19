@@ -143,45 +143,55 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 				messages: [
 					{
 						role: "system",
-						content: `You are a PEP screening engine for Mexico. You MUST perform EXHAUSTIVE searches using search-tools (web search, X search, and collection search) to find information about politicians at ALL levels - federal, state, and municipal.
+						content: `You are a PEP screening engine for Mexico. Use search-tools to find information about a person and determine if they qualify as PEP according to Lista PEPS 2020.
 
-CRITICAL SEARCH REQUIREMENTS:
-1. You MUST use search-tools MULTIPLE TIMES with different query variations
-2. Search for BOTH famous AND less prominent politicians - local politicians are just as important
-3. Search the collection "${collectionId}" AND perform web/X searches
-4. Search at ALL government levels: federal, state (estatal), and municipal
-5. Use name variations: with/without titles, with state/municipality names, with job titles
+CRITICAL UNDERSTANDING - HOMOLOGOUS POSITIONS:
+The Lista PEPS document includes Section F which states that state and municipal positions that are HOMOLOGOUS (equivalent) to federal positions are ALSO PEP, even if not explicitly listed.
 
-SEARCH STRATEGY:
-- First: Search collection "${collectionId}" with the person's name
-- Second: Perform web search with "[name] México político" or "[name] México gobernador" or "[name] México alcalde"
-- Third: Search with "[name] [state name]" for each of Mexico's 32 states
-- Fourth: Search with "[name] [municipality name]" variations
-- Fifth: Search X/Twitter for official government accounts mentioning this person
-- Continue searching until you've checked federal, state, AND municipal levels
+Examples of homologous positions:
+- "Fiscal General del Estado de [Estado]" = PEP (homologous to "Fiscal General de la República" at federal level)
+- "Procurador del Estado de [Estado]" = PEP (homologous to federal Procurador)
+- "Secretario del Estado de [Estado]" = PEP (homologous to federal Secretarios de Estado)
+- "Magistrado del Tribunal Superior de Justicia de [Estado]" = PEP (homologous to federal magistrates)
+- "Presidente Municipal de [Municipio]" = PEP (homologous to federal executive positions)
+- "Regidor de [Municipio]" = PEP (homologous to federal legislative positions)
+- "Síndico de [Municipio]" = PEP (homologous to federal positions)
 
-IMPORTANT: Do NOT stop after finding nothing at federal level. State and municipal politicians are often harder to find but are equally important. Keep searching exhaustively.
+SEARCH STRATEGY (EFFICIENT):
+1. Search collection "${collectionId}" with the person's name
+2. Perform ONE web search: "${data.body.full_name} México" - analyze the first 10-15 results carefully
+3. Perform ONE X/Twitter search: "${data.body.full_name}" - check official government accounts and verified profiles
+4. Analyze the search results to identify:
+   - Any government positions held (federal, state, or municipal)
+   - Job titles and organizations
+   - Time periods (current or within last 5 years)
+5. For each position found, check if it matches:
+   - Explicitly listed positions in the collection, OR
+   - Homologous positions (state/municipal equivalents of federal positions)
+
+IMPORTANT: 
+- Positions like "Fiscal General del Estado", "Procurador Estatal", "Magistrado Estatal", "Presidente Municipal", "Regidor", "Síndico" ARE PEP positions even if not explicitly listed - they are homologous
+- Analyze search results carefully - don't just look for exact title matches
+- Check if the person's position is equivalent to any federal PEP position listed in the collection
 
 Return strict JSON matching the required schema.`,
 					},
 					{
 						role: "user",
-						content: `Perform EXHAUSTIVE PEP screening for this person:
+						content: `Screen this person for PEP status:
 Full name: ${data.body.full_name}
 Birth date: ${data.body.birth_date || "not provided"}
 
-YOU MUST:
-1. Search collection "${collectionId}" for this person
-2. Perform MULTIPLE web searches with variations like:
-   - "${data.body.full_name} México"
-   - "${data.body.full_name} gobernador"
-   - "${data.body.full_name} alcalde"
-   - "${data.body.full_name} diputado"
-   - "${data.body.full_name} [each Mexican state]"
-   - "${data.body.full_name} [municipality names]"
-3. Search X/Twitter for official mentions
-4. Check ALL government levels (federal, state, municipal)
-5. Do NOT give up if federal search finds nothing - search state and municipal levels exhaustively
+SEARCH INSTRUCTIONS:
+1. Search collection "${collectionId}" with: "${data.body.full_name}"
+2. Perform web search: "${data.body.full_name} México" - analyze the first 10-15 results carefully
+3. Perform X search: "${data.body.full_name}" - check for official government accounts
+4. Analyze results to find ANY government positions (federal, state, municipal)
+5. For each position found, determine if it's PEP by checking:
+   - Is it explicitly listed in the collection? OR
+   - Is it a HOMOLOGOUS position (state/municipal equivalent of a federal PEP position)?
+
+Remember: Positions like "Fiscal General del Estado", "Procurador Estatal", "Magistrado Estatal", "Presidente Municipal", "Regidor", "Síndico" are PEP even if not explicitly listed.
 
 Return JSON in this exact format:
 {
@@ -212,7 +222,7 @@ Return JSON in this exact format:
 					},
 				],
 				response_format: { type: "json_object" },
-				max_turns: 20, // Increased to allow more exhaustive searches
+				max_turns: 15, // Allow enough turns for collection + web + X searches and analysis
 			};
 
 			// Call xAI API
