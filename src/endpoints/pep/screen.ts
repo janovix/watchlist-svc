@@ -1,7 +1,6 @@
 import { OpenAPIRoute, ApiException, contentJson } from "chanfana";
 import { z } from "zod";
 import { AppContext } from "../../types";
-import { PepScreeningService } from "../../services/pepScreeningService";
 
 const pepScreeningRequestSchema = z.object({
 	full_name: z.string().min(3, "full_name must be at least 3 characters"),
@@ -11,34 +10,6 @@ const pepScreeningRequestSchema = z.object({
 		.nullable()
 		.optional()
 		.transform((val) => val || null),
-});
-
-const pepBasisSchema = z.object({
-	rule_code: z.string(),
-	description: z.string(),
-});
-
-const positionSchema = z.object({
-	title: z.string(),
-	organization: z.string(),
-	jurisdiction: z.string(),
-	start_date: z.string().nullable(),
-	end_date: z.string().nullable(),
-});
-
-const negativeInfoSchema = z.object({
-	summary: z.string(),
-	evidence: z.array(z.string()),
-});
-
-const matchSchema = z.object({
-	candidate_name: z.string(),
-	candidate_birth_date: z.string().nullable(),
-	why_match: z.string(),
-	pep_basis: z.array(pepBasisSchema),
-	positions: z.array(positionSchema),
-	negative_info: z.array(negativeInfoSchema),
-	evidence: z.array(z.string()),
 });
 
 const pepScreeningResponseSchema = z.object({
@@ -52,7 +23,35 @@ const pepScreeningResponseSchema = z.object({
 	is_pep: z.boolean(),
 	confidence: z.number().min(0).max(1),
 	needs_disambiguation: z.boolean(),
-	matches: z.array(matchSchema),
+	matches: z.array(
+		z.object({
+			candidate_name: z.string(),
+			candidate_birth_date: z.string().nullable(),
+			why_match: z.string(),
+			pep_basis: z.array(
+				z.object({
+					rule_code: z.string(),
+					description: z.string(),
+				}),
+			),
+			positions: z.array(
+				z.object({
+					title: z.string(),
+					organization: z.string(),
+					jurisdiction: z.string(),
+					start_date: z.string().nullable(),
+					end_date: z.string().nullable(),
+				}),
+			),
+			negative_info: z.array(
+				z.object({
+					summary: z.string(),
+					evidence: z.array(z.string()),
+				}),
+			),
+			evidence: z.array(z.string()),
+		}),
+	),
 	search_audit: z.object({
 		sources_consulted: z.array(z.string()),
 	}),
@@ -64,7 +63,7 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 		tags: ["PEP"],
 		summary: "Screen a person for PEP (Politically Exposed Person) status",
 		description:
-			"Performs exhaustive PEP screening using Grok 4.1 with web/X search. Follows Lista PEPS 2020 official rules.",
+			"Performs PEP screening using Grok with search-tools and Lista PEPS collection.",
 		operationId: "screenPEP",
 		request: {
 			body: contentJson(pepScreeningRequestSchema),
@@ -87,7 +86,7 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 				}),
 			},
 			"502": {
-				description: "Bad gateway - provider error or invalid response",
+				description: "Bad gateway - provider error",
 				...contentJson({
 					success: z.literal(false),
 					errors: z.array(
@@ -99,7 +98,7 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 				}),
 			},
 			"503": {
-				description: "Service unavailable - XAI API not configured",
+				description: "Service unavailable - API not configured",
 				...contentJson({
 					success: z.literal(false),
 					errors: z.array(
@@ -116,26 +115,14 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 	public async handle(c: AppContext) {
 		const data = await this.getValidatedData<typeof this.schema>();
 
-		console.log("[PepScreen] Starting PEP screening request", {
+		console.log("[PepScreen] Starting PEP screening", {
 			fullName: data.body.full_name,
-			hasBirthDate: !!data.body.birth_date,
+			birthDate: data.body.birth_date,
 		});
 
-		// Validate environment variables
 		if (!c.env.GROK_API_KEY) {
-			console.error("[PepScreen] GROK_API_KEY not configured");
 			const error = new ApiException(
-				"Grok API key not configured. Please ensure GROK_API_KEY is set in your environment.",
-			);
-			error.status = 503;
-			error.code = 503;
-			throw error;
-		}
-
-		if (!c.env.DB) {
-			console.error("[PepScreen] DB not configured");
-			const error = new ApiException(
-				"Database not configured. Please ensure DB binding is set.",
+				"Grok API key not configured. Please ensure GROK_API_KEY is set.",
 			);
 			error.status = 503;
 			error.code = 503;
@@ -143,126 +130,149 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 		}
 
 		try {
-			// Create screening service
-			const screeningService = new PepScreeningService({
-				xaiApiKey: c.env.GROK_API_KEY,
-				xaiBaseUrl: c.env.XAI_BASE_URL,
-				xaiModel: c.env.XAI_MODEL,
-				xaiMaxTurns: c.env.XAI_MAX_TURNS
-					? parseInt(c.env.XAI_MAX_TURNS, 10)
-					: undefined,
-				db: c.env.DB,
+			const requestId = crypto.randomUUID();
+			const model = c.env.XAI_MODEL || "grok-2-1212";
+			const baseUrl = c.env.XAI_BASE_URL || "https://api.x.ai/v1";
+
+			// Get collection ID from environment or use default
+			const collectionId = c.env.XAI_COLLECTION_ID || "lista-peps-2020";
+
+			// Build the request with search-tools
+			const requestBody = {
+				model,
+				messages: [
+					{
+						role: "system",
+						content: `You are a PEP screening engine for Mexico. Use search-tools to query the Lista PEPS collection (ID: ${collectionId}) and determine if a person qualifies as a Politically Exposed Person.
+
+Rules:
+- Search the collection for the person's name
+- Check if they hold or held (within last 5 years) any PEP positions listed in the collection
+- Return strict JSON matching the required schema
+- If name matches multiple people, set needs_disambiguation=true
+- Only return is_pep=true if there's a clear match with evidence from the collection`,
+					},
+					{
+						role: "user",
+						content: `Screen this person for PEP status:
+Full name: ${data.body.full_name}
+Birth date: ${data.body.birth_date || "not provided"}
+
+Use search-tools to query collection "${collectionId}" for this person. Return JSON in this exact format:
+{
+  "request_id": "${requestId}",
+  "provider": "xai",
+  "model": "${model}",
+  "query": {
+    "full_name": "${data.body.full_name}",
+    "birth_date": ${data.body.birth_date ? `"${data.body.birth_date}"` : "null"}
+  },
+  "is_pep": boolean,
+  "confidence": number (0.0-1.0),
+  "needs_disambiguation": boolean,
+  "matches": [
+    {
+      "candidate_name": "string",
+      "candidate_birth_date": "string|null",
+      "why_match": "string",
+      "pep_basis": [{"rule_code": "string", "description": "string"}],
+      "positions": [{"title": "string", "organization": "string", "jurisdiction": "string", "start_date": "string|null", "end_date": "string|null"}],
+      "negative_info": [{"summary": "string", "evidence": ["string"]}],
+      "evidence": ["string"]
+    }
+  ],
+  "search_audit": {"sources_consulted": ["string"]},
+  "raw": {}
+}`,
+					},
+				],
+				response_format: { type: "json_object" },
+				max_turns: 10,
+			};
+
+			// Call xAI API
+			const response = await fetch(`${baseUrl}/chat/completions`, {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${c.env.GROK_API_KEY}`,
+				},
+				body: JSON.stringify(requestBody),
 			});
 
-			// Perform screening
-			const result = await screeningService.screen(
-				data.body.full_name,
-				data.body.birth_date || null,
-			);
+			if (!response.ok) {
+				const errorText = await response.text();
+				console.error("[PepScreen] xAI API error", {
+					status: response.status,
+					errorText,
+				});
+				throw new Error(`xAI API error: ${response.status} ${errorText}`);
+			}
 
-			console.log("[PepScreen] Screening completed successfully", {
-				requestId: result.response.request_id,
-				screeningId: result.screeningId,
-				isPep: result.response.is_pep,
-				confidence: result.response.confidence,
+			const apiResponse = (await response.json()) as {
+				choices?: Array<{
+					message?: {
+						content?: string;
+					};
+				}>;
+				model?: string;
+			};
+
+			const content = apiResponse.choices?.[0]?.message?.content;
+			if (!content) {
+				throw new Error("No content in API response");
+			}
+
+			// Parse JSON response
+			let parsed: unknown;
+			try {
+				parsed = JSON.parse(content);
+			} catch (parseError) {
+				// Try to extract JSON from markdown code blocks
+				const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+				if (jsonMatch) {
+					parsed = JSON.parse(jsonMatch[1]);
+				} else {
+					throw new Error(
+						`Failed to parse JSON: ${parseError instanceof Error ? parseError.message : String(parseError)}`,
+					);
+				}
+			}
+
+			// Validate and return response
+			const result = pepScreeningResponseSchema.parse(parsed);
+
+			console.log("[PepScreen] Screening completed", {
+				requestId: result.request_id,
+				isPep: result.is_pep,
+				confidence: result.confidence,
 			});
 
-			return result.response;
+			return result;
 		} catch (error) {
-			console.error("[PepScreen] Error during screening", {
+			console.error("[PepScreen] Error", {
 				error: error instanceof Error ? error.message : String(error),
-				stack: error instanceof Error ? error.stack : undefined,
 			});
 
-			// Re-throw ApiException as-is
 			if (error instanceof ApiException) {
 				throw error;
 			}
 
-			// For JSON parsing errors or provider errors, return 502
-			if (
-				error instanceof Error &&
-				(error.message.includes("JSON") ||
-					error.message.includes("parse") ||
-					error.message.includes("XAI API"))
-			) {
+			if (error instanceof z.ZodError) {
 				const apiError = new ApiException(
-					`Provider error: ${error.message}. The screening request has been logged for audit.`,
+					`Invalid response format: ${error.errors.map((e) => e.message).join(", ")}`,
 				);
 				apiError.status = 502;
 				apiError.code = 502;
 				throw apiError;
 			}
 
-			// Wrap other errors as 500
 			const apiError = new ApiException(
-				error instanceof Error
-					? error.message
-					: "An unexpected error occurred during PEP screening",
+				error instanceof Error ? error.message : "An unexpected error occurred",
 			);
-			apiError.status = 500;
-			apiError.code = 500;
+			apiError.status = 502;
+			apiError.code = 502;
 			throw apiError;
 		}
-	}
-}
-
-export class PepScreenReadEndpoint extends OpenAPIRoute {
-	public schema = {
-		tags: ["PEP"],
-		summary: "Get a stored PEP screening result by ID",
-		description:
-			"Retrieves a previously stored PEP screening result from the audit log",
-		operationId: "getPepScreen",
-		request: {
-			params: z.object({
-				id: z.string().min(1, "id is required"),
-			}),
-		},
-		responses: {
-			"200": {
-				description: "PEP screening result",
-				...contentJson(pepScreeningResponseSchema),
-			},
-			"404": {
-				description: "Screening not found",
-				...contentJson({
-					success: z.literal(false),
-					errors: z.array(
-						z.object({
-							code: z.number(),
-							message: z.string(),
-						}),
-					),
-				}),
-			},
-		},
-	};
-
-	public async handle(c: AppContext) {
-		const data = await this.getValidatedData<typeof this.schema>();
-
-		if (!c.env.DB) {
-			const error = new ApiException("Database not configured");
-			error.status = 503;
-			error.code = 503;
-			throw error;
-		}
-
-		const screeningService = new PepScreeningService({
-			xaiApiKey: "", // Not needed for read
-			db: c.env.DB,
-		});
-
-		const result = await screeningService.getScreening(data.params.id);
-
-		if (!result) {
-			const error = new ApiException("Screening not found");
-			error.status = 404;
-			error.code = 404;
-			throw error;
-		}
-
-		return result;
 	}
 }
