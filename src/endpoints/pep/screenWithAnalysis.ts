@@ -53,8 +53,6 @@ export class PepScreenWithAnalysisEndpoint extends OpenAPIRoute {
 				...contentJson(
 					z.object({
 						request_id: z.string(),
-						provider: z.literal("xai"),
-						model: z.string(),
 						query: z.object({
 							full_name: z.string(),
 							birth_date: z.string().nullable(),
@@ -74,7 +72,7 @@ export class PepScreenWithAnalysisEndpoint extends OpenAPIRoute {
 								pep_basis: z.string(),
 							}),
 						),
-						search_sources: z.array(z.string()),
+						sources: z.array(z.string()).optional(),
 					}),
 				),
 			},
@@ -157,15 +155,19 @@ export class PepScreenWithAnalysisEndpoint extends OpenAPIRoute {
 				messages: [
 					{
 						role: "system",
-						content: `You are a research assistant. Use search-tools (web search and X search) to gather comprehensive information about a person. Return a detailed summary including:
+						content: `You are a research assistant. Use search-tools (web search and X search) to gather comprehensive information about a person. 
+
+IMPORTANT: Include ALL sources/URLs where you found information. For each piece of information, note the source URL.
+
+Return a detailed summary including:
 - Full name and any aliases
 - Current and past government positions
 - Organizations they work/worked for
 - Dates of positions (start/end dates if available)
 - Any political roles
-- Sources/URLs where information was found
+- Sources/URLs where information was found (include URLs for each fact)
 
-Be thorough and search multiple sources.`,
+Be thorough and search multiple sources. Always cite your sources.`,
 					},
 					{
 						role: "user",
@@ -181,7 +183,9 @@ Compile a concise summary focusing on:
 - Full name and aliases
 - Government positions (current and past, with dates if available)
 - Organizations (government agencies, secretarías, estados, municipios)
-- Key evidence/sources (most important URLs only)
+- Sources/URLs for each piece of information (include URLs where you found each fact)
+
+IMPORTANT: Include all source URLs where you found information. Format sources clearly in the summary.
 
 Keep the summary focused and efficient. Return ONLY the summary text, no JSON.`,
 					},
@@ -221,20 +225,27 @@ Keep the summary focused and efficient. Return ONLY the summary text, no JSON.`,
 
 			const personSummary = summaryData.choices?.[0]?.message?.content || "";
 
-			// Extract search sources from tool calls
+			// Extract URLs/sources from the summary text and tool calls
 			const searchSources: string[] = [];
+
+			// Extract from tool calls (search queries performed)
 			summaryData.choices?.[0]?.message?.tool_calls?.forEach((call) => {
 				if (call.function?.arguments) {
 					try {
 						const args = JSON.parse(call.function.arguments);
 						if (args.query) {
-							searchSources.push(args.query);
+							searchSources.push(`search:${args.query}`);
 						}
 					} catch {
 						// Ignore parse errors
 					}
 				}
 			});
+
+			// Extract URLs from summary text (http/https URLs)
+			const urlRegex = /https?:\/\/[^\s\)]+/g;
+			const urlsInSummary = personSummary.match(urlRegex) || [];
+			searchSources.push(...urlsInSummary);
 
 			console.log("[PepScreenWithAnalysis] Summary obtained", {
 				summaryLength: personSummary.length,
@@ -381,6 +392,7 @@ ANALYSIS TASK:
 					evidence: string;
 					pep_basis: string;
 				}>;
+				sources?: string[];
 			};
 
 			console.log("[PepScreenWithAnalysis] Analysis completed", {
@@ -389,10 +401,30 @@ ANALYSIS TASK:
 				positionsCount: analysis.positions_found?.length || 0,
 			});
 
+			// Extract sources from analysis response, summary URLs, or search queries
+			const allSources: string[] = [];
+
+			// Add sources from analysis if provided
+			if (Array.isArray(analysis.sources) && analysis.sources.length > 0) {
+				allSources.push(...analysis.sources);
+			}
+
+			// Add URLs found in summary
+			const summaryUrls = searchSources.filter((s) => s.startsWith("http"));
+			allSources.push(...summaryUrls);
+
+			// Add URLs from positions evidence
+			analysis.positions_found?.forEach((pos) => {
+				if (pos.evidence && pos.evidence.startsWith("http")) {
+					allSources.push(pos.evidence);
+				}
+			});
+
+			// Remove duplicates
+			const uniqueSources = Array.from(new Set(allSources));
+
 			return {
 				request_id: requestId,
-				provider: "xai" as const,
-				model: analysisData.model || model,
 				query: {
 					full_name: fullName,
 					birth_date: birthDate,
@@ -404,7 +436,7 @@ ANALYSIS TASK:
 				positions_found: Array.isArray(analysis.positions_found)
 					? analysis.positions_found
 					: [],
-				search_sources: searchSources,
+				sources: uniqueSources.length > 0 ? uniqueSources : undefined,
 			};
 		} catch (error) {
 			console.error("[PepScreenWithAnalysis] Error", {
