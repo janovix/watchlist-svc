@@ -203,21 +203,20 @@ Return ONLY a detailed summary text. No JSON, just a comprehensive written summa
 						content: `You are a PEP analysis engine. Analyze a person's summary against the Lista PEPS 2020 document to determine if they qualify as PEP.
 
 ANALYSIS PROCESS:
-1. Extract ALL government positions from the person's summary
-2. For each position, check if it matches PEP criteria according to Lista PEPS 2020:
+1. Read and understand the Lista PEPS 2020 document carefully
+2. Extract ALL government positions from the person's summary
+3. For each position found, check if it matches PEP criteria according to Lista PEPS 2020:
    - Is it explicitly listed in the document? OR
-   - Is it a homologous position (state/municipal equivalent of federal)? OR
-   - Is it within "three hierarchical levels below" in a decentralized body/desconcentrated organ?
+   - Is it a homologous position (state/municipal equivalent of federal position listed in the document)? OR
+   - Is it within "three hierarchical levels below" in a decentralized body/desconcentrated organ listed in the document?
 
-KEY RULES FROM LISTA PEPS:
-- CONADE is a decentralized body under Secretaría de Educación Pública
-- "Director", "Subdirector", "Coordinador Nacional", "Director Técnico Nacional" in CONADE ARE PEP (within 3 levels)
-- "Fiscal General del Estado" = PEP (homologous to federal Fiscal General)
-- "Procurador Estatal" = PEP (homologous to federal Procurador)
-- "Magistrado Estatal" = PEP (homologous to federal magistrates)
-- "Presidente Municipal" = PEP (homologous to federal executive)
-- "Regidor", "Síndico" = PEP (homologous to federal positions)
-- Any position in decentralized bodies under Secretarías within 3 levels = PEP
+4. Apply the rules from the document:
+   - Check Section F for homologous positions (state/municipal equivalents)
+   - Check Section E for risk factors and "three levels below" criteria
+   - Check all sections (Federal, State, Municipal, Political Parties) for explicit matches
+   - Consider decentralized bodies and desconcentrated organs under Secretarías
+
+5. Use your intelligence to match positions found in the summary against the rules and positions listed in the document. Do not rely on hardcoded examples - read the document and apply its rules.
 
 Return JSON only.`,
 					},
@@ -228,24 +227,31 @@ Return JSON only.`,
 PERSON SUMMARY:
 ${personSummary}
 
-LISTA PEPS 2020 DOCUMENT (reference):
-${LISTA_PEPS_2020_TEXT.substring(0, 10000)}...
-
-[Document contains all PEP positions and rules - check if positions found match any PEP criteria]
+LISTA PEPS 2020 DOCUMENT (complete reference):
+${LISTA_PEPS_2020_TEXT}
 
 ANALYSIS TASK:
-1. Extract all government positions mentioned in the summary
-2. For each position, determine if it's PEP according to Lista PEPS 2020 rules
-3. Check if positions are:
-   - Explicitly listed in the document, OR
-   - Homologous positions (state/municipal equivalents), OR
-   - Within 3 hierarchical levels in decentralized bodies
+1. Read the complete Lista PEPS 2020 document above
+2. Extract all government positions mentioned in the person's summary
+3. For each position found, check if it qualifies as PEP by:
+   - Reading the document to see if the position is explicitly listed, OR
+   - Checking if it's a homologous position (state/municipal equivalent) according to Section F, OR
+   - Checking if it's within "three hierarchical levels below" according to Section E and the document's rules
 
-4. Return JSON:
+4. Apply the document's rules intelligently - read the sections on:
+   - Federal level positions (Section I)
+   - State level positions and homologous rules (Section II and F)
+   - Municipal level positions and homologous rules (Section III and F)
+   - Decentralized bodies and "three levels below" criteria (Section E and throughout)
+   - Risk factors and prominent functions (Section E)
+
+5. Match positions from the summary against the document's criteria - use your intelligence to understand the rules, not hardcoded examples.
+
+6. Return JSON:
 {
   "is_pep": boolean,
   "confidence": number (0.0-1.0),
-  "analysis": "Detailed explanation of why this person is or isn't PEP, referencing specific positions found and how they match PEP criteria from Lista PEPS",
+  "analysis": "Detailed explanation of why this person is or isn't PEP, referencing specific positions found, how they match PEP criteria from Lista PEPS 2020, and which sections/rules of the document apply",
   "positions_found": [
     {
       "title": "exact position title",
@@ -254,7 +260,7 @@ ANALYSIS TASK:
       "start_date": "YYYY-MM-DD or null",
       "end_date": "YYYY-MM-DD or null",
       "evidence": "URL or source",
-      "pep_basis": "Why this position is PEP (explicitly listed / homologous / within 3 levels)"
+      "pep_basis": "Detailed explanation of why this position is PEP, referencing specific sections/rules from Lista PEPS 2020 document"
     }
   ]
 }`,
