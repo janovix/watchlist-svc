@@ -50,13 +50,7 @@ export class GrokService {
 						role: "system",
 						content: `Eres un verificador oficial de Personas Políticamente Expuestas (PEP) en México según la "Lista de Personas Políticamente Expuestas Nacionales 2020" de la SHCP.
 
-⚠️ INSTRUCCIÓN CRÍTICA: DEBES USAR BÚSQUEDA WEB ⚠️
-- USA la funcionalidad de búsqueda web de Grok para TODAS las consultas
-- NO confíes solo en conocimiento previo o información almacenada
-- REALIZA búsquedas web activas y múltiples antes de responder
-- Verifica TODA la información mediante búsquedas web en tiempo real
-
-MISIÓN: Realizar una BÚSQUEDA EXHAUSTIVA usando BÚSQUEDA WEB ACTIVA para determinar si una persona es PEP en México, verificando TODOS los niveles de gobierno (federal, estatal y municipal) según los criterios establecidos en el documento oficial de la SHCP.
+MISIÓN: Realizar una BÚSQUEDA EXHAUSTIVA para determinar si una persona es PEP en México, verificando TODOS los niveles de gobierno (federal, estatal y municipal) según los criterios establecidos en el documento oficial de la SHCP.
 
 METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
 
@@ -67,28 +61,8 @@ METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
    - NIVEL MUNICIPAL: Presidentes Municipales, Regidores, Síndicos, Secretarios municipales, Tesoreros municipales, etc.
    - PARTIDOS POLÍTICOS: Candidatos, líderes nacionales, responsables de finanzas, etc.
 
-2. BÚSQUEDA WEB OBLIGATORIA Y EXPLÍCITA:
-   DEBES realizar búsquedas web activas usando la funcionalidad de búsqueda web de Grok. NO puedes confiar solo en conocimiento previo.
-   
-   INSTRUCCIONES PARA BÚSQUEDA WEB:
-   - USA LA FUNCIÓN DE BÚSQUEDA WEB de Grok para cada consulta
-   - Realiza MÚLTIPLES búsquedas web con diferentes términos
-   - NO asumas información sin verificar mediante búsqueda web
-   - Realiza al menos 3-5 búsquedas web diferentes por persona consultada
-   
-   TÉRMINOS DE BÚSQUEDA WEB A REALIZAR (usa búsqueda web para cada uno):
-   - "[nombre] México PEP"
-   - "[nombre] gobernador México"
-   - "[nombre] alcalde México"
-   - "[nombre] diputado México"
-   - "[nombre] secretario estado México"
-   - "[nombre] [cualquier estado mexicano]"
-   - "[nombre] gobierno [cualquier estado]"
-   - "[nombre] municipio [cualquier municipio]"
-   - "[nombre] servidor público México"
-   - "[nombre] cargo público México"
-   
-   FUENTES WEB A CONSULTAR (usa búsqueda web para acceder):
+2. FUENTES MÚLTIPLES Y EXHAUSTIVAS:
+   Realiza búsquedas en:
    - Sitios web oficiales gubernamentales (gob.mx, portales estatales y municipales)
    - Redes sociales oficiales (X/Twitter de instituciones gubernamentales)
    - Noticias y medios de comunicación confiables
@@ -96,11 +70,11 @@ METODOLOGÍA DE BÚSQUEDA EXHAUSTIVA:
    - Registros oficiales de cargos públicos
    - Páginas de transparencia gubernamental
    
-   IMPORTANTE: Para cargos estatales y municipales, la información puede estar menos disponible. Debes hacer búsquedas web MÁS PROFUNDAS:
-   - Realiza búsquedas web con variaciones del nombre + estado específico
-   - Realiza búsquedas web en portales de transparencia estatales y municipales
-   - Realiza búsquedas web en noticias locales y regionales
-   - Realiza búsquedas web para consultar organigramas oficiales de gobiernos estatales y municipales
+   IMPORTANTE: Para cargos estatales y municipales, la información puede estar menos disponible. Debes hacer búsquedas más profundas:
+   - Buscar variaciones del nombre con el estado o municipio específico
+   - Buscar en portales de transparencia estatales y municipales
+   - Verificar en noticias locales y regionales
+   - Consultar organigramas oficiales de gobiernos estatales y municipales
 
 3. VARIACIONES DE NOMBRE A VERIFICAR:
    Busca la persona usando:
@@ -192,25 +166,7 @@ INSTRUCCIONES PARA USAR ESTE DOCUMENTO:
 					},
 					{
 						role: "user",
-						content: `Realiza una BÚSQUEDA EXHAUSTIVA usando BÚSQUEDA WEB ACTIVA para determinar si "${query}" actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los cargos públicos que lo convierten automáticamente en PEP según la lista oficial de 2020 de la SHCP.
-
-⚠️ INSTRUCCIÓN CRÍTICA: DEBES USAR LA FUNCIÓN DE BÚSQUEDA WEB DE GROK ⚠️
-- NO confíes solo en tu conocimiento previo
-- REALIZA búsquedas web activas usando la herramienta de búsqueda web
-- Realiza MÚLTIPLES búsquedas web con diferentes términos de búsqueda
-- Verifica TODA la información mediante búsquedas web antes de responder
-
-BÚSQUEDAS WEB ESPECÍFICAS A REALIZAR (usa búsqueda web para cada una):
-1. Búsqueda web: "${query} México PEP"
-2. Búsqueda web: "${query} gobernador México"
-3. Búsqueda web: "${query} alcalde México"
-4. Búsqueda web: "${query} diputado México"
-5. Búsqueda web: "${query} secretario estado México"
-6. Búsqueda web: "${query} servidor público México"
-7. Búsqueda web: "${query} cargo público México"
-8. Búsqueda web: "${query} gobierno México"
-9. Búsqueda web: "${query} [buscar con cada uno de los 32 estados de México]"
-10. Búsqueda web: "${query} municipio México"
+						content: `Realiza una BÚSQUEDA EXHAUSTIVA para determinar si "${query}" actualmente ocupa o ha ocupado en los últimos 5 años (hasta diciembre 2025) cualquiera de los cargos públicos que lo convierten automáticamente en PEP según la lista oficial de 2020 de la SHCP.
 
 BÚSQUEDA REQUERIDA:
 

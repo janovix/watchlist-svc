@@ -247,11 +247,10 @@ describe("GrokService", () => {
 
 			// Verify exhaustive search methodology is included
 			expect(systemPrompt).toContain("BÚSQUEDA EXHAUSTIVA");
-			expect(systemPrompt).toContain("BÚSQUEDA WEB");
 			expect(systemPrompt).toContain("NIVEL FEDERAL");
 			expect(systemPrompt).toContain("NIVEL ESTATAL");
 			expect(systemPrompt).toContain("NIVEL MUNICIPAL");
-			expect(systemPrompt).toContain("BÚSQUEDA WEB OBLIGATORIA");
+			expect(systemPrompt).toContain("FUENTES MÚLTIPLES");
 			expect(systemPrompt).toContain("VARIACIONES DE NOMBRE");
 
 			// Verify strict matching criteria are included
@@ -273,14 +272,12 @@ describe("GrokService", () => {
 
 			// Verify query message includes exhaustive search instructions
 			expect(queryMessage).toContain("BÚSQUEDA EXHAUSTIVA");
-			expect(queryMessage).toContain("BÚSQUEDA WEB");
 			expect(queryMessage).toContain("Test Person");
 			expect(queryMessage).toContain("últimos 5 años");
 			expect(queryMessage).toContain("diciembre 2025");
 			expect(queryMessage).toContain("NIVEL FEDERAL");
 			expect(queryMessage).toContain("NIVEL ESTATAL");
 			expect(queryMessage).toContain("NIVEL MUNICIPAL");
-			expect(queryMessage).toContain("BÚSQUEDAS WEB ESPECÍFICAS");
 			expect(queryMessage).toContain("VARIACIONES DE BÚSQUEDA");
 			expect(queryMessage).toContain("coincidencia parcial");
 		});
