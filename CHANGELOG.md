@@ -1,3 +1,10 @@
+# [1.1.0-rc.7](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.6...v1.1.0-rc.7) (2025-12-19)
+
+
+### Features
+
+* Add Mexico PEP list to GrokService prompt ([02c3b54](https://github.com/janovix/watchlist-svc/commit/02c3b5434ad0c41fe91b953a9e18a8747d3a99a9))
+
 # [1.1.0-rc.6](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.5...v1.1.0-rc.6) (2025-12-18)
 
 
