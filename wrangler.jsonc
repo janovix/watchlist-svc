@@ -41,4 +41,10 @@
 	"vars": {
 		"CORS_ALLOWED_DOMAIN": "janovix.workers.dev",
 	},
+	"services": [
+		{
+			"binding": "AUTH_SERVICE",
+			"service": "auth-svc",
+		},
+	],
 }

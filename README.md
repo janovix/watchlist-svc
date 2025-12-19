@@ -9,6 +9,8 @@ Watchlist ingestion and search service using Hono + Chanfana + D1 + Vectorize.
 - Vector indexing with automatic sync
 - Admin endpoints for ingestion and reindexing
 - OpenAPI documentation
+- Authentication via better-auth session validation
+- Service binding support for worker-to-worker communication
 
 ## Setup Steps
 
@@ -59,18 +61,76 @@ Watchlist ingestion and search service using Hono + Chanfana + D1 + Vectorize.
 
 ## Environment Variables
 
-- `ADMIN_API_KEY` - Admin API key for protected endpoints
+- `ADMIN_API_KEY` - Admin API key for protected admin endpoints
 - `GROK_API_KEY` - API key for Grok API (used for PEP search fallback)
 - `CORS_ALLOWED_DOMAIN` - Base domain for CORS configuration (e.g., `janovix.workers.dev`). If not set, all origins are allowed (development mode).
+- `AUTH_SERVICE_URL` - (Optional) Fallback URL for auth service when service binding is not available (for local dev or HTTP fallback)
 
-## API Endpoints
+## Authentication
 
-- `GET /healthz` - Health check
-- `POST /search` - Semantic search for watchlist targets
-- `POST /pep/search` - PEP (Politically Exposed Person) search with match confidence
+The service supports two authentication methods:
+
+1. **Session-based authentication (better-auth)**: Most API endpoints require a valid session from the auth-svc service. The session is validated via:
+
+   - Service binding to `auth-svc` worker (preferred, configured in wrangler.jsonc)
+   - HTTP fallback to `AUTH_SERVICE_URL` if service binding is not available
+
+2. **Admin API key**: Admin endpoints (`/admin/*`) use the `x-admin-api-key` header with the `ADMIN_API_KEY` environment variable.
+
+### Protected Endpoints
+
+The following endpoints require session authentication:
+
+- `POST /search` - Semantic search
+- `POST /pep/search` - PEP search
 - `GET /targets/:id` - Get target by ID
 - `GET /ingestion/runs` - List ingestion runs
 - `GET /ingestion/runs/:runId` - Get ingestion run details
+
+### Service Binding
+
+This service can be used from other Cloudflare Workers via service binding. The service binding is configured in `wrangler.jsonc`:
+
+```jsonc
+"services": [
+  {
+    "binding": "AUTH_SERVICE",
+    "service": "auth-svc",
+  },
+]
+```
+
+Other workers can bind to this service and call it directly:
+
+```typescript
+// In another worker's wrangler.jsonc
+"services": [
+  {
+    "binding": "WATCHLIST_SERVICE",
+    "service": "watchlist-svc",
+  },
+]
+
+// In the worker code
+const response = await env.WATCHLIST_SERVICE.fetch(
+  new Request("https://watchlist-svc.internal/search", {
+    method: "POST",
+    headers: { Cookie: request.headers.get("Cookie") || "" },
+    body: JSON.stringify({ query: "search term" }),
+  })
+);
+```
+
+**Note**: The auth-svc must expose a `/api/auth/session` endpoint that accepts session cookies and returns session data. If your better-auth configuration uses a different endpoint, you may need to update the `validateSession` function in `src/lib/auth.ts`.
+
+## API Endpoints
+
+- `GET /healthz` - Health check (public)
+- `POST /search` - Semantic search for watchlist targets (requires authentication)
+- `POST /pep/search` - PEP (Politically Exposed Person) search with match confidence (requires authentication)
+- `GET /targets/:id` - Get target by ID (requires authentication)
+- `GET /ingestion/runs` - List ingestion runs (requires authentication)
+- `GET /ingestion/runs/:runId` - Get ingestion run details (requires authentication)
 - `POST /admin/ingest` - Trigger CSV ingestion (requires ADMIN_API_KEY)
 - `POST /admin/reindex` - Reindex all vectors (requires ADMIN_API_KEY)
 
