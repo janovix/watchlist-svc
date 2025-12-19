@@ -16,6 +16,10 @@ import {
 	AdminReindexEndpoint,
 } from "./endpoints/watchlist/adminIngest";
 import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
+import {
+	PepScreenEndpoint,
+	PepScreenReadEndpoint,
+} from "./endpoints/pep/screen";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
@@ -114,6 +118,8 @@ app.get("/docsz", (c) => {
 openapi.get("/healthz", HealthEndpoint);
 openapi.post("/search", SearchEndpoint);
 openapi.post("/pep/search", PepSearchEndpoint);
+openapi.post("/pep/screen", PepScreenEndpoint);
+openapi.get("/pep/screen/:id", PepScreenReadEndpoint);
 openapi.get("/targets/:id", TargetReadEndpoint);
 openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
 openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);

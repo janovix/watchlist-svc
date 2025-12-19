@@ -10,6 +10,10 @@ interface Env extends Cloudflare.Env {
 	};
 	ADMIN_API_KEY?: string;
 	GROK_API_KEY?: string;
+	XAI_API_KEY?: string;
+	XAI_BASE_URL?: string;
+	XAI_MODEL?: string;
+	XAI_MAX_TURNS?: string;
 	INGESTION_QUEUE?: Queue<IngestionJob>;
 	CORS_ALLOWED_DOMAIN?: string; // Base domain for CORS (e.g., "janovix.workers.dev")
 }
