@@ -11,6 +11,29 @@ const screenWithAnalysisRequestSchema = z.object({
 		.nullable()
 		.optional()
 		.transform((val) => val || null),
+	max_search_turns: z
+		.number()
+		.int()
+		.min(3)
+		.max(20)
+		.optional()
+		.default(10)
+		.describe("Maximum number of search iterations (3-20, default: 10)"),
+	max_analysis_turns: z
+		.number()
+		.int()
+		.min(3)
+		.max(15)
+		.optional()
+		.default(8)
+		.describe("Maximum number of analysis iterations (3-15, default: 8)"),
+	search_depth: z
+		.enum(["quick", "standard", "deep"])
+		.optional()
+		.default("standard")
+		.describe(
+			"Search depth: quick (3 searches), standard (5 searches), deep (7+ searches)",
+		),
 });
 
 export class PepScreenWithAnalysisEndpoint extends OpenAPIRoute {
@@ -93,6 +116,38 @@ export class PepScreenWithAnalysisEndpoint extends OpenAPIRoute {
 			const baseUrl = c.env.XAI_BASE_URL || "https://api.x.ai/v1";
 			const fullName = data.body.full_name;
 			const birthDate = data.body.birth_date || null;
+			const maxSearchTurns = data.body.max_search_turns || 10;
+			const maxAnalysisTurns = data.body.max_analysis_turns || 8;
+			const searchDepth = data.body.search_depth || "standard";
+
+			// Define search queries based on depth
+			const searchQueries: string[] = [];
+			if (searchDepth === "quick") {
+				searchQueries.push(
+					`"${fullName} México"`,
+					`"${fullName} gobierno"`,
+					`"${fullName}"`,
+				);
+			} else if (searchDepth === "standard") {
+				searchQueries.push(
+					`"${fullName} México"`,
+					`"${fullName} gobierno"`,
+					`"${fullName} funcionario"`,
+					`"${fullName} director"`,
+					`"${fullName}"`,
+				);
+			} else {
+				// deep
+				searchQueries.push(
+					`"${fullName} México"`,
+					`"${fullName} gobierno"`,
+					`"${fullName} funcionario público"`,
+					`"${fullName} director"`,
+					`"${fullName} secretario"`,
+					`"${fullName} gobernador"`,
+					`"${fullName}"`,
+				);
+			}
 
 			// STEP 1: Get comprehensive summary using search-tools
 			console.log("[PepScreenWithAnalysis] Step 1: Getting person summary");
@@ -114,28 +169,24 @@ Be thorough and search multiple sources.`,
 					},
 					{
 						role: "user",
-						content: `Gather comprehensive information about this person using search-tools:
+						content: `Gather information about this person using search-tools:
 
 Name: ${fullName}
 Birth date: ${birthDate || "not provided"}
 
-Perform these searches:
-1. Web: "${fullName} México"
-2. Web: "${fullName} gobierno" or "${fullName} funcionario"
-3. Web: "${fullName} director" or "${fullName} secretario" or "${fullName} gobernador"
-4. X/Twitter: "${fullName}"
+Perform these searches (be efficient, focus on finding government positions):
+${searchQueries.map((q, i) => `${i + 1}. ${q.includes("X") || q.includes("Twitter") ? `X/Twitter` : `Web`}: ${q}`).join("\n")}
 
-Compile a comprehensive summary with:
+Compile a concise summary focusing on:
 - Full name and aliases
-- All government positions (current and past, with dates if available)
-- Organizations (CONADE, Secretarías, Estados, Municipios, etc.)
-- Evidence/sources (URLs)
-- Any other relevant information
+- Government positions (current and past, with dates if available)
+- Organizations (government agencies, secretarías, estados, municipios)
+- Key evidence/sources (most important URLs only)
 
-Return ONLY a detailed summary text. No JSON, just a comprehensive written summary.`,
+Keep the summary focused and efficient. Return ONLY the summary text, no JSON.`,
 					},
 				],
-				max_turns: 15,
+				max_turns: maxSearchTurns,
 			};
 
 			const summaryResponse = await fetch(`${baseUrl}/chat/completions`, {
@@ -228,7 +279,7 @@ PERSON SUMMARY:
 ${personSummary}
 
 LISTA PEPS 2020 DOCUMENT (complete reference):
-${LISTA_PEPS_2020_TEXT}
+${LISTA_PEPS_2020_TEXT.substring(0, 50000)}${LISTA_PEPS_2020_TEXT.length > 50000 ? "\n\n[Document continues - contains all PEP positions and rules]" : ""}
 
 ANALYSIS TASK:
 1. Read the complete Lista PEPS 2020 document above
@@ -267,7 +318,7 @@ ANALYSIS TASK:
 					},
 				],
 				response_format: { type: "json_object" },
-				max_turns: 10,
+				max_turns: maxAnalysisTurns,
 			};
 
 			const analysisResponse = await fetch(`${baseUrl}/chat/completions`, {
