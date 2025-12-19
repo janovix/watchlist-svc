@@ -14,6 +14,8 @@ interface Env extends Cloudflare.Env {
 	CORS_ALLOWED_DOMAIN?: string; // Base domain for CORS (e.g., "janovix.workers.dev")
 	/** Service binding to auth-svc for direct worker-to-worker communication */
 	AUTH_SERVICE: Fetcher;
+	/** Base URL for auth-svc (used to construct JWKS endpoint URL, optional) */
+	AUTH_SERVICE_URL?: string;
 	AUTH_JWKS_CACHE_TTL?: string;
 }
 

@@ -41,6 +41,8 @@ export interface AuthUser {
 export interface AuthEnv {
 	/** Service binding to auth-svc for direct worker-to-worker communication */
 	AUTH_SERVICE: Fetcher;
+	/** Base URL for auth-svc (used to construct JWKS endpoint URL, optional) */
+	AUTH_SERVICE_URL?: string;
 	AUTH_JWKS_CACHE_TTL?: string;
 }
 
@@ -60,6 +62,7 @@ let cachedJWKSExpiry: number = 0;
 async function getJWKS(
 	cacheTtl: number,
 	authServiceBinding: Fetcher,
+	authServiceUrl?: string,
 ): Promise<jose.JSONWebKeySet> {
 	const now = Date.now();
 
@@ -68,10 +71,16 @@ async function getJWKS(
 		return cachedJWKS;
 	}
 
+	// Construct JWKS URL - use provided URL or default format
+	// When using service binding, the hostname doesn't affect routing but is used for Host header
+	const jwksUrl = authServiceUrl
+		? `${authServiceUrl}/api/auth/jwks`
+		: "https://auth-svc.janovix.workers.dev/api/auth/jwks";
+
 	// Use service binding for direct worker-to-worker communication
-	// The hostname is ignored - request is routed directly to the bound service
+	// The hostname in the URL is used for the Host header but routing is handled by the binding
 	const response = await authServiceBinding.fetch(
-		new Request("https://internal/auth-svc/api/auth/jwks", {
+		new Request(jwksUrl, {
 			headers: { Accept: "application/json" },
 		}),
 	);
@@ -103,8 +112,9 @@ async function verifyToken(
 	token: string,
 	cacheTtl: number,
 	authServiceBinding: Fetcher,
+	authServiceUrl?: string,
 ): Promise<AuthTokenPayload> {
-	const jwks = await getJWKS(cacheTtl, authServiceBinding);
+	const jwks = await getJWKS(cacheTtl, authServiceBinding, authServiceUrl);
 
 	// Create a local JWKS for verification
 	const jwksInstance = jose.createLocalJWKSet(jwks);
@@ -180,6 +190,8 @@ export function authMiddleware(options?: {
 
 		// Get the service binding for direct worker-to-worker communication
 		const authServiceBinding = c.env.AUTH_SERVICE;
+		// AUTH_SERVICE_URL is optional - used to construct the JWKS endpoint URL
+		const authServiceUrl = c.env.AUTH_SERVICE_URL;
 
 		// Validate that service binding is configured
 		if (!authServiceBinding) {
@@ -195,7 +207,12 @@ export function authMiddleware(options?: {
 			: DEFAULT_JWKS_CACHE_TTL;
 
 		try {
-			const payload = await verifyToken(token, cacheTtl, authServiceBinding);
+			const payload = await verifyToken(
+				token,
+				cacheTtl,
+				authServiceBinding,
+				authServiceUrl,
+			);
 
 			// Attach user info to context
 			const user: AuthUser = {

@@ -45,6 +45,7 @@
 	],
 	"vars": {
 		"CORS_ALLOWED_DOMAIN": "janovix.ai",
+		"AUTH_SERVICE_URL": "https://auth-svc.janovix.ai",
 		"AUTH_JWKS_CACHE_TTL": "3600",
 	},
 }
