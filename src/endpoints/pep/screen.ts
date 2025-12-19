@@ -131,7 +131,7 @@ export class PepScreenEndpoint extends OpenAPIRoute {
 
 		try {
 			const requestId = crypto.randomUUID();
-			const model = c.env.XAI_MODEL || "grok-2-1212";
+			const model = c.env.XAI_MODEL || "grok-4-1-fast";
 			const baseUrl = c.env.XAI_BASE_URL || "https://api.x.ai/v1";
 
 			// Get collection ID from environment or use default
