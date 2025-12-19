@@ -1,3 +1,10 @@
+# [1.1.0-rc.9](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.8...v1.1.0-rc.9) (2025-12-19)
+
+
+### Bug Fixes
+
+* **auth:** add AUTH_SERVICE_URL back for JWKS endpoint URL construction ([d3c192c](https://github.com/janovix/watchlist-svc/commit/d3c192c8fce1106a698203ff42deb1fa50433acb))
+
 # [1.1.0-rc.8](https://github.com/janovix/watchlist-svc/compare/v1.1.0-rc.7...v1.1.0-rc.8) (2025-12-19)
 
 
