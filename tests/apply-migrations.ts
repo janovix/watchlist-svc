@@ -11,12 +11,11 @@ await applyD1Migrations(env.DB, env.MIGRATIONS);
 // Mock AI binding if not provided by miniflare
 // This ensures tests don't try to connect to real Workers AI
 if (!("AI" in env) || !env.AI) {
-	// @ts-expect-error - Adding mock AI binding for tests
 	env.AI = {
 		run: async () => ({
 			data: [new Array(768).fill(0.1)], // Mock embedding vector (768 dimensions for bge-base-en-v1.5)
 		}),
-	};
+	} as unknown as typeof env.AI;
 }
 
 // Mock Vectorize binding if not provided by miniflare

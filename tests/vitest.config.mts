@@ -24,6 +24,7 @@ export default defineWorkersConfig({
 				"**/dist/**",
 				"**/coverage/**",
 				"src/lib/ingestion-service.ts", // Hard to test without external dependencies
+				"src/lib/auth-middleware.ts", // Requires AUTH_SERVICE binding (service binding to auth-svc)
 				"src/queue-consumer.ts", // Queue consumer requires queue infrastructure setup
 				"src/endpoints/watchlist/pepSearch.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/search.ts", // Requires AI/Vectorize bindings difficult to mock
@@ -45,6 +46,7 @@ export default defineWorkersConfig({
 					bindings: {
 						MIGRATIONS: migrations,
 						GROK_API_KEY: "test-grok-api-key",
+						ENVIRONMENT: "test",
 					},
 					// Configure D1 database directly (no wrangler dev needed)
 					// This prevents wrangler from trying to use remote mode
