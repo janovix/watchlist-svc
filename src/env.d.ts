@@ -15,5 +15,14 @@ declare namespace Cloudflare {
 		};
 		ADMIN_API_KEY?: string;
 		GROK_API_KEY?: string;
+		/**
+		 * Sentry DSN for error tracking.
+		 * If not set, Sentry will be disabled.
+		 */
+		SENTRY_DSN?: string;
+		/**
+		 * Environment identifier (e.g., "dev", "production").
+		 */
+		ENVIRONMENT?: string;
 	}
 }
