@@ -1,6 +1,6 @@
 {
 	"name": "watchlist-svc",
-	"version": "1.2.0",
+	"version": "1.2.0-rc.2",
 	"description": "Watchlist ingestion + search service using Hono + Chanfana + D1 + Vectorize.",
 	"packageManager": "pnpm@10.0.0",
 	"cloudflare": {
@@ -20,6 +20,7 @@
 	"dependencies": {
 		"@prisma/adapter-d1": "7.1.0",
 		"@prisma/client": "7.1.0",
+		"@sentry/cloudflare": "^10.32.1",
 		"chanfana": "2.8.3",
 		"hono": "4.10.7",
 		"jose": "^6.1.3",
@@ -36,6 +37,7 @@
 		"@semantic-release/github": "11.0.6",
 		"@semantic-release/npm": "12.0.2",
 		"@semantic-release/release-notes-generator": "14.1.0",
+		"@sentry/cli": "^3.0.3",
 		"@types/node": "24.10.1",
 		"@vitest/coverage-istanbul": "3.2.4",
 		"eslint": "9.17.0",
@@ -55,8 +57,8 @@
 	"scripts": {
 		"cf-typegen": "wrangler types",
 		"deploy": "wrangler deploy",
-		"deploy:prod": "wrangler deploy --config wrangler.prod.jsonc",
-		"deploy:dev": "wrangler deploy --config wrangler.jsonc",
+		"deploy:prod": "wrangler deploy --config wrangler.prod.jsonc --outdir dist --upload-source-maps --var SENTRY_RELEASE:$(sentry-cli releases propose-version)",
+		"deploy:dev": "wrangler deploy --config wrangler.jsonc --outdir dist --upload-source-maps --var SENTRY_RELEASE:$(sentry-cli releases propose-version)",
 		"dev": "npm run seedLocalDb && wrangler dev",
 		"format": "prettier . --write",
 		"format:check": "prettier . --check",
@@ -74,7 +76,10 @@
 		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
 		"vitest": "vitest --config tests/vitest.config.mts",
 		"vitest:coverage": "vitest run --coverage --config tests/vitest.config.mts",
-		"test": "npm run vitest"
+		"test": "npm run vitest",
+		"sentry:sourcemaps": "_SENTRY_RELEASE=$(sentry-cli releases propose-version) && sentry-cli releases new $_SENTRY_RELEASE && sentry-cli sourcemaps upload --release=$_SENTRY_RELEASE --strip-prefix 'dist/..' dist",
+		"postdeploy:dev": "pnpm sentry:sourcemaps || true",
+		"postdeploy:prod": "pnpm sentry:sourcemaps || true"
 	},
 	"lint-staged": {
 		"**/*.{js,cjs,mjs,ts,tsx,cts,mts,json,md,yaml,yml}": [

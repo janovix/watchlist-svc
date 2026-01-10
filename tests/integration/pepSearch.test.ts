@@ -343,12 +343,11 @@ describe("PEP Search API Integration Tests", () => {
 			});
 
 			// Mock AI binding to return embedding
-			// @ts-expect-error - Mocking AI binding
 			env.AI = {
 				run: async () => ({
 					data: [new Array(768).fill(0.1)], // Mock embedding vector
 				}),
-			};
+			} as unknown as typeof env.AI;
 
 			// Mock Vectorize to return high-score match (exact match)
 			env.WATCHLIST_VECTORIZE = {
@@ -427,12 +426,11 @@ describe("PEP Search API Integration Tests", () => {
 			});
 
 			// Mock AI binding to return embedding
-			// @ts-expect-error - Mocking AI binding
 			env.AI = {
 				run: async () => ({
 					data: [new Array(768).fill(0.1)], // Mock embedding vector
 				}),
-			};
+			} as unknown as typeof env.AI;
 
 			// Mock Vectorize to return low-score match (possible match)
 			env.WATCHLIST_VECTORIZE = {
@@ -488,12 +486,11 @@ describe("PEP Search API Integration Tests", () => {
 
 		it("should return 503 when Vectorize is not available", async () => {
 			// Mock AI binding
-			// @ts-expect-error - Mocking AI binding
 			env.AI = {
 				run: async () => ({
 					data: [new Array(768).fill(0.1)],
 				}),
-			};
+			} as unknown as typeof env.AI;
 
 			// Remove Vectorize binding
 			// @ts-expect-error - Removing Vectorize binding
@@ -521,12 +518,11 @@ describe("PEP Search API Integration Tests", () => {
 
 		it("should return 500 when embedding generation fails", async () => {
 			// Mock AI binding to return invalid response
-			// @ts-expect-error - Mocking AI binding
 			env.AI = {
 				run: async () => ({
 					data: [], // Empty data should cause error
 				}),
-			};
+			} as unknown as typeof env.AI;
 
 			// Mock Vectorize binding
 			env.WATCHLIST_VECTORIZE = {
@@ -577,12 +573,11 @@ describe("PEP Search API Integration Tests", () => {
 			};
 
 			// Mock AI binding
-			// @ts-expect-error - Mocking AI binding
 			env.AI = {
 				run: async () => ({
 					data: [new Array(768).fill(0.1)],
 				}),
-			};
+			} as unknown as typeof env.AI;
 
 			// Mock Vectorize to return no matches
 			env.WATCHLIST_VECTORIZE = {

@@ -1,4 +1,4 @@
-# [1.2.0](https://github.com/janovix/watchlist-svc/compare/v1.1.0...v1.2.0) (2026-01-10)
+# [1.2.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.2.0-rc.1...v1.2.0-rc.2) (2026-01-10)
 
 
 ### Bug Fixes
@@ -8,6 +8,7 @@
 
 ### Features
 
+* **auth:** enhance authMiddleware for test environment support ([275b450](https://github.com/janovix/watchlist-svc/commit/275b450fef84cd9c1ef8e8b462223fa36dd64000))
 * Add CORS_ALLOWED_DOMAIN to wrangler configs and update mocks ([340e560](https://github.com/janovix/watchlist-svc/commit/340e5605403b29b003be6bb78a51691f20df7f59))
 * Add CSV streaming and update queue names ([ac81d21](https://github.com/janovix/watchlist-svc/commit/ac81d218062cf46b6408933bddd079198fb8279b))
 * Add Grok API as a fallback for watchlist search ([e04f054](https://github.com/janovix/watchlist-svc/commit/e04f054b4589725dd9171640c0c896c722abede4))

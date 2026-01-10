@@ -4,10 +4,13 @@
 	"name": "watchlist-svc-preview",
 	"upload_source_maps": true,
 	"workers_dev": true,
+	"version_metadata": {
+		"binding": "CF_VERSION_METADATA",
+	},
 	"observability": {
 		"enabled": true,
 	},
-	"compatibility_flags": ["nodejs_compat"],
+	"compatibility_flags": ["nodejs_als"],
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -45,6 +48,7 @@
 		},
 	],
 	"vars": {
+		"ENVIRONMENT": "preview",
 		"CORS_ALLOWED_DOMAIN": "janovix.workers.dev",
 		"AUTH_SERVICE_URL": "https://auth-svc.janovix.workers.dev",
 		"AUTH_JWKS_CACHE_TTL": "3600",

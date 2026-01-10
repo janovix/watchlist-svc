@@ -2,6 +2,7 @@ import { ApiException, fromHono } from "chanfana";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { ContentfulStatusCode } from "hono/utils/http-status";
+import * as Sentry from "@sentry/cloudflare";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
 import { authMiddleware } from "./lib/auth-middleware";
@@ -18,8 +19,37 @@ import {
 } from "./endpoints/watchlist/adminIngest";
 import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
 
+/**
+ * Extended environment bindings with Sentry support.
+ */
+export type Bindings = Env & {
+	/**
+	 * Cloudflare Worker version metadata.
+	 * Used for Sentry release tracking.
+	 */
+	CF_VERSION_METADATA?: WorkerVersionMetadata;
+	/**
+	 * Sentry DSN for error tracking.
+	 * If not set, Sentry will be disabled.
+	 * Configured via Cloudflare Dashboard secrets or wrangler vars.
+	 */
+	SENTRY_DSN?: string;
+	/**
+	 * Environment identifier (e.g., "dev", "production").
+	 */
+	ENVIRONMENT?: string;
+	/**
+	 * Admin API key for protected endpoints.
+	 */
+	ADMIN_API_KEY?: string;
+	/**
+	 * Grok API key for AI-powered features.
+	 */
+	GROK_API_KEY?: string;
+};
+
 // Start a Hono app
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Bindings }>();
 
 // Configure CORS to allow requests from configured domain subdomains
 app.use(
@@ -128,5 +158,17 @@ openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
 openapi.post("/admin/ingest", AdminIngestEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
 
-// Export the Hono app
-export default app;
+// Sentry is enabled only when SENTRY_DSN environment variable is set.
+// Configure it via wrangler secrets: `wrangler secret put SENTRY_DSN`
+export default Sentry.withSentry((env: Bindings) => {
+	const versionId = env.CF_VERSION_METADATA?.id;
+	return {
+		// When DSN is undefined/empty, Sentry SDK is disabled (no events sent)
+		dsn: env.SENTRY_DSN,
+		release: versionId,
+		environment: env.ENVIRONMENT,
+		// Adds request headers and IP for users, for more info visit:
+		// https://docs.sentry.io/platforms/javascript/guides/cloudflare/configuration/options/#sendDefaultPii
+		sendDefaultPii: true,
+	};
+}, app);
