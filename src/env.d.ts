@@ -15,5 +15,8 @@ declare namespace Cloudflare {
 		};
 		ADMIN_API_KEY?: string;
 		GROK_API_KEY?: string;
+		XAI_BASE_URL?: string;
+		XAI_MODEL?: string;
+		XAI_COLLECTION_ID?: string;
 	}
 }
