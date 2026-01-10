@@ -5,8 +5,8 @@
 
 import { PrismaClient } from "@prisma/client";
 import {
-	parseCSV,
 	parseCSVRow,
+	streamCSV,
 	type WatchlistCSVRow,
 	type ParseError,
 } from "./csv-parser";
@@ -36,19 +36,6 @@ export interface IngestionRun {
 	finishedAt: Date | null;
 	stats: IngestionStats | null;
 	errorMessage: string | null;
-}
-
-/**
- * Download CSV from URL
- */
-async function downloadCSV(url: string): Promise<string> {
-	const response = await fetch(url);
-	if (!response.ok) {
-		throw new Error(
-			`Failed to download CSV: ${response.status} ${response.statusText}`,
-		);
-	}
-	return await response.text();
 }
 
 /**
@@ -176,9 +163,11 @@ async function updateVectorState(
 }
 
 /**
- * Main ingestion function
+ * Memory-efficient streaming ingestion function
+ * Processes CSV in chunks without loading entire file into memory
+ * Suitable for Cloudflare Workers with limited memory
  */
-export async function ingestCSV(
+export async function ingestCSVStreaming(
 	prisma: PrismaClient,
 	vectorize: VectorizeIndex,
 	ai:
@@ -194,6 +183,7 @@ export async function ingestCSV(
 	options: {
 		reindexAll?: boolean;
 		batchSize?: number;
+		onProgress?: (stats: IngestionStats) => Promise<void>;
 	} = {},
 ): Promise<IngestionStats> {
 	const stats: IngestionStats = {
@@ -207,89 +197,102 @@ export async function ingestCSV(
 		indexErrors: 0,
 	};
 
+	const batchSize = options.batchSize || 20; // Smaller batch size for memory efficiency
+	const vectorsToIndex: Array<{
+		id: string;
+		values: number[];
+		metadata: Record<string, string | number | boolean | string[]>;
+		row: WatchlistCSVRow;
+	}> = [];
+
+	let processedRows = 0;
+	const progressInterval = 100; // Report progress every N rows
+
 	try {
-		// Download CSV
-		const csvText = await downloadCSV(sourceUrl);
-		const csvRows = parseCSV(csvText);
-		stats.totalRows = csvRows.length;
+		console.log(`[Ingestion] Starting streaming ingestion for runId: ${runId}`);
+		console.log(`[Ingestion] CSV URL: ${sourceUrl}`);
 
-		// Process rows in batches
-		const batchSize = options.batchSize || 50;
-		const vectorsToIndex: Array<{
-			id: string;
-			values: number[];
-			metadata: Record<string, string | number | boolean | string[]>;
-			row: WatchlistCSVRow;
-		}> = [];
+		// Stream CSV download
+		const response = await fetch(sourceUrl);
+		if (!response.ok) {
+			throw new Error(
+				`Failed to download CSV: ${response.status} ${response.statusText}`,
+			);
+		}
 
-		for (let i = 0; i < csvRows.length; i += batchSize) {
-			const batch = csvRows.slice(i, i + batchSize);
+		console.log(`[Ingestion] CSV download started, streaming...`);
 
-			for (const csvRow of batch) {
-				const parseErrors: ParseError[] = [];
-				const row = parseCSVRow(csvRow, parseErrors);
+		// Process CSV row by row
+		for await (const csvRow of streamCSV(response)) {
+			stats.totalRows++;
+			processedRows++;
 
-				if (parseErrors.length > 0) {
-					stats.errors.push(...parseErrors);
-					stats.parseErrors += parseErrors.length;
-				}
+			const parseErrors: ParseError[] = [];
+			const row = parseCSVRow(csvRow, parseErrors);
 
-				if (!row) continue;
-				stats.parsedRows++;
-
-				try {
-					// Upsert to D1
-					const { inserted } = await upsertTarget(prisma, row);
-					if (inserted) {
-						stats.insertedRows++;
-					} else {
-						stats.updatedRows++;
-					}
-
-					// Check if needs indexing
-					const needsIndex =
-						options.reindexAll ||
-						(await needsReindexing(prisma, row.id, row.lastChange));
-
-					if (needsIndex) {
-						// Generate embedding
-						const vectorText = composeVectorText(row);
-						if (vectorText) {
-							try {
-								const embedding = await generateEmbedding(ai, vectorText);
-								const metadata = composeVectorMetadata(row);
-
-								vectorsToIndex.push({
-									id: row.id,
-									values: embedding,
-									metadata: metadata as Record<
-										string,
-										string | number | boolean | string[]
-									>,
-									row,
-								});
-							} catch (error) {
-								stats.indexErrors++;
-								console.warn(
-									`Failed to generate embedding for ${row.id}:`,
-									error,
-								);
-							}
-						}
-					}
-				} catch (error) {
-					stats.errors.push({
-						rowId: row.id,
-						field: "database",
-						error: error instanceof Error ? error.message : String(error),
-					});
-					console.warn(`Failed to upsert target ${row.id}:`, error);
-				}
+			if (parseErrors.length > 0) {
+				stats.errors.push(...parseErrors);
+				stats.parseErrors += parseErrors.length;
 			}
 
-			// Batch upsert vectors
-			if (vectorsToIndex.length > 0) {
+			if (!row) continue;
+			stats.parsedRows++;
+
+			try {
+				// Upsert to D1
+				const { inserted } = await upsertTarget(prisma, row);
+				if (inserted) {
+					stats.insertedRows++;
+				} else {
+					stats.updatedRows++;
+				}
+
+				// Check if needs indexing
+				const needsIndex =
+					options.reindexAll ||
+					(await needsReindexing(prisma, row.id, row.lastChange));
+
+				if (needsIndex) {
+					// Generate embedding
+					const vectorText = composeVectorText(row);
+					if (vectorText) {
+						try {
+							const embedding = await generateEmbedding(ai, vectorText);
+							const metadata = composeVectorMetadata(row);
+
+							vectorsToIndex.push({
+								id: row.id,
+								values: embedding,
+								metadata: metadata as Record<
+									string,
+									string | number | boolean | string[]
+								>,
+								row,
+							});
+						} catch (error) {
+							stats.indexErrors++;
+							console.warn(
+								`[Ingestion] Failed to generate embedding for ${row.id}:`,
+								error,
+							);
+						}
+					}
+				}
+			} catch (error) {
+				stats.errors.push({
+					rowId: row.id,
+					field: "database",
+					error: error instanceof Error ? error.message : String(error),
+				});
+				console.warn(`[Ingestion] Failed to upsert target ${row.id}:`, error);
+			}
+
+			// Process vectors in batches to avoid memory buildup
+			if (vectorsToIndex.length >= batchSize) {
 				try {
+					console.log(
+						`[Ingestion] Processing batch of ${vectorsToIndex.length} vectors...`,
+					);
 					await upsertVectors(
 						vectorize,
 						vectorsToIndex.map((v) => ({
@@ -305,17 +308,32 @@ export async function ingestCSV(
 					}
 
 					stats.indexedRows += vectorsToIndex.length;
-					vectorsToIndex.length = 0; // Clear batch
+					console.log(
+						`[Ingestion] Indexed ${vectorsToIndex.length} vectors (total: ${stats.indexedRows})`,
+					);
+					vectorsToIndex.length = 0; // Clear batch to free memory
 				} catch (error) {
 					stats.indexErrors += vectorsToIndex.length;
-					console.warn("Failed to upsert vectors batch:", error);
+					console.error(`[Ingestion] Failed to upsert vectors batch:`, error);
+					vectorsToIndex.length = 0; // Clear even on error to prevent memory leak
 				}
+			}
+
+			// Report progress periodically
+			if (processedRows % progressInterval === 0 && options.onProgress) {
+				console.log(
+					`[Ingestion] Progress: ${processedRows} rows processed (${stats.parsedRows} parsed, ${stats.insertedRows} inserted, ${stats.updatedRows} updated, ${stats.indexedRows} indexed)`,
+				);
+				await options.onProgress({ ...stats });
 			}
 		}
 
 		// Process any remaining vectors
 		if (vectorsToIndex.length > 0) {
 			try {
+				console.log(
+					`[Ingestion] Processing final batch of ${vectorsToIndex.length} vectors...`,
+				);
 				await upsertVectors(
 					vectorize,
 					vectorsToIndex.map((v) => ({
@@ -330,16 +348,41 @@ export async function ingestCSV(
 				}
 
 				stats.indexedRows += vectorsToIndex.length;
+				console.log(
+					`[Ingestion] Final batch indexed (total: ${stats.indexedRows})`,
+				);
 			} catch (error) {
 				stats.indexErrors += vectorsToIndex.length;
-				console.warn("Failed to upsert final vectors batch:", error);
+				console.error(
+					`[Ingestion] Failed to upsert final vectors batch:`,
+					error,
+				);
 			}
 		}
+
+		// Final progress update
+		if (options.onProgress) {
+			await options.onProgress({ ...stats });
+		}
+
+		console.log(`[Ingestion] Completed ingestion for runId: ${runId}`, {
+			totalRows: stats.totalRows,
+			parsedRows: stats.parsedRows,
+			insertedRows: stats.insertedRows,
+			updatedRows: stats.updatedRows,
+			indexedRows: stats.indexedRows,
+			errors: stats.errors.length,
+		});
 	} catch (error) {
 		// Provide more context about what failed
 		const baseMessage = error instanceof Error ? error.message : String(error);
 		const errorType =
 			error instanceof Error ? error.constructor.name : typeof error;
+
+		console.error(`[Ingestion] Ingestion failed for runId: ${runId}`, {
+			error: baseMessage,
+			type: errorType,
+		});
 
 		throw new Error(`Ingestion failed [${errorType}]: ${baseMessage}`, {
 			cause: error,

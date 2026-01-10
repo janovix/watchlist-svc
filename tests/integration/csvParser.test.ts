@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	parseCSV,
 	parseCSVRow,
+	streamCSV,
 	type ParseError,
 } from "../../src/lib/csv-parser";
 
@@ -113,6 +114,104 @@ describe("CSV Parser", () => {
 			expect(result).not.toBeNull();
 			expect(result?.name).toBeNull();
 			expect(result?.aliases).toBeNull();
+		});
+	});
+
+	describe("streamCSV", () => {
+		it("should stream parse CSV from Response", async () => {
+			const csv = "id,name\n1,Test\n2,Another";
+			const stream = new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode(csv));
+					controller.close();
+				},
+			});
+			const response = new Response(stream);
+
+			const rows: Record<string, string>[] = [];
+			for await (const row of streamCSV(response)) {
+				rows.push(row);
+			}
+
+			expect(rows).toHaveLength(2);
+			expect(rows[0]).toEqual({ id: "1", name: "Test" });
+			expect(rows[1]).toEqual({ id: "2", name: "Another" });
+		});
+
+		it("should handle chunked streaming", async () => {
+			const chunks = ["id,name\n1,", "Test\n2,Another\n3,", "Third"];
+			let chunkIndex = 0;
+			const stream = new ReadableStream({
+				start(controller) {
+					const sendChunk = () => {
+						if (chunkIndex < chunks.length) {
+							controller.enqueue(
+								new TextEncoder().encode(chunks[chunkIndex++]),
+							);
+							setTimeout(sendChunk, 0);
+						} else {
+							controller.close();
+						}
+					};
+					sendChunk();
+				},
+			});
+			const response = new Response(stream);
+
+			const rows: Record<string, string>[] = [];
+			for await (const row of streamCSV(response)) {
+				rows.push(row);
+			}
+
+			expect(rows).toHaveLength(3);
+			expect(rows[0]).toEqual({ id: "1", name: "Test" });
+			expect(rows[1]).toEqual({ id: "2", name: "Another" });
+			expect(rows[2]).toEqual({ id: "3", name: "Third" });
+		});
+
+		it("should throw error if response body is null", async () => {
+			const response = new Response(null);
+
+			await expect(async () => {
+				for await (const _row of streamCSV(response)) {
+					// Should not reach here
+				}
+			}).rejects.toThrow("Response body is null");
+		});
+
+		it("should handle empty CSV", async () => {
+			const stream = new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode(""));
+					controller.close();
+				},
+			});
+			const response = new Response(stream);
+
+			const rows: Record<string, string>[] = [];
+			for await (const row of streamCSV(response)) {
+				rows.push(row);
+			}
+
+			expect(rows).toHaveLength(0);
+		});
+
+		it("should handle CSV with only headers", async () => {
+			const csv = "id,name\n";
+			const stream = new ReadableStream({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode(csv));
+					controller.close();
+				},
+			});
+			const response = new Response(stream);
+
+			const rows: Record<string, string>[] = [];
+			for await (const row of streamCSV(response)) {
+				rows.push(row);
+			}
+
+			expect(rows).toHaveLength(0);
 		});
 	});
 });

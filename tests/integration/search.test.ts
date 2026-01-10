@@ -17,4 +17,5 @@ describe("Search API Tests", () => {
 
 	// Note: Search endpoint requires AI and Vectorize bindings which are difficult to mock
 	// in the Cloudflare Workers test environment. These tests verify error handling.
+	// Grok API fallback functionality is tested via unit tests in grokService.test.ts
 });

@@ -2,38 +2,34 @@ import { OpenAPIRoute, ApiException } from "chanfana";
 import { AppContext } from "../../types";
 import { contentJson } from "chanfana";
 import { z } from "zod";
-import { createPrismaClient } from "../../lib/prisma";
-import { watchlistTarget } from "./base";
 import { GrokService } from "../../lib/grok-service";
+import { watchlistTarget } from "./base";
+import { createPrismaClient } from "../../lib/prisma";
 import { transformWatchlistTarget } from "../../lib/transformers";
 
-export class SearchEndpoint extends OpenAPIRoute {
+export class PepSearchEndpoint extends OpenAPIRoute {
 	public schema = {
-		tags: ["Search"],
+		tags: ["PEP"],
 		summary:
-			"Semantic search for watchlist targets using Vectorize first, then Grok API as fallback",
-		operationId: "searchTargets",
+			"Search for PEP (Politically Exposed Person) status using Vectorize first, then Grok API as fallback",
+		operationId: "searchPEP",
 		request: {
 			body: contentJson(
 				z.object({
 					query: z.string().min(1, "Query string is required"),
-					topK: z.number().int().min(1).max(100).optional().default(10),
 				}),
 			),
 		},
 		responses: {
 			"200": {
-				description: "Search results",
+				description: "PEP search results",
 				...contentJson({
 					success: Boolean,
 					result: z.object({
-						matches: z.array(
-							z.object({
-								target: watchlistTarget,
-								score: z.number(),
-							}),
-						),
-						count: z.number(),
+						target: watchlistTarget,
+						pepStatus: z.boolean(),
+						pepDetails: z.string().optional(),
+						matchConfidence: z.enum(["exact", "possible"]),
 					}),
 				}),
 			},
@@ -67,15 +63,14 @@ export class SearchEndpoint extends OpenAPIRoute {
 	public async handle(c: AppContext) {
 		const data = await this.getValidatedData<typeof this.schema>();
 
-		console.log("[Search] Starting search", {
+		console.log("[PepSearch] Starting PEP search", {
 			query: data.body.query,
-			topK: data.body.topK,
 		});
 
 		try {
 			// First, try Vectorize search
 			if (!c.env.AI) {
-				console.error("[Search] AI binding not available");
+				console.error("[PepSearch] AI binding not available");
 				const error = new ApiException(
 					"AI binding not available. Please ensure Workers AI is enabled for your account.",
 				);
@@ -85,7 +80,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 			}
 
 			if (!c.env.WATCHLIST_VECTORIZE) {
-				console.error("[Search] WATCHLIST_VECTORIZE not available");
+				console.error("[PepSearch] WATCHLIST_VECTORIZE not available");
 				const error = new ApiException(
 					"Vectorize index not available. Please ensure WATCHLIST_VECTORIZE is configured.",
 				);
@@ -94,7 +89,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 				throw error;
 			}
 
-			console.log("[Search] Generating embedding for query");
+			console.log("[PepSearch] Generating embedding for query");
 			const queryResponse = (await c.env.AI.run("@cf/baai/bge-base-en-v1.5", {
 				text: [data.body.query],
 			})) as { data: number[][] };
@@ -104,7 +99,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 				!Array.isArray(queryResponse.data) ||
 				queryResponse.data.length === 0
 			) {
-				console.error("[Search] Failed to generate query embedding");
+				console.error("[PepSearch] Failed to generate query embedding");
 				const error = new ApiException("Failed to generate query embedding");
 				error.status = 500;
 				error.code = 500;
@@ -112,26 +107,35 @@ export class SearchEndpoint extends OpenAPIRoute {
 			}
 
 			const embedding = queryResponse.data[0] as number[];
-			console.log("[Search] Embedding generated", {
+			console.log("[PepSearch] Embedding generated", {
 				embeddingLength: embedding.length,
 			});
 
-			console.log("[Search] Querying Vectorize");
+			console.log("[PepSearch] Querying Vectorize");
 			const vectorizeResults = await c.env.WATCHLIST_VECTORIZE.query(
 				embedding,
 				{
-					topK: data.body.topK,
+					topK: 10,
 					returnMetadata: true,
 				},
 			);
 
-			console.log("[Search] Vectorize query completed", {
+			console.log("[PepSearch] Vectorize query completed", {
 				vectorizeMatchesCount: vectorizeResults.matches.length,
 			});
 
-			// If we found matches in Vectorize, return them
+			// If we found matches in Vectorize, return the first match
 			if (vectorizeResults.matches.length > 0) {
 				const prisma = createPrismaClient(c.env.DB);
+				const firstMatch = vectorizeResults.matches[0];
+				const matchScore = firstMatch.score || 0;
+
+				// Determine if this is an exact match based on similarity score
+				// Vectorize scores typically range from 0-1, with higher scores being better matches
+				// Using 0.8 as threshold for "exact" match
+				const matchConfidence: "exact" | "possible" =
+					matchScore >= 0.8 ? "exact" : "possible";
+
 				const targetIds = vectorizeResults.matches.map((m) => m.id);
 				const targets = await prisma.watchlistTarget.findMany({
 					where: {
@@ -139,104 +143,95 @@ export class SearchEndpoint extends OpenAPIRoute {
 					},
 				});
 
-				const targetMap = new Map(
-					targets.map((t: (typeof targets)[number]) => [t.id, t]),
-				);
+				if (targets.length > 0) {
+					const target = transformWatchlistTarget(targets[0]);
+					const pepStatus = target.schema === "PEP";
 
-				const matches = vectorizeResults.matches
-					.map((match: { id: string; score?: number }) => {
-						const target = targetMap.get(match.id);
-						if (!target) return null;
-
-						return {
-							target: transformWatchlistTarget(target),
-							score: match.score || 0,
-						};
-					})
-					.filter(
-						(
-							m: { target: unknown; score: number } | null,
-						): m is { target: unknown; score: number } => m !== null,
+					console.log(
+						"[PepSearch] PEP search completed successfully from Vectorize",
+						{
+							pepStatus,
+							targetId: target.id,
+							schema: target.schema,
+							matchScore,
+							matchConfidence,
+						},
 					);
 
-				console.log("[Search] Search completed successfully from Vectorize", {
-					matchesCount: matches.length,
-				});
-
-				return {
-					success: true,
-					result: {
-						matches,
-						count: matches.length,
-					},
-				};
+					return {
+						success: true,
+						result: {
+							target,
+							pepStatus,
+							pepDetails: pepStatus
+								? `Found in watchlist with schema: ${target.schema}`
+								: undefined,
+							matchConfidence,
+						},
+					};
+				}
 			}
 
 			// No matches in Vectorize, fallback to Grok API
 			console.log(
-				"[Search] No Vectorize matches found, falling back to Grok API",
+				"[PepSearch] No Vectorize matches found, falling back to Grok API",
 			);
 
 			if (!c.env.GROK_API_KEY) {
-				console.log(
-					"[Search] GROK_API_KEY not configured, returning empty results",
+				console.error("[PepSearch] GROK_API_KEY not configured");
+				const error = new ApiException(
+					"Grok API key not configured. Please ensure GROK_API_KEY is set in your environment.",
 				);
-				return {
-					success: true,
-					result: {
-						matches: [],
-						count: 0,
-					},
-				};
+				error.status = 503;
+				error.code = 503;
+				throw error;
 			}
 
 			const grokService = new GrokService({
 				apiKey: c.env.GROK_API_KEY,
 			});
 
-			console.log("[Search] Calling Grok API");
+			console.log("[PepSearch] Calling Grok API for PEP status check");
 			const grokResponse = await grokService.queryPEPStatus(data.body.query);
 
-			console.log("[Search] Grok API response received", {
+			console.log("[PepSearch] Grok API response received", {
 				hasResponse: !!grokResponse,
+				pepStatus: grokResponse?.pepStatus,
 				hasName: !!grokResponse?.name,
 			});
 
-			if (!grokResponse || !grokResponse.name) {
-				console.log("[Search] Grok API returned no usable response");
-				return {
-					success: true,
-					result: {
-						matches: [],
-						count: 0,
-					},
-				};
+			if (!grokResponse) {
+				console.log("[PepSearch] Grok API returned no response");
+				const error = new ApiException(
+					"Failed to get response from Grok API. Please try again later.",
+				);
+				error.status = 503;
+				error.code = 503;
+				throw error;
 			}
 
 			// Convert Grok response to WatchlistTarget format
-			const grokTarget = grokService.convertToWatchlistTarget(
+			const target = grokService.convertToWatchlistTarget(
 				grokResponse,
 				data.body.query,
 			);
 
-			console.log("[Search] Search completed successfully from Grok", {
-				targetId: grokTarget.id,
+			console.log("[PepSearch] PEP search completed successfully from Grok", {
+				pepStatus: grokResponse.pepStatus,
+				targetId: target.id,
 			});
 
 			return {
 				success: true,
 				result: {
-					matches: [
-						{
-							target: grokTarget,
-							score: 0.8, // High confidence score for Grok API results (external match)
-						},
-					],
-					count: 1,
+					target,
+					pepStatus: grokResponse.pepStatus,
+					pepDetails: grokResponse.pepDetails,
+					matchConfidence: "possible" as const, // Grok fallback is always a possible match
 				},
 			};
 		} catch (error) {
-			console.error("[Search] Error during search", {
+			console.error("[PepSearch] Error during PEP search", {
 				error: error instanceof Error ? error.message : String(error),
 				stack: error instanceof Error ? error.stack : undefined,
 			});
@@ -250,7 +245,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 			const apiError = new ApiException(
 				error instanceof Error
 					? error.message
-					: "An unexpected error occurred during search",
+					: "An unexpected error occurred during PEP search",
 			);
 			apiError.status = 500;
 			apiError.code = 500;

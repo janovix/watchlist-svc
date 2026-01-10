@@ -57,10 +57,17 @@ Watchlist ingestion and search service using Hono + Chanfana + D1 + Vectorize.
    pnpm run dev
    ```
 
+## Environment Variables
+
+- `ADMIN_API_KEY` - Admin API key for protected endpoints
+- `GROK_API_KEY` - API key for Grok API (used for PEP search fallback)
+- `CORS_ALLOWED_DOMAIN` - Base domain for CORS configuration (e.g., `janovix.workers.dev`). If not set, all origins are allowed (development mode).
+
 ## API Endpoints
 
 - `GET /healthz` - Health check
 - `POST /search` - Semantic search for watchlist targets
+- `POST /pep/search` - PEP (Politically Exposed Person) search with match confidence
 - `GET /targets/:id` - Get target by ID
 - `GET /ingestion/runs` - List ingestion runs
 - `GET /ingestion/runs/:runId` - Get ingestion run details

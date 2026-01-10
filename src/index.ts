@@ -1,8 +1,10 @@
 import { ApiException, fromHono } from "chanfana";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
+import { authMiddleware } from "./lib/auth-middleware";
 import { HealthEndpoint } from "./endpoints/watchlist/health";
 import { SearchEndpoint } from "./endpoints/watchlist/search";
 import { TargetReadEndpoint } from "./endpoints/watchlist/targetRead";
@@ -14,9 +16,52 @@ import {
 	AdminIngestEndpoint,
 	AdminReindexEndpoint,
 } from "./endpoints/watchlist/adminIngest";
+import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Env }>();
+
+// Configure CORS to allow requests from configured domain subdomains
+app.use(
+	"*",
+	cors({
+		origin: (origin, c) => {
+			// Get allowed domain from environment variable
+			const allowedDomain = c.env.CORS_ALLOWED_DOMAIN;
+			if (!allowedDomain) {
+				// If no domain configured, allow all origins (for development)
+				return "*";
+			}
+
+			if (!origin) return "*";
+
+			try {
+				const url = new URL(origin);
+				const hostname = url.hostname;
+				// Allow exact match
+				if (hostname === allowedDomain) {
+					return origin;
+				}
+				// Allow any subdomain (e.g., watchlist.janovix.workers.dev)
+				if (hostname.endsWith(`.${allowedDomain}`)) {
+					return origin;
+				}
+			} catch {
+				// Invalid origin, deny
+			}
+			return null;
+		},
+		allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+		allowHeaders: [
+			"Content-Type",
+			"Authorization",
+			"X-Requested-With",
+			"Accept",
+		],
+		exposeHeaders: ["Content-Length", "Content-Type"],
+		credentials: true,
+	}),
+);
 
 const appMeta: AppMeta = {
 	name: pkg.name,
@@ -66,9 +111,17 @@ app.get("/docsz", (c) => {
 	return c.html(getScalarHtml(appMeta));
 });
 
+// Apply auth middleware to protected routes
+// Pattern: Apply middleware to specific paths before registering endpoints
+app.use("/search", authMiddleware());
+app.use("/pep/search", authMiddleware());
+app.use("/targets/*", authMiddleware());
+app.use("/ingestion/*", authMiddleware());
+
 // Register watchlist endpoints
 openapi.get("/healthz", HealthEndpoint);
 openapi.post("/search", SearchEndpoint);
+openapi.post("/pep/search", PepSearchEndpoint);
 openapi.get("/targets/:id", TargetReadEndpoint);
 openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
 openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
