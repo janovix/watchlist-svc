@@ -1,3 +1,10 @@
+# [1.3.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.2.0...v1.3.0-rc.1) (2026-01-10)
+
+
+### Features
+
+* **auth:** enhance authMiddleware for test environment support ([275b450](https://github.com/janovix/watchlist-svc/commit/275b450fef84cd9c1ef8e8b462223fa36dd64000))
+
 # [1.2.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.2.0-rc.1...v1.2.0-rc.2) (2026-01-10)
 
 
