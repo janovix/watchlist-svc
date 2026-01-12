@@ -1,3 +1,11 @@
+# [1.4.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.3.0...v1.4.0-rc.1) (2026-01-12)
+
+
+### Features
+
+* **auth:** add auth-settings module for user settings integration ([4b1b167](https://github.com/janovix/watchlist-svc/commit/4b1b1672eff8408ea8d7218e93c6cc696a64f1c7))
+* **watchlist:** update API summaries for search endpoints and add error response schemas ([af00806](https://github.com/janovix/watchlist-svc/commit/af00806cc75b0fbaec4430f51749e838aa4dc958))
+
 # [1.3.0](https://github.com/janovix/watchlist-svc/compare/v1.2.0...v1.3.0) (2026-01-10)
 
 
