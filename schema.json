@@ -51,7 +51,7 @@
 		"/search": {
 			"post": {
 				"tags": ["Search"],
-				"summary": "Semantic search for watchlist targets",
+				"summary": "Semantic search for watchlist targets using Vectorize first, then Grok API as fallback",
 				"operationId": "searchTargets",
 				"requestBody": {
 					"content": {
@@ -62,18 +62,6 @@
 									"query": {
 										"type": "string",
 										"minLength": 1
-									},
-									"schema": {
-										"type": "string"
-									},
-									"dataset": {
-										"type": "string"
-									},
-									"country": {
-										"type": "string"
-									},
-									"programId": {
-										"type": "string"
 									},
 									"topK": {
 										"type": "integer",
@@ -229,6 +217,68 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Bad request",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"errors": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"code": {
+														"type": "number"
+													},
+													"message": {
+														"type": "string"
+													}
+												},
+												"required": ["code", "message"]
+											}
+										}
+									},
+									"required": ["success", "errors"]
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "Service unavailable - Required services not configured",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"success": {
+											"type": "boolean"
+										},
+										"errors": {
+											"type": "array",
+											"items": {
+												"type": "object",
+												"properties": {
+													"code": {
+														"type": "number"
+													},
+													"message": {
+														"type": "string"
+													}
+												},
+												"required": ["code", "message"]
+											}
+										}
+									},
+									"required": ["success", "errors"]
+								}
+							}
+						}
 					}
 				}
 			}
@@ -236,7 +286,7 @@
 		"/pep/search": {
 			"post": {
 				"tags": ["PEP"],
-				"summary": "Search for PEP (Politically Exposed Person) status using Grok API",
+				"summary": "Search for PEP (Politically Exposed Person) status using Vectorize first, then Grok API as fallback",
 				"operationId": "searchPEP",
 				"requestBody": {
 					"content": {
@@ -377,10 +427,14 @@
 													"type": "boolean"
 												},
 												"pepDetails": {
-													"type": "string"
+													"type": ["string", "null"]
+												},
+												"matchConfidence": {
+													"type": "string",
+													"enum": ["exact", "possible"]
 												}
 											},
-											"required": ["target", "pepStatus"]
+											"required": ["target", "pepStatus", "matchConfidence"]
 										}
 									},
 									"required": ["success", "result"]
@@ -420,7 +474,7 @@
 						}
 					},
 					"503": {
-						"description": "Service unavailable - Grok API not configured",
+						"description": "Service unavailable - Required services not configured",
 						"content": {
 							"application/json": {
 								"schema": {
