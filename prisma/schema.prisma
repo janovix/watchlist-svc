@@ -1,66 +1,68 @@
 // Prisma schema for Cloudflare D1
+// NOTE: All column names use snake_case via @map directives for consistency
+
 generator client {
-	provider = "prisma-client-js"
-	previewFeatures = ["driverAdapters"]
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
-	provider = "sqlite"
+  provider = "sqlite"
 }
 
 model WatchlistTarget {
-	id          String   @id
-	schema      String?
-	name        String?
-	aliases     String?  // JSON array of strings
-	birthDate   String?  @map("birth_date")
-	countries   String?  // JSON array of strings
-	addresses   String?  // JSON array of strings
-	identifiers String?  // JSON array of strings
-	sanctions   String?  // JSON array of strings
-	phones      String?  // JSON array of strings
-	emails      String?  // JSON array of strings
-	programIds  String?  @map("program_ids") // JSON array of strings
-	dataset     String?
-	firstSeen   String?  @map("first_seen") // ISO 8601 datetime string
-	lastSeen    String?  @map("last_seen") // ISO 8601 datetime string
-	lastChange  String?  @map("last_change") // ISO 8601 datetime string
-	createdAt   DateTime @default(now()) @map("created_at")
-	updatedAt   DateTime @updatedAt @map("updated_at")
+  id          String   @id
+  schema      String?
+  name        String?
+  aliases     String? // JSON array of strings
+  birthDate   String?  @map("birth_date")
+  countries   String? // JSON array of strings
+  addresses   String? // JSON array of strings
+  identifiers String? // JSON array of strings
+  sanctions   String? // JSON array of strings
+  phones      String? // JSON array of strings
+  emails      String? // JSON array of strings
+  programIds  String?  @map("program_ids") // JSON array of strings
+  dataset     String?
+  firstSeen   String?  @map("first_seen") // ISO 8601 datetime string
+  lastSeen    String?  @map("last_seen") // ISO 8601 datetime string
+  lastChange  String?  @map("last_change") // ISO 8601 datetime string
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-	vectorState WatchlistVectorState?
+  vectorState WatchlistVectorState?
 
-	@@map("watchlist_target")
-	@@index([schema])
-	@@index([dataset])
-	@@index([lastChange])
+  @@map("watchlist_target")
+  @@index([schema])
+  @@index([dataset])
+  @@index([lastChange])
 }
 
 model WatchlistIngestionRun {
-	id           Int       @id @default(autoincrement())
-	sourceUrl    String    @map("source_url")
-	status       String    // 'running', 'completed', 'failed'
-	startedAt    DateTime  @default(now()) @map("started_at")
-	finishedAt   DateTime? @map("finished_at")
-	stats        String?   // JSON object with counts, errors, etc.
-	errorMessage String?   @map("error_message")
-	createdAt    DateTime  @default(now()) @map("created_at")
+  id           Int       @id @default(autoincrement())
+  sourceUrl    String    @map("source_url")
+  status       String // 'running', 'completed', 'failed'
+  startedAt    DateTime  @default(now()) @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  stats        String? // JSON object with counts, errors, etc.
+  errorMessage String?   @map("error_message")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
-	@@map("watchlist_ingestion_run")
-	@@index([status])
-	@@index([startedAt(sort: Desc)])
+  @@map("watchlist_ingestion_run")
+  @@index([status])
+  @@index([startedAt(sort: Desc)])
 }
 
 model WatchlistVectorState {
-	targetId          String   @id @map("target_id")
-	lastIndexedAt     DateTime @default(now()) @map("last_indexed_at")
-	lastIndexedChange String?  @map("last_indexed_change") // ISO 8601 datetime string from last_change
-	vectorId          String   @map("vector_id") // same as target_id
-	createdAt         DateTime @default(now()) @map("created_at")
-	updatedAt         DateTime @updatedAt @map("updated_at")
+  targetId          String   @id @map("target_id")
+  lastIndexedAt     DateTime @default(now()) @map("last_indexed_at")
+  lastIndexedChange String?  @map("last_indexed_change") // ISO 8601 datetime string from last_change
+  vectorId          String   @map("vector_id") // same as target_id
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-	target WatchlistTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  target WatchlistTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
 
-	@@map("watchlist_vector_state")
-	@@index([lastIndexedAt])
+  @@map("watchlist_vector_state")
+  @@index([lastIndexedAt])
 }

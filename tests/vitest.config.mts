@@ -11,6 +11,12 @@ export default defineWorkersConfig({
 	esbuild: {
 		target: "esnext",
 	},
+	// Required for @prisma/adapter-d1@7.x which depends on 'ky'
+	// See: https://developers.cloudflare.com/workers/testing/vitest-integration/known-issues/#module-resolution
+	ssr: {
+		// Force Vite to bundle these modules instead of externalizing them
+		noExternal: ["ky", "@prisma/adapter-d1"],
+	},
 	test: {
 		coverage: {
 			provider: "istanbul",
@@ -25,6 +31,7 @@ export default defineWorkersConfig({
 				"**/coverage/**",
 				"src/lib/ingestion-service.ts", // Hard to test without external dependencies
 				"src/lib/auth-middleware.ts", // Requires AUTH_SERVICE binding (service binding to auth-svc)
+				"src/lib/auth-settings.ts", // Requires AUTH_SERVICE binding for getResolvedSettings
 				"src/queue-consumer.ts", // Queue consumer requires queue infrastructure setup
 				"src/endpoints/watchlist/pepSearch.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/search.ts", // Requires AI/Vectorize bindings difficult to mock
