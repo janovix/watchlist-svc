@@ -1,3 +1,10 @@
+# [1.4.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.1...v1.4.0-rc.2) (2026-01-12)
+
+
+### Features
+
+* **subscription:** add subscription client and middleware for usage and feature checks ([d51a611](https://github.com/janovix/watchlist-svc/commit/d51a6113a2643748819031661af48bb12f986293))
+
 # [1.4.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.3.0...v1.4.0-rc.1) (2026-01-12)
 
 
