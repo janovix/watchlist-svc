@@ -24,5 +24,9 @@ declare namespace Cloudflare {
 		 * Environment identifier (e.g., "dev", "production").
 		 */
 		ENVIRONMENT?: string;
+		/**
+		 * Auth service binding for subscription checks
+		 */
+		AUTH_SERVICE?: Service;
 	}
 }
