@@ -1,3 +1,10 @@
+# [1.4.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.2...v1.4.0-rc.3) (2026-01-16)
+
+
+### Features
+
+* **caddy:** add Caddyfile for local development and update package.json scripts ([a8208e6](https://github.com/janovix/watchlist-svc/commit/a8208e62e44ac7cacc414c2ad674013cb51c6031))
+
 # [1.4.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.1...v1.4.0-rc.2) (2026-01-12)
 
 
