@@ -60,6 +60,8 @@
 		"deploy:prod": "wrangler deploy --config wrangler.prod.jsonc --outdir dist --upload-source-maps --var SENTRY_RELEASE:$(sentry-cli releases propose-version)",
 		"deploy:dev": "wrangler deploy --config wrangler.jsonc --outdir dist --upload-source-maps --var SENTRY_RELEASE:$(sentry-cli releases propose-version)",
 		"dev": "npm run seedLocalDb && wrangler dev",
+		"dev:local": "pnpm run seedLocalDb && wrangler dev --config wrangler.local.jsonc --port 8791",
+		"caddy:local": "caddy run --config Caddyfile",
 		"format": "prettier . --write",
 		"format:check": "prettier . --check",
 		"lint": "eslint .",
