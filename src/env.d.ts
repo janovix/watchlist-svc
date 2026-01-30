@@ -21,12 +21,32 @@ declare namespace Cloudflare {
 		 */
 		SENTRY_DSN?: string;
 		/**
-		 * Environment identifier (e.g., "dev", "production").
+		 * Environment identifier (e.g., "dev", "production", "preview", "local").
 		 */
 		ENVIRONMENT?: string;
 		/**
 		 * Auth service binding for subscription checks
 		 */
 		AUTH_SERVICE?: Service;
+		/**
+		 * R2 Access Key ID for generating presigned URLs.
+		 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
+		 */
+		R2_ACCESS_KEY_ID?: string;
+		/**
+		 * R2 Secret Access Key for generating presigned URLs.
+		 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
+		 */
+		R2_SECRET_ACCESS_KEY?: string;
+		/**
+		 * Cloudflare Account ID for R2 endpoint URL.
+		 * Find in Cloudflare Dashboard URL or Overview page.
+		 */
+		CLOUDFLARE_ACCOUNT_ID?: string;
+		/**
+		 * R2 bucket name (optional override).
+		 * Defaults to bucket configured in wrangler.jsonc
+		 */
+		R2_BUCKET_NAME?: string;
 	}
 }

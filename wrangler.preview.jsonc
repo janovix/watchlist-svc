@@ -33,10 +33,16 @@
 	"ai": {
 		"binding": "AI",
 	},
+	"r2_buckets": [
+		{
+			"binding": "WATCHLIST_UPLOADS_BUCKET",
+			"bucket_name": "watchlist-uploads-preview",
+		},
+	],
 	"queues": {
 		"producers": [
 			{
-				"queue": "watchlist-ingestion-dev",
+				"queue": "watchlist-ingestion-preview",
 				"binding": "INGESTION_QUEUE",
 			},
 		],
@@ -52,5 +58,10 @@
 		"CORS_ALLOWED_DOMAIN": "janovix.workers.dev",
 		"AUTH_SERVICE_URL": "https://auth-svc.janovix.workers.dev",
 		"AUTH_JWKS_CACHE_TTL": "3600",
+		// R2 presigned URL configuration (set via wrangler secret)
+		// "R2_ACCESS_KEY_ID": "set-via-secret",
+		// "R2_SECRET_ACCESS_KEY": "set-via-secret",
+		// "CLOUDFLARE_ACCOUNT_ID": "set-via-secret",
+		"R2_BUCKET_NAME": "watchlist-uploads-preview",
 	},
 }

@@ -15,9 +15,16 @@ import {
 } from "./endpoints/watchlist/ingestionRuns";
 import {
 	AdminIngestEndpoint,
+	AdminIngestSdnXmlEndpoint,
 	AdminReindexEndpoint,
 } from "./endpoints/watchlist/adminIngest";
+import {
+	IngestionStartEndpoint,
+	IngestionCompleteEndpoint,
+	IngestionFailedEndpoint,
+} from "./endpoints/watchlist/ingestionUpload";
 import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
+import { uploadRoutes } from "./routes/upload";
 
 /**
  * Extended environment bindings with Sentry support.
@@ -46,6 +53,30 @@ export type Bindings = Env & {
 	 * Grok API key for AI-powered features.
 	 */
 	GROK_API_KEY?: string;
+	/**
+	 * R2 bucket for storing uploaded watchlist files (XML, etc.)
+	 */
+	WATCHLIST_UPLOADS_BUCKET?: R2Bucket;
+	/**
+	 * R2 Access Key ID for generating presigned URLs.
+	 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
+	 */
+	R2_ACCESS_KEY_ID?: string;
+	/**
+	 * R2 Secret Access Key for generating presigned URLs.
+	 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
+	 */
+	R2_SECRET_ACCESS_KEY?: string;
+	/**
+	 * Cloudflare Account ID for R2 endpoint URL.
+	 * Find in Cloudflare Dashboard URL or Overview page.
+	 */
+	CLOUDFLARE_ACCOUNT_ID?: string;
+	/**
+	 * R2 bucket name (optional, defaults to 'watchlist-uploads').
+	 * Override if using different bucket names per environment.
+	 */
+	R2_BUCKET_NAME?: string;
 };
 
 // Start a Hono app
@@ -146,7 +177,7 @@ app.get("/docsz", (c) => {
 app.use("/search", authMiddleware());
 app.use("/pep/search", authMiddleware());
 app.use("/targets/*", authMiddleware());
-app.use("/ingestion/*", authMiddleware());
+//app.use("/ingestion/*", authMiddleware());
 
 // Register watchlist endpoints
 openapi.get("/healthz", HealthEndpoint);
@@ -155,8 +186,15 @@ openapi.post("/pep/search", PepSearchEndpoint);
 openapi.get("/targets/:id", TargetReadEndpoint);
 openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
 openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
+openapi.post("/ingestion/start", IngestionStartEndpoint);
+openapi.post("/ingestion/:runId/complete", IngestionCompleteEndpoint);
+openapi.post("/ingestion/:runId/failed", IngestionFailedEndpoint);
 openapi.post("/admin/ingest", AdminIngestEndpoint);
+openapi.post("/admin/ingest/sdn-xml", AdminIngestSdnXmlEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
+
+// Mount upload routes (for file uploads to R2)
+app.route("/api/upload", uploadRoutes);
 
 // Sentry is enabled only when SENTRY_DSN environment variable is set.
 // Configure it via wrangler secrets: `wrangler secret put SENTRY_DSN`

@@ -10,23 +10,25 @@ datasource db {
   provider = "sqlite"
 }
 
+/// Watchlist Target - Original watchlist entries (CSV-based)
+/// Used by existing search, PEP, and ingestion flows
 model WatchlistTarget {
   id          String   @id
   schema      String?
   name        String?
-  aliases     String? // JSON array of strings
+  aliases     String? // JSON array
   birthDate   String?  @map("birth_date")
-  countries   String? // JSON array of strings
-  addresses   String? // JSON array of strings
-  identifiers String? // JSON array of strings
-  sanctions   String? // JSON array of strings
-  phones      String? // JSON array of strings
-  emails      String? // JSON array of strings
-  programIds  String?  @map("program_ids") // JSON array of strings
+  countries   String? // JSON array
+  addresses   String? // JSON array
+  identifiers String? // JSON array
+  sanctions   String? // JSON array
+  phones      String? // JSON array
+  emails      String? // JSON array
+  programIds  String?  @map("program_ids") // JSON array
   dataset     String?
-  firstSeen   String?  @map("first_seen") // ISO 8601 datetime string
-  lastSeen    String?  @map("last_seen") // ISO 8601 datetime string
-  lastChange  String?  @map("last_change") // ISO 8601 datetime string
+  firstSeen   String?  @map("first_seen")
+  lastSeen    String?  @map("last_seen")
+  lastChange  String?  @map("last_change")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -34,14 +36,36 @@ model WatchlistTarget {
 
   @@map("watchlist_target")
   @@index([schema])
+  @@index([name])
   @@index([dataset])
-  @@index([lastChange])
 }
 
+/// OFAC SDN Entry - Specially Designated Nationals and Blocked Persons
+/// Contains sanctions data from OFAC's SDN Advanced XML file
+/// Note: Search is via Vectorize, so no secondary indexes needed (only PK)
+model OfacSdnEntry {
+  id          String   @id // FixedRef from DistinctParty
+  partyType   String   @map("party_type") // Individual, Entity, Vessel, Aircraft
+  primaryName String   @map("primary_name") // Primary name from Identity
+  aliases     String? // JSON array of alias names
+  birthDate   String?  @map("birth_date") // ISO 8601 date string
+  birthPlace  String?  @map("birth_place") // Place of birth text
+  addresses   String? // JSON array of address strings
+  identifiers String? // JSON array of {type, number, country, issueDate, expirationDate}
+  remarks     String? // Additional comments/remarks
+  sourceList  String   @map("source_list") // SDN, Non-SDN, SSI, etc.
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("ofac_sdn_entry")
+}
+
+/// Watchlist Ingestion Run - Tracks ingestion job status and statistics
 model WatchlistIngestionRun {
   id           Int       @id @default(autoincrement())
   sourceUrl    String    @map("source_url")
-  status       String // 'running', 'completed', 'failed'
+  sourceType   String    @default("csv_url") @map("source_type") // 'sdn_xml', 'csv_url', etc.
+  status       String // 'pending', 'running', 'completed', 'failed'
   startedAt    DateTime  @default(now()) @map("started_at")
   finishedAt   DateTime? @map("finished_at")
   stats        String? // JSON object with counts, errors, etc.
@@ -51,12 +75,15 @@ model WatchlistIngestionRun {
   @@map("watchlist_ingestion_run")
   @@index([status])
   @@index([startedAt(sort: Desc)])
+  @@index([sourceType])
 }
 
+/// Watchlist Vector State - Tracks vector indexing for semantic search
+/// Associated with WatchlistTarget (existing flow)
 model WatchlistVectorState {
   targetId          String   @id @map("target_id")
   lastIndexedAt     DateTime @default(now()) @map("last_indexed_at")
-  lastIndexedChange String?  @map("last_indexed_change") // ISO 8601 datetime string from last_change
+  lastIndexedChange String?  @map("last_indexed_change") // ISO 8601 datetime string
   vectorId          String   @map("vector_id") // same as target_id
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
