@@ -1,3 +1,10 @@
+# [1.4.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.3...v1.4.0-rc.4) (2026-01-30)
+
+
+### Features
+
+* **ingestion:** implement SDN XML ingestion endpoints and R2 presigned URL handling ([7be9a9f](https://github.com/janovix/watchlist-svc/commit/7be9a9f9bc6d314bb7656acf37f17ffaa6de5c95))
+
 # [1.4.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.2...v1.4.0-rc.3) (2026-01-16)
 
 
