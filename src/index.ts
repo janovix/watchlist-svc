@@ -5,7 +5,7 @@ import { ContentfulStatusCode } from "hono/utils/http-status";
 import * as Sentry from "@sentry/cloudflare";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
-import { authMiddleware } from "./lib/auth-middleware";
+import { authMiddleware, adminMiddleware } from "./lib/auth-middleware";
 import { HealthEndpoint } from "./endpoints/watchlist/health";
 import { SearchEndpoint } from "./endpoints/watchlist/search";
 import { TargetReadEndpoint } from "./endpoints/watchlist/targetRead";
@@ -45,10 +45,6 @@ export type Bindings = Env & {
 	 * Environment identifier (e.g., "dev", "production").
 	 */
 	ENVIRONMENT?: string;
-	/**
-	 * Admin API key for protected endpoints.
-	 */
-	ADMIN_API_KEY?: string;
 	/**
 	 * Grok API key for AI-powered features.
 	 */
@@ -178,6 +174,12 @@ app.use("/search", authMiddleware());
 app.use("/pep/search", authMiddleware());
 app.use("/targets/*", authMiddleware());
 //app.use("/ingestion/*", authMiddleware());
+
+// Admin routes require authentication + admin role
+app.use("/admin/*", authMiddleware());
+app.use("/admin/*", adminMiddleware());
+app.use("/api/upload/*", authMiddleware());
+app.use("/api/upload/*", adminMiddleware());
 
 // Register watchlist endpoints
 openapi.get("/healthz", HealthEndpoint);
