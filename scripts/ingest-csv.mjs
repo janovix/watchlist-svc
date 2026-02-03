@@ -5,6 +5,10 @@
  *
  * Usage:
  *   node scripts/ingest-csv.mjs --csv-url <URL> [--env dev|preview|prod] [--reindex-all]
+ *
+ * Authentication:
+ *   Requires a JWT token with admin role from auth-svc.
+ *   Set AUTH_TOKEN environment variable with a valid Bearer token.
  */
 
 import { parseArgs } from "util";
@@ -54,10 +58,11 @@ console.log(`Config file: ${configFile}`);
 console.log(`Reindex all: ${reindexAll}`);
 
 // Use wrangler to trigger ingestion via the admin endpoint
-// This requires ADMIN_API_KEY to be set in the environment
-const adminApiKey = process.env.ADMIN_API_KEY;
-if (!adminApiKey) {
-	console.error("Error: ADMIN_API_KEY environment variable is required");
+// This requires a JWT token with admin role from auth-svc
+const authToken = process.env.AUTH_TOKEN;
+if (!authToken) {
+	console.error("Error: AUTH_TOKEN environment variable is required");
+	console.error("Get a JWT token with admin role from auth-svc");
 	process.exit(1);
 }
 
@@ -69,7 +74,7 @@ if (!adminApiKey) {
 console.log("\nNote: This script is a placeholder.");
 console.log("For actual ingestion, use one of:");
 console.log(
-	"1. Deploy the worker and call POST /admin/ingest with ADMIN_API_KEY",
+	"1. Deploy the worker and call POST /admin/ingest with JWT Bearer token",
 );
 console.log("2. Use wrangler dev and call the endpoint locally");
 console.log("3. Use GitHub Actions workflow (recommended)");
@@ -83,7 +88,7 @@ if (workerUrl) {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				"x-admin-api-key": adminApiKey,
+				Authorization: `Bearer ${authToken}`,
 			},
 			body: JSON.stringify({
 				csvUrl,

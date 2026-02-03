@@ -4,7 +4,6 @@ import { contentJson } from "chanfana";
 import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import { watchlistIngestionRun } from "./base";
-import { checkAdminAuth } from "../../lib/auth";
 import { transformIngestionRun } from "../../lib/transformers";
 
 export class AdminIngestEndpoint extends OpenAPIRoute {
@@ -44,7 +43,6 @@ export class AdminIngestEndpoint extends OpenAPIRoute {
 	};
 
 	public async handle(c: AppContext) {
-		checkAdminAuth(c);
 		const validatedData = await this.getValidatedData<typeof this.schema>();
 		const prisma = createPrismaClient(c.env.DB);
 
@@ -175,7 +173,6 @@ export class AdminIngestSdnXmlEndpoint extends OpenAPIRoute {
 	};
 
 	public async handle(c: AppContext) {
-		checkAdminAuth(c);
 		const validatedData = await this.getValidatedData<typeof this.schema>();
 		const prisma = createPrismaClient(c.env.DB);
 
@@ -300,7 +297,6 @@ export class AdminReindexEndpoint extends OpenAPIRoute {
 	};
 
 	public async handle(c: AppContext) {
-		checkAdminAuth(c);
 		await this.getValidatedData<typeof this.schema>();
 		const prisma = createPrismaClient(c.env.DB);
 

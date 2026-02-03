@@ -13,7 +13,6 @@ declare namespace Cloudflare {
 				input: { text: string[] },
 			) => Promise<{ data: number[][] }>;
 		};
-		ADMIN_API_KEY?: string;
 		GROK_API_KEY?: string;
 		/**
 		 * Sentry DSN for error tracking.

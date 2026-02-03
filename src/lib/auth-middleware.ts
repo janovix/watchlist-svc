@@ -24,6 +24,10 @@ export interface AuthTokenPayload {
 	email?: string;
 	/** User name (if included in token) */
 	name?: string;
+	/** User role from Better Auth ("admin", "user", "visitor") */
+	role?: string;
+	/** Active organization ID for multi-tenant context */
+	organizationId?: string | null;
 }
 
 /**
@@ -176,8 +180,19 @@ export function authMiddleware(options?: {
 	return async (c, next) => {
 		// Skip authentication in test environment
 		if (c.env.ENVIRONMENT === "test") {
-			// Set a mock user for tests
-			c.set("user", { id: "test-user-id", email: "test@example.com" });
+			// Set a mock user for tests with admin role
+			const mockPayload: AuthTokenPayload = {
+				sub: "test-user-id",
+				email: "test@example.com",
+				name: "Test User",
+				role: "admin",
+			};
+			c.set("user", {
+				id: mockPayload.sub,
+				email: mockPayload.email,
+				name: mockPayload.name,
+			});
+			c.set("tokenPayload", mockPayload);
 			return next();
 		}
 
@@ -312,6 +327,47 @@ export function getAuthUserOrNull(
 	c: AppContext & { get: (key: "user") => AuthUser | undefined },
 ): AuthUser | null {
 	return c.get("user") ?? null;
+}
+
+/**
+ * Creates an authorization middleware that requires admin role
+ * Must be used after authMiddleware() to ensure tokenPayload is available
+ * Throws ApiException on authorization failure (compatible with chanfana)
+ *
+ * @returns Hono middleware handler
+ *
+ * @example
+ * // Require admin role for admin routes
+ * app.use("/admin/*", authMiddleware());
+ * app.use("/admin/*", adminMiddleware());
+ */
+export function adminMiddleware(): MiddlewareHandler<{
+	Bindings: AuthEnv & { ENVIRONMENT?: string };
+	Variables: {
+		user?: AuthUser;
+		token?: string;
+		tokenPayload?: AuthTokenPayload;
+	};
+}> {
+	return async (c, next) => {
+		const tokenPayload = c.get("tokenPayload");
+
+		if (!tokenPayload) {
+			const error = new ApiException("Unauthorized");
+			error.status = 401;
+			error.code = 401;
+			throw error;
+		}
+
+		if (tokenPayload.role !== "admin") {
+			const error = new ApiException("Admin access required");
+			error.status = 403;
+			error.code = 403;
+			throw error;
+		}
+
+		return next();
+	};
 }
 
 /**

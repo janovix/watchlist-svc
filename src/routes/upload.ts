@@ -4,7 +4,6 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { Bindings } from "../index";
-import { checkAdminAuth } from "../lib/auth";
 import { z } from "zod";
 
 type UploadBindings = {
@@ -78,9 +77,6 @@ const prepareUploadRequestSchema = z.object({
  * Returns the upload URL and the key to use for the upload.
  */
 uploadRoutes.post("/sdn-xml/prepare", async (c: UploadContext) => {
-	// Check admin authentication
-	checkAdminAuth(c);
-
 	// Check if R2 bucket is configured
 	if (!c.env.WATCHLIST_UPLOADS_BUCKET) {
 		console.error("[Upload] WATCHLIST_UPLOADS_BUCKET not configured");
@@ -128,9 +124,6 @@ uploadRoutes.post("/sdn-xml/prepare", async (c: UploadContext) => {
  * - key: The pre-generated key from /sdn-xml/prepare (optional, will generate if not provided)
  */
 uploadRoutes.post("/sdn-xml", async (c: UploadContext) => {
-	// Check admin authentication
-	checkAdminAuth(c);
-
 	// Check if R2 bucket is configured
 	if (!c.env.WATCHLIST_UPLOADS_BUCKET) {
 		console.error("[Upload] WATCHLIST_UPLOADS_BUCKET not configured");
@@ -218,9 +211,6 @@ uploadRoutes.post("/sdn-xml", async (c: UploadContext) => {
  * Delete an uploaded SDN XML file (admin only)
  */
 uploadRoutes.delete("/sdn-xml/*", async (c: UploadContext) => {
-	// Check admin authentication
-	checkAdminAuth(c);
-
 	// Check if R2 bucket is configured
 	if (!c.env.WATCHLIST_UPLOADS_BUCKET) {
 		console.error("[Upload] WATCHLIST_UPLOADS_BUCKET not configured");
