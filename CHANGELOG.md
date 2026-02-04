@@ -1,3 +1,10 @@
+# [1.4.0-rc.6](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.5...v1.4.0-rc.6) (2026-02-04)
+
+
+### Features
+
+* **cors:** implement TRUSTED_ORIGINS for CORS configuration and update related environment variables ([bf55001](https://github.com/janovix/watchlist-svc/commit/bf55001d0af7ca0a0bbf605b4cae8fc0789057b3))
+
 # [1.4.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.4...v1.4.0-rc.5) (2026-02-03)
 
 
