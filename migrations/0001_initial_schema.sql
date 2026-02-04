@@ -73,7 +73,14 @@ CREATE TABLE watchlist_ingestion_run (
     finished_at DATETIME,
     stats TEXT,                                    -- JSON object with counts, errors, etc.
     error_message TEXT,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Progress tracking fields (updated during ingestion for polling)
+    progress_phase TEXT,                           -- 'idle', 'initializing', 'downloading', 'parsing', 'inserting', 'completed', 'failed'
+    progress_records_processed INTEGER,            -- Number of records processed so far
+    progress_total_estimate INTEGER,               -- Estimated total records
+    progress_percentage INTEGER,                   -- Completion percentage (0-100)
+    progress_current_batch INTEGER,                -- Current batch number
+    progress_updated_at DATETIME                   -- Last progress update timestamp
 );
 
 -- ============================================================================

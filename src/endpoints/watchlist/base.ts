@@ -33,6 +33,28 @@ export const watchlistIngestionRun = z.object({
 	createdAt: z.string().datetime(),
 });
 
+// Progress tracking schema for polling
+export const ingestionProgressPhase = z.enum([
+	"idle",
+	"initializing",
+	"downloading",
+	"parsing",
+	"inserting",
+	"completed",
+	"failed",
+]);
+
+export const ingestionProgress = z.object({
+	phase: ingestionProgressPhase,
+	recordsProcessed: z.number().int(),
+	totalRecordsEstimate: z.number().int(),
+	percentage: z.number().int().min(0).max(100),
+	currentBatch: z.number().int(),
+	updatedAt: z.string().datetime().nullable(),
+});
+
+export type IngestionProgress = z.infer<typeof ingestionProgress>;
+
 export const watchlistVectorState = z.object({
 	targetId: z.string(),
 	lastIndexedAt: z.string().datetime(),

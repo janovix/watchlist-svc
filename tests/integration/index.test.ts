@@ -45,6 +45,14 @@ describe("Index Routes", () => {
 			expect(origin).toBeNull();
 		});
 
+		it("should allow requests without origin header", async () => {
+			const response = await SELF.fetch("http://local.test/", {
+				method: "GET",
+			});
+
+			expect(response.status).toBe(200);
+		});
+
 		// Note: CORS domain matching tests are skipped because environment variables
 		// set in tests don't propagate to the worker runtime in cloudflare:test
 		// The CORS logic is tested through integration tests in the actual deployment

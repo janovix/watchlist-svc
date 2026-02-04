@@ -13,6 +13,7 @@ import {
 	IngestionRunsListEndpoint,
 	IngestionRunReadEndpoint,
 } from "./endpoints/watchlist/ingestionRuns";
+import { IngestionProgressEndpoint } from "./endpoints/watchlist/ingestionProgress";
 import {
 	AdminIngestEndpoint,
 	AdminIngestSdnXmlEndpoint,
@@ -149,6 +150,7 @@ openapi.post("/pep/search", PepSearchEndpoint);
 openapi.get("/targets/:id", TargetReadEndpoint);
 openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
 openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
+openapi.get("/ingestion/runs/:runId/progress", IngestionProgressEndpoint);
 openapi.post("/ingestion/start", IngestionStartEndpoint);
 openapi.post("/ingestion/:runId/complete", IngestionCompleteEndpoint);
 openapi.post("/ingestion/:runId/failed", IngestionFailedEndpoint);

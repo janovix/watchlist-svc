@@ -72,6 +72,14 @@ model WatchlistIngestionRun {
   errorMessage String?   @map("error_message")
   createdAt    DateTime  @default(now()) @map("created_at")
 
+  // Progress tracking fields (updated during ingestion)
+  progressPhase            String?   @map("progress_phase") // 'idle', 'initializing', 'downloading', 'parsing', 'inserting', 'completed', 'failed'
+  progressRecordsProcessed Int?      @map("progress_records_processed")
+  progressTotalEstimate    Int?      @map("progress_total_estimate")
+  progressPercentage       Int?      @map("progress_percentage")
+  progressCurrentBatch     Int?      @map("progress_current_batch")
+  progressUpdatedAt        DateTime? @map("progress_updated_at")
+
   @@map("watchlist_ingestion_run")
   @@index([status])
   @@index([startedAt(sort: Desc)])
