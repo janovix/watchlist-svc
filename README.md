@@ -60,10 +60,11 @@ Watchlist ingestion and search service using Hono + Chanfana + D1 + Vectorize.
 ## Environment Variables
 
 - `GROK_API_KEY` - API key for Grok API (used for PEP search fallback)
-- `CORS_ALLOWED_DOMAIN` - Base domain for CORS configuration (e.g., `janovix.workers.dev`). If not set, all origins are allowed (development mode).
+
 - `AUTH_SERVICE` - Service binding to auth-svc for JWT validation
 - `AUTH_SERVICE_URL` - URL for auth-svc JWKS endpoint
 - `AUTH_JWKS_CACHE_TTL` - Cache TTL for JWKS (default: 3600 seconds)
+- `TRUSTED_ORIGINS` - Comma-separated list of allowed origin patterns for CORS (e.g., `*.janovix.workers.dev,http://localhost:*`). If not set, all CORS requests are denied (security-first).
 
 ## API Endpoints
 
