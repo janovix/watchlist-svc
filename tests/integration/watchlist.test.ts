@@ -80,9 +80,11 @@ describe("Watchlist API Integration Tests", () => {
 		});
 	});
 
-	describe("GET /ingestion/runs", () => {
+	describe("GET /admin/ingestion/runs", () => {
 		it("should return empty list when no runs exist", async () => {
-			const response = await SELF.fetch("http://local.test/ingestion/runs");
+			const response = await SELF.fetch(
+				"http://local.test/admin/ingestion/runs",
+			);
 			const body = await response.json<{
 				success: boolean;
 				result: Array<unknown>;
@@ -105,7 +107,9 @@ describe("Watchlist API Integration Tests", () => {
 				},
 			});
 
-			const response = await SELF.fetch("http://local.test/ingestion/runs");
+			const response = await SELF.fetch(
+				"http://local.test/admin/ingestion/runs",
+			);
 			const body = await response.json<{
 				success: boolean;
 				result: Array<{
@@ -136,7 +140,7 @@ describe("Watchlist API Integration Tests", () => {
 			}
 
 			const response = await SELF.fetch(
-				"http://local.test/ingestion/runs?limit=2",
+				"http://local.test/admin/ingestion/runs?limit=2",
 			);
 			const body = await response.json<{
 				success: boolean;
@@ -149,10 +153,10 @@ describe("Watchlist API Integration Tests", () => {
 		});
 	});
 
-	describe("GET /ingestion/runs/:runId", () => {
+	describe("GET /admin/ingestion/runs/:runId", () => {
 		it("should return 404 for non-existent run", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/ingestion/runs/99999",
+				"http://local.test/admin/ingestion/runs/99999",
 			);
 			const body = await response.json<{
 				success: boolean;
@@ -177,7 +181,7 @@ describe("Watchlist API Integration Tests", () => {
 			});
 
 			const response = await SELF.fetch(
-				`http://local.test/ingestion/runs/${run.id}`,
+				`http://local.test/admin/ingestion/runs/${run.id}`,
 			);
 			const body = await response.json<{
 				success: boolean;

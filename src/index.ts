@@ -135,9 +135,9 @@ app.get("/docsz", (c) => {
 app.use("/search", authMiddleware());
 app.use("/pep/search", authMiddleware());
 app.use("/targets/*", authMiddleware());
-//app.use("/ingestion/*", authMiddleware());
 
 // Admin routes require authentication + admin role
+// All admin-facing endpoints are served under /admin with admin JWT validation
 app.use("/admin/*", authMiddleware());
 app.use("/admin/*", adminMiddleware());
 app.use("/api/upload/*", authMiddleware());
@@ -148,12 +148,16 @@ openapi.get("/healthz", HealthEndpoint);
 openapi.post("/search", SearchEndpoint);
 openapi.post("/pep/search", PepSearchEndpoint);
 openapi.get("/targets/:id", TargetReadEndpoint);
-openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
-openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
-openapi.get("/ingestion/runs/:runId/progress", IngestionProgressEndpoint);
-openapi.post("/ingestion/start", IngestionStartEndpoint);
-openapi.post("/ingestion/:runId/complete", IngestionCompleteEndpoint);
-openapi.post("/ingestion/:runId/failed", IngestionFailedEndpoint);
+
+// Ingestion endpoints under /admin (require admin JWT)
+openapi.get("/admin/ingestion/runs", IngestionRunsListEndpoint);
+openapi.get("/admin/ingestion/runs/:runId", IngestionRunReadEndpoint);
+openapi.get("/admin/ingestion/runs/:runId/progress", IngestionProgressEndpoint);
+openapi.post("/admin/ingestion/start", IngestionStartEndpoint);
+openapi.post("/admin/ingestion/:runId/complete", IngestionCompleteEndpoint);
+openapi.post("/admin/ingestion/:runId/failed", IngestionFailedEndpoint);
+
+// Admin management endpoints
 openapi.post("/admin/ingest", AdminIngestEndpoint);
 openapi.post("/admin/ingest/sdn-xml", AdminIngestSdnXmlEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
