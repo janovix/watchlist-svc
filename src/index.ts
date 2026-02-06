@@ -26,6 +26,12 @@ import {
 } from "./endpoints/watchlist/ingestionUpload";
 import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
 import { uploadRoutes } from "./routes/upload";
+import {
+	InternalOfacTruncateEndpoint,
+	InternalOfacBatchEndpoint,
+	InternalOfacCompleteEndpoint,
+	InternalOfacFailedEndpoint,
+} from "./endpoints/watchlist/internalOfac";
 
 /**
  * Extended environment bindings with Sentry support.
@@ -74,6 +80,10 @@ export type Bindings = Env & {
 	 * Override if using different bucket names per environment.
 	 */
 	R2_BUCKET_NAME?: string;
+	/**
+	 * Thread service binding for creating and tracking threads.
+	 */
+	THREAD_SVC?: Fetcher;
 };
 
 // Start a Hono app
@@ -199,6 +209,12 @@ openapi.post("/admin/reindex", AdminReindexEndpoint);
 
 // Mount upload routes (for file uploads to R2)
 app.route("/api/upload", uploadRoutes);
+
+// Internal endpoints for container callbacks (no auth - secured via service binding)
+openapi.post("/internal/ofac/truncate", InternalOfacTruncateEndpoint);
+openapi.post("/internal/ofac/batch", InternalOfacBatchEndpoint);
+openapi.post("/internal/ofac/complete", InternalOfacCompleteEndpoint);
+openapi.post("/internal/ofac/failed", InternalOfacFailedEndpoint);
 
 // Sentry is enabled only when SENTRY_DSN environment variable is set.
 // Configure it via wrangler secrets: `wrangler secret put SENTRY_DSN`

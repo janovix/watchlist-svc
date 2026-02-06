@@ -4,7 +4,7 @@
  */
 import { OpenAPIRoute, ApiException, contentJson } from "chanfana";
 import { z } from "zod";
-import type { AppContext, SdnXmlIngestionJob } from "../../types";
+import type { AppContext } from "../../types";
 import { createPrismaClient } from "../../lib/prisma";
 import { watchlistIngestionRun } from "./base";
 import { transformIngestionRun } from "../../lib/transformers";
@@ -336,41 +336,82 @@ This will verify the file exists in R2 and queue the ingestion job for processin
 			},
 		});
 
-		// Queue the ingestion job
-		if (!c.env.INGESTION_QUEUE) {
-			// Update run to failed if queue not available
+		// Create thread in thread-svc for processing
+		if (!c.env.THREAD_SVC) {
+			// Update run to failed if thread service not available
 			await prisma.watchlistIngestionRun.update({
 				where: { id: runId },
 				data: {
 					status: "failed",
 					finishedAt: new Date(),
-					errorMessage: "Ingestion queue not configured",
+					errorMessage: "Thread service not configured",
 				},
 			});
 
-			const error = new ApiException("Ingestion queue not configured");
+			const error = new ApiException("Thread service not configured");
 			error.status = 500;
 			error.code = 500;
 			throw error;
 		}
 
-		const job: SdnXmlIngestionJob = {
-			runId: run.id,
-			sourceType: run.sourceType as "sdn_xml",
-			r2Key,
-			reindexAll: metadata.reindexAll ?? false,
-			batchSize: metadata.batchSize ?? 100,
+		// Build callback URL for container to call back to watchlist-svc
+		const callbackUrl = new URL(c.req.url).origin + "/internal/ofac";
+
+		// Create thread in thread-svc
+		const threadPayload = {
+			task_type: "ofac_parse",
+			job_params: {
+				r2_key: r2Key,
+				callback_url: callbackUrl,
+				truncate_before: true,
+				run_id: run.id,
+				batch_size: metadata.batchSize ?? 100,
+			},
+			metadata: {
+				source: "watchlist-svc",
+				source_type: run.sourceType,
+				file_size: fileSize,
+			},
 		};
 
 		try {
-			await c.env.INGESTION_QUEUE.send(job);
-			console.log(
-				`[IngestionComplete] Queued job for runId: ${run.id}, r2Key: ${r2Key}`,
+			const threadResponse = await c.env.THREAD_SVC.fetch(
+				"http://thread-svc/threads",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(threadPayload),
+				},
 			);
-		} catch (queueError) {
+
+			if (!threadResponse.ok) {
+				const errorText = await threadResponse.text();
+				throw new Error(
+					`Thread service returned ${threadResponse.status}: ${errorText}`,
+				);
+			}
+
+			const threadData = (await threadResponse.json()) as { id: string };
+			console.log(
+				`[IngestionComplete] Created thread ${threadData.id} for runId: ${run.id}, r2Key: ${r2Key}`,
+			);
+
+			// Store thread ID in run stats for tracking
+			await prisma.watchlistIngestionRun.update({
+				where: { id: runId },
+				data: {
+					stats: JSON.stringify({
+						...metadata,
+						uploadCompletedAt: new Date().toISOString(),
+						fileSize,
+						threadId: threadData.id,
+					}),
+				},
+			});
+		} catch (threadError) {
 			console.error(
-				`[IngestionComplete] Failed to queue job for runId: ${run.id}`,
-				queueError,
+				`[IngestionComplete] Failed to create thread for runId: ${run.id}`,
+				threadError,
 			);
 
 			// Update run to failed
@@ -379,15 +420,15 @@ This will verify the file exists in R2 and queue the ingestion job for processin
 				data: {
 					status: "failed",
 					finishedAt: new Date(),
-					errorMessage: `Failed to queue job: ${
-						queueError instanceof Error
-							? queueError.message
-							: String(queueError)
+					errorMessage: `Failed to create thread: ${
+						threadError instanceof Error
+							? threadError.message
+							: String(threadError)
 					}`,
 				},
 			});
 
-			const error = new ApiException("Failed to queue ingestion job");
+			const error = new ApiException("Failed to create processing thread");
 			error.status = 500;
 			error.code = 500;
 			throw error;

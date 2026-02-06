@@ -1,5 +1,5 @@
 import { OpenAPIRoute, ApiException } from "chanfana";
-import type { AppContext, IngestionJob, SdnXmlIngestionJob } from "../../types";
+import type { AppContext, IngestionJob } from "../../types";
 import { contentJson } from "chanfana";
 import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
@@ -206,46 +206,95 @@ export class AdminIngestSdnXmlEndpoint extends OpenAPIRoute {
 			},
 		});
 
-		// Send job to queue for background processing
-		if (!c.env.INGESTION_QUEUE) {
-			const error = new ApiException("Ingestion queue not configured");
-			error.status = 500;
-			error.code = 500;
-			throw error;
-		}
-
-		const job: SdnXmlIngestionJob = {
-			runId: run.id,
-			sourceType: "sdn_xml",
-			r2Key: validatedData.body.r2Key,
-			reindexAll: validatedData.body.reindexAll,
-			batchSize: validatedData.body.batchSize,
-		};
-
-		try {
-			await c.env.INGESTION_QUEUE.send(job);
-			console.log(
-				`[AdminIngestSdnXml] Queued SDN XML ingestion job for runId: ${run.id}`,
-				job,
-			);
-		} catch (error) {
-			console.error(
-				`[AdminIngestSdnXml] Failed to queue ingestion job for runId: ${run.id}`,
-				error,
-			);
-			// Update run status to failed
+		// Create thread in thread-svc for processing
+		if (!c.env.THREAD_SVC) {
 			await prisma.watchlistIngestionRun.update({
 				where: { id: run.id },
 				data: {
 					status: "failed",
 					finishedAt: new Date(),
-					errorMessage: `Failed to queue job: ${
+					errorMessage: "Thread service not configured",
+				},
+			});
+
+			const error = new ApiException("Thread service not configured");
+			error.status = 500;
+			error.code = 500;
+			throw error;
+		}
+
+		// Build callback URL for container to call back to watchlist-svc
+		const callbackUrl = new URL(c.req.url).origin + "/internal/ofac";
+
+		const threadPayload = {
+			task_type: "ofac_parse",
+			job_params: {
+				r2_key: validatedData.body.r2Key,
+				callback_url: callbackUrl,
+				truncate_before: true,
+				run_id: run.id,
+				batch_size: validatedData.body.batchSize ?? 100,
+			},
+			metadata: {
+				source: "watchlist-svc",
+				source_type: "sdn_xml",
+				triggered_by: "admin",
+				file_size: r2Object.size,
+			},
+		};
+
+		try {
+			const threadResponse = await c.env.THREAD_SVC.fetch(
+				"http://thread-svc/threads",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(threadPayload),
+				},
+			);
+
+			if (!threadResponse.ok) {
+				const errorText = await threadResponse.text();
+				throw new Error(
+					`Thread service returned ${threadResponse.status}: ${errorText}`,
+				);
+			}
+
+			const threadData = (await threadResponse.json()) as { id: string };
+			console.log(
+				`[AdminIngestSdnXml] Created thread ${threadData.id} for runId: ${run.id}`,
+			);
+
+			// Store thread ID in run stats for tracking
+			await prisma.watchlistIngestionRun.update({
+				where: { id: run.id },
+				data: {
+					stats: JSON.stringify({
+						threadId: threadData.id,
+						r2Key: validatedData.body.r2Key,
+						batchSize: validatedData.body.batchSize,
+						fileSize: r2Object.size,
+					}),
+				},
+			});
+		} catch (error) {
+			console.error(
+				`[AdminIngestSdnXml] Failed to create thread for runId: ${run.id}`,
+				error,
+			);
+
+			await prisma.watchlistIngestionRun.update({
+				where: { id: run.id },
+				data: {
+					status: "failed",
+					finishedAt: new Date(),
+					errorMessage: `Failed to create thread: ${
 						error instanceof Error ? error.message : String(error)
 					}`,
 				},
 			});
 
-			const apiError = new ApiException("Failed to queue ingestion job");
+			const apiError = new ApiException("Failed to create processing thread");
 			apiError.status = 500;
 			apiError.code = 500;
 			throw apiError;
