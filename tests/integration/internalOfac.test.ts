@@ -332,6 +332,78 @@ describe("Internal OFAC Endpoints", () => {
 			const stats = JSON.parse(run?.stats ?? "{}");
 			expect(stats.errors).toHaveLength(100);
 		});
+
+		it("should handle completion when run_id does not exist", async () => {
+			const nonExistentRunId = 99999;
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/ofac/complete",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: nonExistentRunId,
+						total_records: 100,
+						total_batches: 1,
+						errors: [],
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{ success: boolean }>();
+			expect(body.success).toBe(true);
+		});
+
+		it("should skip vectorization when skip_vectorization is true", async () => {
+			const response = await SELF.fetch(
+				"http://local.test/internal/ofac/complete",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						total_records: 100,
+						total_batches: 1,
+						errors: [],
+						skip_vectorization: true,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				vectorization_thread_id: string | null;
+			}>();
+			expect(body.success).toBe(true);
+			expect(body.vectorization_thread_id).toBeNull();
+		});
+
+		it("should skip vectorization when total_records is 0", async () => {
+			const response = await SELF.fetch(
+				"http://local.test/internal/ofac/complete",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						total_records: 0,
+						total_batches: 0,
+						errors: [],
+						skip_vectorization: false,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				vectorization_thread_id: string | null;
+			}>();
+			expect(body.success).toBe(true);
+			expect(body.vectorization_thread_id).toBeNull();
+		});
 	});
 
 	// =========================================================================
@@ -386,6 +458,26 @@ describe("Internal OFAC Endpoints", () => {
 				where: { id: testRunId },
 			});
 			expect(run?.errorMessage?.length).toBe(1000);
+		});
+
+		it("should handle failure when run_id does not exist", async () => {
+			const nonExistentRunId = 99999;
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/ofac/failed",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: nonExistentRunId,
+						error: "Test error",
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{ success: boolean }>();
+			expect(body.success).toBe(true);
 		});
 	});
 });

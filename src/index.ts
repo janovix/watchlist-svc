@@ -32,6 +32,13 @@ import {
 	InternalOfacCompleteEndpoint,
 	InternalOfacFailedEndpoint,
 } from "./endpoints/watchlist/internalOfac";
+import {
+	InternalVectorizeCountEndpoint,
+	InternalVectorizeDeleteByDatasetEndpoint,
+	InternalVectorizeIndexBatchEndpoint,
+	InternalVectorizeCompleteEndpoint,
+} from "./endpoints/watchlist/internalVectorize";
+import { AdminVectorizeReindexEndpoint } from "./endpoints/watchlist/adminVectorize";
 
 /**
  * Extended environment bindings with Sentry support.
@@ -206,6 +213,7 @@ openapi.post("/ingestion/:runId/failed", IngestionFailedEndpoint);
 openapi.post("/admin/ingest", AdminIngestEndpoint);
 openapi.post("/admin/ingest/sdn-xml", AdminIngestSdnXmlEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
+openapi.post("/admin/vectorize/reindex", AdminVectorizeReindexEndpoint);
 
 // Mount upload routes (for file uploads to R2)
 app.route("/api/upload", uploadRoutes);
@@ -215,6 +223,18 @@ openapi.post("/internal/ofac/truncate", InternalOfacTruncateEndpoint);
 openapi.post("/internal/ofac/batch", InternalOfacBatchEndpoint);
 openapi.post("/internal/ofac/complete", InternalOfacCompleteEndpoint);
 openapi.post("/internal/ofac/failed", InternalOfacFailedEndpoint);
+
+// Internal vectorize endpoints for indexing
+openapi.get("/internal/vectorize/count", InternalVectorizeCountEndpoint);
+openapi.post(
+	"/internal/vectorize/delete-by-dataset",
+	InternalVectorizeDeleteByDatasetEndpoint,
+);
+openapi.post(
+	"/internal/vectorize/index-batch",
+	InternalVectorizeIndexBatchEndpoint,
+);
+openapi.post("/internal/vectorize/complete", InternalVectorizeCompleteEndpoint);
 
 // Sentry is enabled only when SENTRY_DSN environment variable is set.
 // Configure it via wrangler secrets: `wrangler secret put SENTRY_DSN`

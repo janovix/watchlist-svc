@@ -35,6 +35,8 @@ export default defineWorkersConfig({
 				"src/queue-consumer.ts", // Queue consumer requires queue infrastructure setup
 				"src/endpoints/watchlist/pepSearch.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/search.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/internalVectorize.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/addOnVectorize.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/lib/r2-presigned.ts", // Requires R2 bucket binding with presigned URL support
 				"src/endpoints/watchlist/adminIngest.ts", // Requires WATCHLIST_INGEST_QUEUE binding
 				"src/endpoints/watchlist/ingestionUpload.ts", // Requires WATCHLIST_INGEST_QUEUE binding

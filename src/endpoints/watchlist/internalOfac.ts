@@ -12,6 +12,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import type { Bindings } from "../../index";
+import { getCallbackUrl } from "../../lib/ofac-vectorize-service";
 
 // =============================================================================
 // Schemas
@@ -372,6 +373,11 @@ export class InternalOfacCompleteEndpoint extends OpenAPIRoute {
 								.array(z.string())
 								.optional()
 								.describe("Any errors encountered"),
+							skip_vectorization: z
+								.boolean()
+								.optional()
+								.default(false)
+								.describe("Skip automatic vectorization trigger"),
 						}),
 					},
 				},
@@ -384,6 +390,7 @@ export class InternalOfacCompleteEndpoint extends OpenAPIRoute {
 					"application/json": {
 						schema: z.object({
 							success: z.boolean(),
+							vectorization_thread_id: z.string().nullable().optional(),
 						}),
 					},
 				},
@@ -393,12 +400,14 @@ export class InternalOfacCompleteEndpoint extends OpenAPIRoute {
 
 	async handle(c: { env: Bindings; req: Request }) {
 		const body = await c.req.json();
-		const { run_id, total_records, total_batches, errors } = body as {
-			run_id: number;
-			total_records: number;
-			total_batches: number;
-			errors?: string[];
-		};
+		const { run_id, total_records, total_batches, errors, skip_vectorization } =
+			body as {
+				run_id: number;
+				total_records: number;
+				total_batches: number;
+				errors?: string[];
+				skip_vectorization?: boolean;
+			};
 
 		console.log(
 			`[InternalOfac] Completing run ${run_id}: total_records=${total_records}, total_batches=${total_batches}`,
@@ -433,8 +442,58 @@ export class InternalOfacCompleteEndpoint extends OpenAPIRoute {
 			);
 		}
 
+		// Trigger automatic vectorization if not skipped and records were processed
+		let vectorizationThreadId: string | null = null;
+		if (!skip_vectorization && total_records > 0 && c.env.THREAD_SVC) {
+			console.log(
+				`[InternalOfac] Triggering automatic vectorization for ${total_records} records`,
+			);
+
+			try {
+				const callbackUrl = getCallbackUrl(c.env.ENVIRONMENT);
+				const response = await c.env.THREAD_SVC.fetch(
+					"http://thread-svc/threads",
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							task_type: "vectorize_index",
+							job_params: {
+								dataset: "ofac_sdn",
+								reindex_all: true,
+								batch_size: 100,
+								callback_url: callbackUrl,
+								triggered_by: `ofac_ingestion_run_${run_id}`,
+							},
+							metadata: {
+								source: "auto_trigger",
+								ofac_run_id: run_id,
+								total_records: total_records,
+							},
+						}),
+					},
+				);
+
+				if (response.ok) {
+					const thread = (await response.json()) as { id: string };
+					vectorizationThreadId = thread.id;
+					console.log(
+						`[InternalOfac] Vectorization thread created: ${vectorizationThreadId}`,
+					);
+				} else {
+					console.error(
+						`[InternalOfac] Failed to create vectorization thread: ${response.status}`,
+					);
+				}
+			} catch (e) {
+				// Log but don't fail - vectorization can be triggered manually
+				console.error(`[InternalOfac] Failed to trigger vectorization: ${e}`);
+			}
+		}
+
 		return Response.json({
 			success: true,
+			vectorization_thread_id: vectorizationThreadId,
 		});
 	}
 }
