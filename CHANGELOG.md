@@ -1,3 +1,15 @@
+# [1.4.0-rc.8](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.7...v1.4.0-rc.8) (2026-02-09)
+
+
+### Bug Fixes
+
+* update thread service binding in wrangler configuration ([ca6844a](https://github.com/janovix/watchlist-svc/commit/ca6844aeb36db21ec670490aa068b28fcad7f789))
+
+
+### Features
+
+* add internal vectorization endpoints and update ingestion logic ([23b4acd](https://github.com/janovix/watchlist-svc/commit/23b4acdc901e62f2080fe5324aa77f250b407431))
+
 # [1.4.0-rc.7](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.6...v1.4.0-rc.7) (2026-02-04)
 
 
