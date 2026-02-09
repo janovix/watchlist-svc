@@ -28,6 +28,10 @@ declare namespace Cloudflare {
 		 */
 		AUTH_SERVICE?: Service;
 		/**
+		 * Thread service binding for creating and tracking threads
+		 */
+		THREAD_SVC?: Service;
+		/**
 		 * R2 Access Key ID for generating presigned URLs.
 		 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
 		 */

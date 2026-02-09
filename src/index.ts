@@ -26,6 +26,19 @@ import {
 } from "./endpoints/watchlist/ingestionUpload";
 import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
 import { uploadRoutes } from "./routes/upload";
+import {
+	InternalOfacTruncateEndpoint,
+	InternalOfacBatchEndpoint,
+	InternalOfacCompleteEndpoint,
+	InternalOfacFailedEndpoint,
+} from "./endpoints/watchlist/internalOfac";
+import {
+	InternalVectorizeCountEndpoint,
+	InternalVectorizeDeleteByDatasetEndpoint,
+	InternalVectorizeIndexBatchEndpoint,
+	InternalVectorizeCompleteEndpoint,
+} from "./endpoints/watchlist/internalVectorize";
+import { AdminVectorizeReindexEndpoint } from "./endpoints/watchlist/adminVectorize";
 
 /**
  * Extended environment bindings with Sentry support.
@@ -74,6 +87,10 @@ export type Bindings = Env & {
 	 * Override if using different bucket names per environment.
 	 */
 	R2_BUCKET_NAME?: string;
+	/**
+	 * Thread service binding for creating and tracking threads.
+	 */
+	THREAD_SVC?: Fetcher;
 };
 
 // Start a Hono app
@@ -161,9 +178,28 @@ openapi.post("/admin/ingestion/:runId/failed", IngestionFailedEndpoint);
 openapi.post("/admin/ingest", AdminIngestEndpoint);
 openapi.post("/admin/ingest/sdn-xml", AdminIngestSdnXmlEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
+openapi.post("/admin/vectorize/reindex", AdminVectorizeReindexEndpoint);
 
 // Mount upload routes (for file uploads to R2)
 app.route("/api/upload", uploadRoutes);
+
+// Internal endpoints for container callbacks (no auth - secured via service binding)
+openapi.post("/internal/ofac/truncate", InternalOfacTruncateEndpoint);
+openapi.post("/internal/ofac/batch", InternalOfacBatchEndpoint);
+openapi.post("/internal/ofac/complete", InternalOfacCompleteEndpoint);
+openapi.post("/internal/ofac/failed", InternalOfacFailedEndpoint);
+
+// Internal vectorize endpoints for indexing
+openapi.get("/internal/vectorize/count", InternalVectorizeCountEndpoint);
+openapi.post(
+	"/internal/vectorize/delete-by-dataset",
+	InternalVectorizeDeleteByDatasetEndpoint,
+);
+openapi.post(
+	"/internal/vectorize/index-batch",
+	InternalVectorizeIndexBatchEndpoint,
+);
+openapi.post("/internal/vectorize/complete", InternalVectorizeCompleteEndpoint);
 
 // Sentry is enabled only when SENTRY_DSN environment variable is set.
 // Configure it via wrangler secrets: `wrangler secret put SENTRY_DSN`

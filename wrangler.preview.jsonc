@@ -39,18 +39,15 @@
 			"bucket_name": "watchlist-uploads-preview",
 		},
 	],
-	"queues": {
-		"producers": [
-			{
-				"queue": "watchlist-ingestion-preview",
-				"binding": "INGESTION_QUEUE",
-			},
-		],
-	},
+	// Queue removed - now using thread-svc for ingestion
 	"services": [
 		{
 			"binding": "AUTH_SERVICE",
 			"service": "auth-svc",
+		},
+		{
+			"binding": "THREAD_SVC",
+			"service": "thread-svc",
 		},
 	],
 	"vars": {

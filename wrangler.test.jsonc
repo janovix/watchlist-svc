@@ -28,21 +28,7 @@
 	"ai": {
 		"binding": "AI",
 	},
-	"queues": {
-		"producers": [
-			{
-				"queue": "ingestion-queue",
-				"binding": "INGESTION_QUEUE",
-			},
-		],
-		"consumers": [
-			{
-				"queue": "ingestion-queue",
-				"max_batch_size": 1,
-				"max_batch_timeout": 30,
-			},
-		],
-	},
+	// Queue removed - now using thread-svc for ingestion
 	"vars": {
 		"ENVIRONMENT": "test",
 	},
