@@ -47,7 +47,7 @@
 		},
 		{
 			"binding": "THREAD_SVC",
-			"service": "thread-svc-preview",
+			"service": "thread-svc",
 		},
 	],
 	"vars": {
