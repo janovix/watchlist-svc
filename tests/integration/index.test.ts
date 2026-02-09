@@ -3,8 +3,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 
 describe("Index Routes", () => {
 	beforeEach(() => {
-		// Reset CORS_ALLOWED_DOMAIN if it was set
-		delete (env as { CORS_ALLOWED_DOMAIN?: string }).CORS_ALLOWED_DOMAIN;
+		// Reset TRUSTED_ORIGINS if it was set
+		delete (env as { TRUSTED_ORIGINS?: string }).TRUSTED_ORIGINS;
 	});
 
 	describe("GET /", () => {
@@ -27,8 +27,8 @@ describe("Index Routes", () => {
 	});
 
 	describe("CORS Configuration", () => {
-		it("should allow all origins when CORS_ALLOWED_DOMAIN is not set", async () => {
-			// CORS_ALLOWED_DOMAIN is not set in test env by default
+		it("should deny CORS when TRUSTED_ORIGINS is not set (security-first)", async () => {
+			// TRUSTED_ORIGINS is not set in test env by default
 			const response = await SELF.fetch("http://local.test/", {
 				method: "OPTIONS",
 				headers: {
@@ -37,11 +37,12 @@ describe("Index Routes", () => {
 				},
 			});
 
-			// CORS middleware should allow the request (returns * when no domain configured)
+			// CORS middleware denies requests when no trusted origins are configured
+			// This is a security-first approach
 			expect([200, 204]).toContain(response.status);
 			const origin = response.headers.get("Access-Control-Allow-Origin");
-			// When CORS_ALLOWED_DOMAIN is not set, it allows all origins
-			expect(origin).toBeTruthy();
+			// When TRUSTED_ORIGINS is not set, CORS is denied (no origin header)
+			expect(origin).toBeNull();
 		});
 
 		it("should allow requests without origin header", async () => {
@@ -56,8 +57,6 @@ describe("Index Routes", () => {
 		// set in tests don't propagate to the worker runtime in cloudflare:test
 		// The CORS logic is tested through integration tests in the actual deployment
 		// environment where environment variables are properly configured.
-		// The code coverage for CORS logic (lines 66-82) is achieved through the
-		// "should allow all origins" test above which exercises the CORS middleware.
 	});
 
 	describe("GET /docsz", () => {

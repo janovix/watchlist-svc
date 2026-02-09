@@ -40,10 +40,10 @@ describe("Ingestion Progress API", () => {
 		testRunId = run.id;
 	});
 
-	describe("GET /ingestion/runs/:runId/progress", () => {
+	describe("GET /admin/ingestion/runs/:runId/progress", () => {
 		it("should return progress for an existing run", async () => {
 			const response = await SELF.fetch(
-				`http://local.test/ingestion/runs/${testRunId}/progress`,
+				`http://local.test/admin/ingestion/runs/${testRunId}/progress`,
 			);
 
 			expect(response.status).toBe(200);
@@ -71,7 +71,7 @@ describe("Ingestion Progress API", () => {
 
 		it("should return 404 for non-existent run", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/ingestion/runs/999999/progress",
+				"http://local.test/admin/ingestion/runs/999999/progress",
 			);
 
 			expect(response.status).toBe(404);
@@ -105,7 +105,7 @@ describe("Ingestion Progress API", () => {
 			});
 
 			const response = await SELF.fetch(
-				`http://local.test/ingestion/runs/${run.id}/progress`,
+				`http://local.test/admin/ingestion/runs/${run.id}/progress`,
 			);
 
 			expect(response.status).toBe(200);
@@ -144,7 +144,7 @@ describe("Ingestion Progress API", () => {
 			});
 
 			const response = await SELF.fetch(
-				`http://local.test/ingestion/runs/${run.id}/progress`,
+				`http://local.test/admin/ingestion/runs/${run.id}/progress`,
 			);
 
 			expect(response.status).toBe(200);
@@ -168,7 +168,7 @@ describe("Ingestion Progress API", () => {
 			});
 
 			const response = await SELF.fetch(
-				`http://local.test/ingestion/runs/${run.id}/progress`,
+				`http://local.test/admin/ingestion/runs/${run.id}/progress`,
 			);
 
 			expect(response.status).toBe(200);
@@ -192,7 +192,7 @@ describe("Ingestion Progress API", () => {
 			});
 
 			const response = await SELF.fetch(
-				`http://local.test/ingestion/runs/${run.id}/progress`,
+				`http://local.test/admin/ingestion/runs/${run.id}/progress`,
 			);
 
 			expect(response.status).toBe(200);
@@ -216,7 +216,7 @@ describe("Ingestion Progress API", () => {
 			});
 
 			const response = await SELF.fetch(
-				`http://local.test/ingestion/runs/${run.id}/progress`,
+				`http://local.test/admin/ingestion/runs/${run.id}/progress`,
 			);
 
 			expect(response.status).toBe(200);
@@ -241,7 +241,7 @@ describe("Ingestion Progress API", () => {
 			});
 
 			const response = await SELF.fetch(
-				`http://local.test/ingestion/runs/${run.id}/progress`,
+				`http://local.test/admin/ingestion/runs/${run.id}/progress`,
 			);
 
 			expect(response.status).toBe(200);

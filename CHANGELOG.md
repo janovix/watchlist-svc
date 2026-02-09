@@ -1,3 +1,25 @@
+# [1.4.0-rc.7](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.6...v1.4.0-rc.7) (2026-02-04)
+
+
+### Features
+
+* **ingestion:** add progress tracking fields and endpoint for real-time ingestion status ([d95b2f0](https://github.com/janovix/watchlist-svc/commit/d95b2f087b11a2c18911007b41d2207924e89484))
+* test add ingestion progress API tests and allow requests without origin header ([1e62138](https://github.com/janovix/watchlist-svc/commit/1e62138dc0ef6ab7530cd7ee316fce50f3d53707))
+
+# [1.4.0-rc.6](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.5...v1.4.0-rc.6) (2026-02-04)
+
+
+### Features
+
+* **cors:** implement TRUSTED_ORIGINS for CORS configuration and update related environment variables ([bf55001](https://github.com/janovix/watchlist-svc/commit/bf55001d0af7ca0a0bbf605b4cae8fc0789057b3))
+
+# [1.4.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.4...v1.4.0-rc.5) (2026-02-03)
+
+
+### Features
+
+* **auth:** replace ADMIN_API_KEY with JWT-based authentication for admin endpoints ([2c290a1](https://github.com/janovix/watchlist-svc/commit/2c290a19a4c35eb1e4945775a358fa09f2bb40c3))
+
 # [1.4.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.3...v1.4.0-rc.4) (2026-01-30)
 
 

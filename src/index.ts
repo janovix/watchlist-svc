@@ -1,11 +1,11 @@
 import { ApiException, fromHono } from "chanfana";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import * as Sentry from "@sentry/cloudflare";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
 import { authMiddleware, adminMiddleware } from "./lib/auth-middleware";
+import { corsMiddleware } from "./middleware/cors";
 import { HealthEndpoint } from "./endpoints/watchlist/health";
 import { SearchEndpoint } from "./endpoints/watchlist/search";
 import { TargetReadEndpoint } from "./endpoints/watchlist/targetRead";
@@ -96,47 +96,8 @@ export type Bindings = Env & {
 // Start a Hono app
 const app = new Hono<{ Bindings: Bindings }>();
 
-// Configure CORS to allow requests from configured domain subdomains
-app.use(
-	"*",
-	cors({
-		origin: (origin, c) => {
-			// Get allowed domain from environment variable
-			const allowedDomain = c.env.CORS_ALLOWED_DOMAIN;
-			if (!allowedDomain) {
-				// If no domain configured, allow all origins (for development)
-				return "*";
-			}
-
-			if (!origin) return "*";
-
-			try {
-				const url = new URL(origin);
-				const hostname = url.hostname;
-				// Allow exact match
-				if (hostname === allowedDomain) {
-					return origin;
-				}
-				// Allow any subdomain (e.g., watchlist.janovix.workers.dev)
-				if (hostname.endsWith(`.${allowedDomain}`)) {
-					return origin;
-				}
-			} catch {
-				// Invalid origin, deny
-			}
-			return null;
-		},
-		allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-		allowHeaders: [
-			"Content-Type",
-			"Authorization",
-			"X-Requested-With",
-			"Accept",
-		],
-		exposeHeaders: ["Content-Length", "Content-Type"],
-		credentials: true,
-	}),
-);
+// CORS middleware using TRUSTED_ORIGINS environment variable
+app.use("*", corsMiddleware());
 
 const appMeta: AppMeta = {
 	name: pkg.name,
@@ -191,9 +152,9 @@ app.get("/docsz", (c) => {
 app.use("/search", authMiddleware());
 app.use("/pep/search", authMiddleware());
 app.use("/targets/*", authMiddleware());
-//app.use("/ingestion/*", authMiddleware());
 
 // Admin routes require authentication + admin role
+// All admin-facing endpoints are served under /admin with admin JWT validation
 app.use("/admin/*", authMiddleware());
 app.use("/admin/*", adminMiddleware());
 app.use("/api/upload/*", authMiddleware());
@@ -204,12 +165,16 @@ openapi.get("/healthz", HealthEndpoint);
 openapi.post("/search", SearchEndpoint);
 openapi.post("/pep/search", PepSearchEndpoint);
 openapi.get("/targets/:id", TargetReadEndpoint);
-openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
-openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
-openapi.get("/ingestion/runs/:runId/progress", IngestionProgressEndpoint);
-openapi.post("/ingestion/start", IngestionStartEndpoint);
-openapi.post("/ingestion/:runId/complete", IngestionCompleteEndpoint);
-openapi.post("/ingestion/:runId/failed", IngestionFailedEndpoint);
+
+// Ingestion endpoints under /admin (require admin JWT)
+openapi.get("/admin/ingestion/runs", IngestionRunsListEndpoint);
+openapi.get("/admin/ingestion/runs/:runId", IngestionRunReadEndpoint);
+openapi.get("/admin/ingestion/runs/:runId/progress", IngestionProgressEndpoint);
+openapi.post("/admin/ingestion/start", IngestionStartEndpoint);
+openapi.post("/admin/ingestion/:runId/complete", IngestionCompleteEndpoint);
+openapi.post("/admin/ingestion/:runId/failed", IngestionFailedEndpoint);
+
+// Admin management endpoints
 openapi.post("/admin/ingest", AdminIngestEndpoint);
 openapi.post("/admin/ingest/sdn-xml", AdminIngestSdnXmlEndpoint);
 openapi.post("/admin/reindex", AdminReindexEndpoint);
