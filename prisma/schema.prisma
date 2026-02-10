@@ -104,3 +104,19 @@ model WatchlistVectorState {
   @@map("watchlist_vector_state")
   @@index([lastIndexedAt])
 }
+
+/// Watchlist Identifier - Stores normalized identifiers for exact matching
+/// Used for hybrid search to match documents like passports, RFCs, NITs, etc.
+model WatchlistIdentifier {
+  id             Int      @id @default(autoincrement())
+  dataset        String   // e.g., "ofac_sdn", "csv_target"
+  recordId       String   @map("record_id") // FK to ofac_sdn_entry.id or watchlist_target.id
+  identifierType String?  @map("identifier_type") // e.g., "PASSPORT", "RFC", "NIT"
+  identifierRaw  String   @map("identifier_raw") // Original identifier value
+  identifierNorm String   @map("identifier_norm") // Normalized (uppercase, stripped) for exact lookup
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([identifierNorm], name: "idx_watchlist_identifier_norm")
+  @@index([dataset, recordId], name: "idx_watchlist_identifier_dataset_record")
+  @@map("watchlist_identifier")
+}

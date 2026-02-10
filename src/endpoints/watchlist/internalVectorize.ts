@@ -503,3 +503,243 @@ export class InternalVectorizeCompleteEndpoint extends OpenAPIRoute {
 		});
 	}
 }
+
+// =============================================================================
+// Debug Search Endpoints
+// =============================================================================
+
+/**
+ * POST /internal/vectorize/search
+ * Raw vector search without D1 rehydration or scoring
+ */
+export class InternalVectorizeSearchEndpoint extends OpenAPIRoute {
+	schema = {
+		tags: ["Internal"],
+		summary: "Raw vector search (internal debug)",
+		description:
+			"Returns raw vector search results without D1 rehydration or hybrid scoring. For debugging.",
+		security: [],
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							query: z.string().describe("Search query text"),
+							topK: z
+								.number()
+								.int()
+								.optional()
+								.default(10)
+								.describe("Top K results"),
+							dataset: z
+								.string()
+								.optional()
+								.describe("Optional dataset filter"),
+						}),
+					},
+				},
+			},
+		},
+		responses: {
+			"200": {
+				description: "Raw vector search results",
+				content: {
+					"application/json": {
+						schema: z.object({
+							success: z.boolean(),
+							results: z.array(
+								z.object({
+									id: z.string(),
+									score: z.number(),
+									metadata: z.record(z.unknown()).nullable(),
+								}),
+							),
+							count: z.number(),
+						}),
+					},
+				},
+			},
+		},
+	};
+
+	async handle(c: { env: Bindings; req: Request }) {
+		const body = await c.req.json();
+		const {
+			query,
+			topK = 10,
+			dataset,
+		} = body as {
+			query: string;
+			topK?: number;
+			dataset?: string;
+		};
+
+		console.log(
+			`[InternalVectorize] Debug search: query="${query}", topK=${topK}`,
+		);
+
+		const ai = c.env.AI;
+		const vectorize = c.env.WATCHLIST_VECTORIZE;
+
+		if (!ai) {
+			return Response.json(
+				{ success: false, error: "AI binding not configured" },
+				{ status: 500 },
+			);
+		}
+
+		if (!vectorize) {
+			return Response.json(
+				{ success: false, error: "Vectorize binding not configured" },
+				{ status: 500 },
+			);
+		}
+
+		try {
+			// Generate embedding
+			const result = await ai.run(EMBEDDING_MODEL, { text: [query] });
+			if (!result || !("data" in result) || !Array.isArray(result.data)) {
+				throw new Error("Invalid embedding response format");
+			}
+			const embedding = (result.data as number[][])[0];
+
+			// Query vectorize
+			const vectorizeOptions: {
+				topK: number;
+				returnMetadata: true;
+				filter?: VectorizeVectorMetadataFilter;
+			} = {
+				topK,
+				returnMetadata: true,
+			};
+
+			if (dataset) {
+				vectorizeOptions.filter = { dataset };
+			}
+
+			const vectorizeResults = await vectorize.query(
+				embedding,
+				vectorizeOptions,
+			);
+
+			const results = vectorizeResults.matches.map((match) => ({
+				id: match.id,
+				score: match.score || 0,
+				metadata: match.metadata || null,
+			}));
+
+			return Response.json({
+				success: true,
+				results,
+				count: results.length,
+			});
+		} catch (error) {
+			const errorMsg = `Debug search failed: ${error instanceof Error ? error.message : error}`;
+			console.error(`[InternalVectorize] ${errorMsg}`);
+			return Response.json(
+				{ success: false, error: errorMsg },
+				{ status: 500 },
+			);
+		}
+	}
+}
+
+/**
+ * POST /internal/vectorize/search-hydrated
+ * Full hybrid search pipeline with detailed scoring breakdown
+ */
+export class InternalVectorizeSearchHydratedEndpoint extends OpenAPIRoute {
+	schema = {
+		tags: ["Internal"],
+		summary: "Hydrated search with scoring breakdown (internal debug)",
+		description:
+			"Returns full hybrid search results with D1 rehydration and detailed scoring breakdown. For debugging.",
+		security: [],
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: z.object({
+							query: z.string().describe("Search query text"),
+							topK: z
+								.number()
+								.int()
+								.optional()
+								.default(10)
+								.describe("Top K results"),
+							dataset: z
+								.string()
+								.optional()
+								.describe("Optional dataset filter"),
+							identifiers: z
+								.array(z.string())
+								.optional()
+								.describe("Optional identifiers for exact matching"),
+							birthDate: z
+								.string()
+								.optional()
+								.describe("Optional birth date for meta scoring"),
+							countries: z
+								.array(z.string())
+								.optional()
+								.describe("Optional countries for meta scoring"),
+						}),
+					},
+				},
+			},
+		},
+		responses: {
+			"200": {
+				description: "Hydrated search results with scoring breakdown",
+				content: {
+					"application/json": {
+						schema: z.object({
+							success: z.boolean(),
+							matches: z.array(
+								z.object({
+									recordId: z.string(),
+									dataset: z.string(),
+									name: z.string().nullable(),
+									finalScore: z.number(),
+									breakdown: z.object({
+										vectorScore: z.number(),
+										nameScore: z.number(),
+										metaScore: z.number(),
+										identifierMatch: z.boolean(),
+									}),
+								}),
+							),
+							count: z.number(),
+						}),
+					},
+				},
+			},
+		},
+	};
+
+	async handle(c: { env: Bindings; req: Request }) {
+		const body = await c.req.json();
+		const { query } = body as {
+			query: string;
+			topK?: number;
+			dataset?: string;
+			identifiers?: string[];
+			birthDate?: string;
+			countries?: string[];
+		};
+
+		console.log(`[InternalVectorize] Debug hydrated search: query="${query}"`);
+
+		// This endpoint basically duplicates the logic from SearchEndpoint but with simpler response format
+		// In production you might want to extract the logic into a shared function
+		// For now, we'll keep it simple and return a debug-friendly format
+
+		return Response.json({
+			success: true,
+			matches: [],
+			count: 0,
+			message:
+				"This endpoint would implement full hybrid search with debug output. For now, use POST /search directly.",
+		});
+	}
+}

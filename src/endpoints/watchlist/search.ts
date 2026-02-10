@@ -4,26 +4,37 @@ import { contentJson } from "chanfana";
 import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import { watchlistTarget } from "./base";
-import { GrokService } from "../../lib/grok-service";
 import { transformWatchlistTarget } from "../../lib/transformers";
+import { parseVectorId } from "../../lib/ofac-vectorize-service";
+import {
+	normalizeIdentifier,
+	bestNameScore,
+	computeMetaScore,
+	computeHybridScore,
+} from "../../lib/matching-utils";
 
 export class SearchEndpoint extends OpenAPIRoute {
 	public schema = {
 		tags: ["Search"],
 		summary:
-			"Semantic search for watchlist targets using Vectorize first, then Grok API as fallback",
+			"Hybrid semantic search for watchlist targets using identifier lookup, vector search, and Jaro-Winkler name similarity",
 		operationId: "searchTargets",
 		request: {
 			body: contentJson(
 				z.object({
-					query: z.string().min(1, "Query string is required"),
-					topK: z.number().int().min(1).max(100).optional().default(10),
+					q: z.string().min(1, "Query string is required"),
+					dataset: z.string().optional(),
+					countries: z.array(z.string()).optional(),
+					birthDate: z.string().optional(),
+					identifiers: z.array(z.string()).optional(),
+					topK: z.number().int().min(1).max(100).optional().default(20),
+					threshold: z.number().min(0).max(1).optional().default(0.8),
 				}),
 			),
 		},
 		responses: {
 			"200": {
-				description: "Search results",
+				description: "Search results with hybrid scoring",
 				...contentJson({
 					success: Boolean,
 					result: z.object({
@@ -31,6 +42,12 @@ export class SearchEndpoint extends OpenAPIRoute {
 							z.object({
 								target: watchlistTarget,
 								score: z.number(),
+								breakdown: z.object({
+									vectorScore: z.number(),
+									nameScore: z.number(),
+									metaScore: z.number(),
+									identifierMatch: z.boolean(),
+								}),
 							}),
 						),
 						count: z.number(),
@@ -67,13 +84,15 @@ export class SearchEndpoint extends OpenAPIRoute {
 	public async handle(c: AppContext) {
 		const data = await this.getValidatedData<typeof this.schema>();
 
-		console.log("[Search] Starting search", {
-			query: data.body.query,
+		console.log("[Search] Starting hybrid search", {
+			q: data.body.q,
 			topK: data.body.topK,
+			threshold: data.body.threshold,
+			hasIdentifiers: !!data.body.identifiers,
 		});
 
 		try {
-			// First, try Vectorize search
+			// Check required bindings
 			if (!c.env.AI) {
 				console.error("[Search] AI binding not available");
 				const error = new ApiException(
@@ -94,9 +113,140 @@ export class SearchEndpoint extends OpenAPIRoute {
 				throw error;
 			}
 
-			console.log("[Search] Generating embedding for query");
+			const prisma = createPrismaClient(c.env.DB);
+			const candidateMap = new Map<
+				string,
+				{
+					target: unknown;
+					vectorScore: number;
+					identifierMatch: boolean;
+					dataset: string;
+				}
+			>();
+
+			// Step A: Exact Identifier Matching
+			if (data.body.identifiers && data.body.identifiers.length > 0) {
+				console.log(
+					"[Search] Step A: Exact identifier lookup for",
+					data.body.identifiers.length,
+					"identifiers",
+				);
+
+				const normalizedIdentifiers = data.body.identifiers
+					.map((id) => normalizeIdentifier(id))
+					.filter((id) => id.length > 0);
+
+				if (normalizedIdentifiers.length > 0) {
+					try {
+						// Query watchlist_identifier table
+						const db = c.env.DB;
+						const placeholders = normalizedIdentifiers
+							.map(() => "?")
+							.join(", ");
+						const identifierMatches = await db
+							.prepare(
+								`SELECT DISTINCT dataset, record_id FROM watchlist_identifier WHERE identifier_norm IN (${placeholders})`,
+							)
+							.bind(...normalizedIdentifiers)
+							.all();
+
+						console.log(
+							"[Search] Found",
+							identifierMatches.results?.length || 0,
+							"identifier matches",
+						);
+
+						if (
+							identifierMatches.results &&
+							identifierMatches.results.length > 0
+						) {
+							// Group by dataset
+							const ofacIds: string[] = [];
+							const csvIds: string[] = [];
+
+							for (const row of identifierMatches.results) {
+								const dataset = (row as { dataset: string }).dataset;
+								const recordId = (row as { record_id: string }).record_id;
+
+								if (dataset === "ofac_sdn") {
+									ofacIds.push(recordId);
+								} else {
+									csvIds.push(recordId);
+								}
+							}
+
+							// Fetch OFAC records
+							if (ofacIds.length > 0) {
+								const ofacRecords = await prisma.ofacSdnEntry.findMany({
+									where: { id: { in: ofacIds } },
+								});
+
+								for (const record of ofacRecords) {
+									// Transform OFAC record to watchlist target format
+									const target = {
+										id: record.id,
+										schema: null,
+										name: record.primaryName,
+										aliases: record.aliases ? JSON.parse(record.aliases) : null,
+										birthDate: record.birthDate,
+										countries: null, // OFAC doesn't have direct countries field
+										addresses: record.addresses
+											? JSON.parse(record.addresses)
+											: null,
+										identifiers: record.identifiers
+											? JSON.parse(record.identifiers)
+											: null,
+										sanctions: null,
+										phones: null,
+										emails: null,
+										programIds: null,
+										dataset: "ofac_sdn",
+										firstSeen: null,
+										lastSeen: null,
+										lastChange: null,
+										createdAt: record.createdAt.toISOString(),
+										updatedAt: record.updatedAt.toISOString(),
+									};
+
+									candidateMap.set(record.id, {
+										target,
+										vectorScore: 0, // Will be updated if also found in vector search
+										identifierMatch: true,
+										dataset: "ofac_sdn",
+									});
+								}
+							}
+
+							// Fetch CSV target records
+							if (csvIds.length > 0) {
+								const csvRecords = await prisma.watchlistTarget.findMany({
+									where: { id: { in: csvIds } },
+								});
+
+								for (const record of csvRecords) {
+									candidateMap.set(record.id, {
+										target: transformWatchlistTarget(record),
+										vectorScore: 0,
+										identifierMatch: true,
+										dataset: record.dataset || "csv",
+									});
+								}
+							}
+						}
+					} catch (identifierError) {
+						console.error(
+							"[Search] Error in identifier lookup:",
+							identifierError,
+						);
+						// Continue with vector search even if identifier lookup fails
+					}
+				}
+			}
+
+			// Step B: Vector Search
+			console.log("[Search] Step B: Generating embedding for query");
 			const queryResponse = (await c.env.AI.run("@cf/baai/bge-base-en-v1.5", {
-				text: [data.body.query],
+				text: [data.body.q],
 			})) as { data: number[][] };
 
 			if (
@@ -116,123 +266,216 @@ export class SearchEndpoint extends OpenAPIRoute {
 				embeddingLength: embedding.length,
 			});
 
+			// Build Vectorize query with optional filters
+			const vectorizeOptions: {
+				topK: number;
+				returnMetadata: true;
+				filter?: VectorizeVectorMetadataFilter;
+			} = {
+				topK: data.body.topK,
+				returnMetadata: true,
+			};
+
+			if (data.body.dataset) {
+				vectorizeOptions.filter = { dataset: data.body.dataset };
+			}
+
 			console.log("[Search] Querying Vectorize");
 			const vectorizeResults = await c.env.WATCHLIST_VECTORIZE.query(
 				embedding,
-				{
-					topK: data.body.topK,
-					returnMetadata: true,
-				},
+				vectorizeOptions,
 			);
 
 			console.log("[Search] Vectorize query completed", {
 				vectorizeMatchesCount: vectorizeResults.matches.length,
 			});
 
-			// If we found matches in Vectorize, return them
-			if (vectorizeResults.matches.length > 0) {
-				const prisma = createPrismaClient(c.env.DB);
-				const targetIds = vectorizeResults.matches.map((m) => m.id);
-				const targets = await prisma.watchlistTarget.findMany({
-					where: {
-						id: { in: targetIds },
-					},
+			// Step C: Rehydrate from D1
+			console.log("[Search] Step C: Rehydrating records from D1");
+
+			const ofacIdsToFetch: string[] = [];
+			const csvIdsToFetch: string[] = [];
+
+			for (const match of vectorizeResults.matches) {
+				const metadata = match.metadata as {
+					recordId?: string;
+					dataset?: string;
+				} | null;
+
+				let recordId: string;
+				let dataset: string;
+
+				if (metadata?.recordId) {
+					recordId = metadata.recordId;
+					dataset = metadata.dataset || "csv";
+				} else {
+					// Fallback: parse vector ID
+					const parsed = parseVectorId(match.id);
+					recordId = parsed.id;
+					dataset = parsed.dataset;
+				}
+
+				// Skip if already in candidates (from identifier match)
+				if (candidateMap.has(recordId)) {
+					// Update vector score
+					const existing = candidateMap.get(recordId)!;
+					existing.vectorScore = match.score || 0;
+					continue;
+				}
+
+				// Queue for fetching
+				if (dataset === "ofac_sdn") {
+					ofacIdsToFetch.push(recordId);
+				} else {
+					csvIdsToFetch.push(recordId);
+				}
+
+				// Store preliminary entry with vector score
+				candidateMap.set(recordId, {
+					target: null, // Will be populated below
+					vectorScore: match.score || 0,
+					identifierMatch: false,
+					dataset,
+				});
+			}
+
+			// Fetch OFAC records
+			if (ofacIdsToFetch.length > 0) {
+				const ofacRecords = await prisma.ofacSdnEntry.findMany({
+					where: { id: { in: ofacIdsToFetch } },
 				});
 
-				const targetMap = new Map(
-					targets.map((t: (typeof targets)[number]) => [t.id, t]),
-				);
-
-				const matches = vectorizeResults.matches
-					.map((match: { id: string; score?: number }) => {
-						const target = targetMap.get(match.id);
-						if (!target) return null;
-
-						return {
-							target: transformWatchlistTarget(target),
-							score: match.score || 0,
+				for (const record of ofacRecords) {
+					const candidate = candidateMap.get(record.id);
+					if (candidate) {
+						candidate.target = {
+							id: record.id,
+							schema: null,
+							name: record.primaryName,
+							aliases: record.aliases ? JSON.parse(record.aliases) : null,
+							birthDate: record.birthDate,
+							countries: null,
+							addresses: record.addresses ? JSON.parse(record.addresses) : null,
+							identifiers: record.identifiers
+								? JSON.parse(record.identifiers)
+								: null,
+							sanctions: null,
+							phones: null,
+							emails: null,
+							programIds: null,
+							dataset: "ofac_sdn",
+							firstSeen: null,
+							lastSeen: null,
+							lastChange: null,
+							createdAt: record.createdAt.toISOString(),
+							updatedAt: record.updatedAt.toISOString(),
 						};
-					})
-					.filter(
-						(
-							m: { target: unknown; score: number } | null,
-						): m is { target: unknown; score: number } => m !== null,
-					);
+					}
+				}
+			}
 
-				console.log("[Search] Search completed successfully from Vectorize", {
-					matchesCount: matches.length,
+			// Fetch CSV target records
+			if (csvIdsToFetch.length > 0) {
+				const csvRecords = await prisma.watchlistTarget.findMany({
+					where: { id: { in: csvIdsToFetch } },
 				});
 
-				return {
-					success: true,
-					result: {
-						matches,
-						count: matches.length,
-					},
-				};
+				for (const record of csvRecords) {
+					const candidate = candidateMap.get(record.id);
+					if (candidate) {
+						candidate.target = transformWatchlistTarget(record);
+					}
+				}
 			}
 
-			// No matches in Vectorize, fallback to Grok API
-			console.log(
-				"[Search] No Vectorize matches found, falling back to Grok API",
-			);
+			// Step D: Hybrid Scoring
+			console.log("[Search] Step D: Computing hybrid scores");
 
-			if (!c.env.GROK_API_KEY) {
-				console.log(
-					"[Search] GROK_API_KEY not configured, returning empty results",
+			const matches: Array<{
+				target: unknown;
+				score: number;
+				breakdown: {
+					vectorScore: number;
+					nameScore: number;
+					metaScore: number;
+					identifierMatch: boolean;
+				};
+			}> = [];
+
+			for (const [_recordId, candidate] of candidateMap.entries()) {
+				if (!candidate.target) continue; // Skip if target not found
+
+				const target = candidate.target as {
+					name: string | null;
+					aliases: string[] | null;
+					birthDate: string | null;
+					countries: string[] | null;
+				};
+
+				// Identifier matches get score override of 1.0
+				if (candidate.identifierMatch) {
+					matches.push({
+						target: candidate.target,
+						score: 1.0,
+						breakdown: {
+							vectorScore: candidate.vectorScore,
+							nameScore: 0,
+							metaScore: 0,
+							identifierMatch: true,
+						},
+					});
+					continue;
+				}
+
+				// Compute name score
+				const nameScore = target.name
+					? bestNameScore(data.body.q, target.name, target.aliases)
+					: 0;
+
+				// Compute meta score
+				const metaScore = computeMetaScore(
+					data.body.birthDate,
+					data.body.countries,
+					target.birthDate,
+					target.countries,
 				);
-				return {
-					success: true,
-					result: {
-						matches: [],
-						count: 0,
+
+				// Compute hybrid score
+				const finalScore = computeHybridScore(
+					candidate.vectorScore,
+					nameScore,
+					metaScore,
+				);
+
+				matches.push({
+					target: candidate.target,
+					score: finalScore,
+					breakdown: {
+						vectorScore: candidate.vectorScore,
+						nameScore,
+						metaScore,
+						identifierMatch: false,
 					},
-				};
+				});
 			}
 
-			const grokService = new GrokService({
-				apiKey: c.env.GROK_API_KEY,
-			});
+			// Filter by threshold and sort by score descending
+			const filteredMatches = matches
+				.filter((m) => m.score >= data.body.threshold)
+				.sort((a, b) => b.score - a.score);
 
-			console.log("[Search] Calling Grok API");
-			const grokResponse = await grokService.queryPEPStatus(data.body.query);
-
-			console.log("[Search] Grok API response received", {
-				hasResponse: !!grokResponse,
-				hasName: !!grokResponse?.name,
-			});
-
-			if (!grokResponse || !grokResponse.name) {
-				console.log("[Search] Grok API returned no usable response");
-				return {
-					success: true,
-					result: {
-						matches: [],
-						count: 0,
-					},
-				};
-			}
-
-			// Convert Grok response to WatchlistTarget format
-			const grokTarget = grokService.convertToWatchlistTarget(
-				grokResponse,
-				data.body.query,
-			);
-
-			console.log("[Search] Search completed successfully from Grok", {
-				targetId: grokTarget.id,
+			console.log("[Search] Search completed successfully", {
+				totalCandidates: candidateMap.size,
+				matchesCount: filteredMatches.length,
+				identifierMatches: matches.filter((m) => m.breakdown.identifierMatch)
+					.length,
 			});
 
 			return {
 				success: true,
 				result: {
-					matches: [
-						{
-							target: grokTarget,
-							score: 0.8, // High confidence score for Grok API results (external match)
-						},
-					],
-					count: 1,
+					matches: filteredMatches,
+					count: filteredMatches.length,
 				},
 			};
 		} catch (error) {

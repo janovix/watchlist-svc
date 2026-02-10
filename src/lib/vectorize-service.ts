@@ -18,6 +18,8 @@ export type VectorizeMetadata = Record<
 /**
  * Compose the text representation for semantic search
  * Concatenates key fields for embedding
+ * Identity-focused: includes name, aliases, identifiers
+ * Excludes noise fields like addresses
  */
 export function composeVectorText(row: WatchlistCSVRow): string {
 	const parts: string[] = [];
@@ -26,21 +28,9 @@ export function composeVectorText(row: WatchlistCSVRow): string {
 	if (row.aliases && row.aliases.length > 0) {
 		parts.push(...row.aliases);
 	}
+	// Add identifiers with ID: prefix for consistency with OFAC
 	if (row.identifiers && row.identifiers.length > 0) {
-		parts.push(...row.identifiers);
-	}
-	if (row.countries && row.countries.length > 0) {
-		parts.push(row.countries.join(", "));
-	}
-	if (row.addresses && row.addresses.length > 0) {
-		parts.push(...row.addresses);
-	}
-	if (row.sanctions && row.sanctions.length > 0) {
-		parts.push(...row.sanctions);
-	}
-	if (row.dataset) parts.push(row.dataset);
-	if (row.programIds && row.programIds.length > 0) {
-		parts.push(...row.programIds);
+		parts.push(...row.identifiers.map((id) => `ID:${id}`));
 	}
 
 	return parts.join(" ").trim();
@@ -48,11 +38,14 @@ export function composeVectorText(row: WatchlistCSVRow): string {
 
 /**
  * Compose metadata for filtering
+ * Enriched with recordId for rehydration in hybrid search
  */
 export function composeVectorMetadata(
 	row: WatchlistCSVRow,
 ): Record<string, string | number | boolean | string[]> {
-	const metadata: Record<string, string | number | boolean | string[]> = {};
+	const metadata: Record<string, string | number | boolean | string[]> = {
+		recordId: row.id, // Add recordId for rehydration
+	};
 
 	if (row.schema) metadata.schema = row.schema;
 	if (row.dataset) metadata.dataset = row.dataset;

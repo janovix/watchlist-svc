@@ -119,3 +119,23 @@ CREATE INDEX IF NOT EXISTS idx_watchlist_ingestion_run_source_type ON watchlist_
 
 -- Watchlist vector state indexes
 CREATE INDEX IF NOT EXISTS idx_watchlist_vector_state_last_indexed_at ON watchlist_vector_state(last_indexed_at);
+
+-- ============================================================================
+-- Watchlist Identifier Domain (NEW - for hybrid search)
+-- ============================================================================
+
+-- Watchlist identifier table - Stores normalized identifiers for exact matching
+-- Used for hybrid search to match documents like passports, RFCs, NITs, etc.
+CREATE TABLE watchlist_identifier (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    dataset TEXT NOT NULL,                  -- e.g., "ofac_sdn", "csv_target"
+    record_id TEXT NOT NULL,                -- FK to ofac_sdn_entry.id or watchlist_target.id
+    identifier_type TEXT,                   -- e.g., "PASSPORT", "RFC", "NIT"
+    identifier_raw TEXT NOT NULL,           -- Original identifier value
+    identifier_norm TEXT NOT NULL,          -- Normalized (uppercase, stripped) for exact lookup
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Watchlist identifier indexes
+CREATE INDEX IF NOT EXISTS idx_watchlist_identifier_norm ON watchlist_identifier(identifier_norm);
+CREATE INDEX IF NOT EXISTS idx_watchlist_identifier_dataset_record ON watchlist_identifier(dataset, record_id);

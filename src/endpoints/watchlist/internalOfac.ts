@@ -13,6 +13,10 @@ import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import type { Bindings } from "../../index";
 import { getCallbackUrl } from "../../lib/ofac-vectorize-service";
+import {
+	normalizeIdentifier,
+	normalizeIdentifierType,
+} from "../../lib/matching-utils";
 
 // =============================================================================
 // Schemas
@@ -105,6 +109,21 @@ export class InternalOfacTruncateEndpoint extends OpenAPIRoute {
 		console.log(
 			`[InternalOfac] Deleted ${countResult} records from ofac_sdn_entry`,
 		);
+
+		// Also truncate watchlist_identifier for ofac_sdn dataset
+		const db = c.env.DB;
+		try {
+			await db
+				.prepare("DELETE FROM watchlist_identifier WHERE dataset = ?")
+				.bind("ofac_sdn")
+				.run();
+			console.log(`[InternalOfac] Deleted identifiers for ofac_sdn dataset`);
+		} catch (e) {
+			console.warn(
+				`[InternalOfac] Failed to delete identifiers (may not exist yet):`,
+				e,
+			);
+		}
 
 		// Update run status to show we're in the inserting phase (if run exists)
 		try {
@@ -293,6 +312,109 @@ export class InternalOfacBatchEndpoint extends OpenAPIRoute {
 					}
 				}
 			}
+		}
+
+		// Insert identifiers into watchlist_identifier table
+		console.log(
+			`[InternalOfac] Extracting and inserting identifiers for ${records.length} records`,
+		);
+		let identifiersInserted = 0;
+
+		try {
+			// Collect all identifiers from all records
+			interface IdentifierToInsert {
+				recordId: string;
+				identifierType: string;
+				identifierRaw: string;
+				identifierNorm: string;
+			}
+
+			const identifiersToInsert: IdentifierToInsert[] = [];
+
+			for (const record of records) {
+				if (!record.identifiers || record.identifiers.length === 0) continue;
+
+				for (const identifier of record.identifiers) {
+					const { type, number } = identifier;
+					if (!number || !number.trim()) continue;
+
+					const identifierNorm = normalizeIdentifier(number);
+					if (!identifierNorm) continue; // Skip if empty after normalization
+
+					const identifierType = type
+						? normalizeIdentifierType(type)
+						: undefined;
+
+					identifiersToInsert.push({
+						recordId: record.id,
+						identifierType: identifierType || "",
+						identifierRaw: number,
+						identifierNorm,
+					});
+				}
+			}
+
+			// Insert identifiers in sub-batches
+			// Each identifier has 5 fields (excluding id and created_at which are auto)
+			// So we can do ~15 identifiers per batch (15 * 5 = 75 params)
+			const IDENTIFIER_BATCH_SIZE = 15;
+
+			for (
+				let i = 0;
+				i < identifiersToInsert.length;
+				i += IDENTIFIER_BATCH_SIZE
+			) {
+				const identifierBatch = identifiersToInsert.slice(
+					i,
+					i + IDENTIFIER_BATCH_SIZE,
+				);
+
+				if (identifierBatch.length === 0) continue;
+
+				try {
+					const values = identifierBatch.map(() => "(?, ?, ?, ?, ?, ?)");
+					const insertIdentifierSql = `
+						INSERT INTO watchlist_identifier (
+							dataset, record_id, identifier_type, identifier_raw, identifier_norm, created_at
+						) VALUES ${values.join(", ")}
+					`;
+
+					const identifierParams: unknown[] = [];
+					for (const id of identifierBatch) {
+						identifierParams.push(
+							"ofac_sdn",
+							id.recordId,
+							id.identifierType,
+							id.identifierRaw,
+							id.identifierNorm,
+							now,
+						);
+					}
+
+					await db
+						.prepare(insertIdentifierSql)
+						.bind(...identifierParams)
+						.run();
+
+					identifiersInserted += identifierBatch.length;
+				} catch (idError) {
+					console.warn(
+						`[InternalOfac] Failed to insert identifier batch:`,
+						idError,
+					);
+					// Continue with next batch even if one fails
+				}
+			}
+
+			console.log(
+				`[InternalOfac] Inserted ${identifiersInserted} identifiers for batch ${batch_number}`,
+			);
+		} catch (identifierError) {
+			console.warn(
+				`[InternalOfac] Error extracting identifiers:`,
+				identifierError,
+			);
+			// Don't fail the whole batch if identifier insertion fails
 		}
 
 		// Update progress (if run exists)

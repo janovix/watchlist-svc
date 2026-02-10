@@ -8,7 +8,7 @@ import type { WatchlistCSVRow } from "../../src/lib/csv-parser";
 
 describe("Vectorize Service", () => {
 	describe("composeVectorText", () => {
-		it("should compose text from all fields", () => {
+		it("should compose identity-focused text from fields", () => {
 			const row: WatchlistCSVRow = {
 				id: "test-id",
 				name: "John Doe",
@@ -33,12 +33,15 @@ describe("Vectorize Service", () => {
 			expect(result).toContain("John Doe");
 			expect(result).toContain("Johnny");
 			expect(result).toContain("JD");
-			expect(result).toContain("passport:123");
-			expect(result).toContain("US, CA");
-			expect(result).toContain("123 Main St");
-			expect(result).toContain("sanction1");
-			expect(result).toContain("test-dataset");
-			expect(result).toContain("program1");
+			// Should include identifiers with ID: prefix
+			expect(result).toContain("ID:passport:123");
+			expect(result).toContain("ID:ssn:456");
+			// Should NOT include countries, addresses, sanctions, dataset, programIds
+			expect(result).not.toContain("US, CA");
+			expect(result).not.toContain("123 Main St");
+			expect(result).not.toContain("sanction1");
+			expect(result).not.toContain("test-dataset");
+			expect(result).not.toContain("program1");
 		});
 
 		it("should handle minimal data", () => {
@@ -113,6 +116,7 @@ describe("Vectorize Service", () => {
 
 			const result = composeVectorMetadata(row);
 
+			expect(result.recordId).toBe("test-id");
 			expect(result.schema).toBe("Person");
 			expect(result.dataset).toBe("test-dataset");
 			expect(result.countries).toEqual(["US", "CA"]);
@@ -142,7 +146,8 @@ describe("Vectorize Service", () => {
 
 			const result = composeVectorMetadata(row);
 
-			expect(result).toEqual({});
+			// Should always include recordId
+			expect(result.recordId).toBe("test-id");
 		});
 	});
 
