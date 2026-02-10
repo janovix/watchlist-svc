@@ -31,19 +31,22 @@ describe("OFAC Vectorize Service", () => {
 	});
 
 	describe("composeOfacVectorText", () => {
-		it("should compose text from all fields", () => {
+		it("should compose identity-focused text from all fields", () => {
 			const entry = createMockEntry();
 			const result = composeOfacVectorText(entry);
 
 			expect(result).toContain("JOHN DOE");
 			expect(result).toContain("Johnny");
 			expect(result).toContain("JD");
-			expect(result).toContain("Born: 1980-01-15");
-			expect(result).toContain("New York, USA");
-			expect(result).toContain("123 Main St, NY");
-			expect(result).toContain("456 Oak Ave, CA");
-			expect(result).toContain("Individual");
-			expect(result).toContain("SDN List");
+			// Should include identifiers with ID: prefix
+			expect(result).toContain("ID:ABC123");
+			// Should NOT include birthDate with "Born:" prefix
+			expect(result).not.toContain("Born:");
+			// Should NOT include birthPlace, addresses, partyType, sourceList
+			expect(result).not.toContain("New York, USA");
+			expect(result).not.toContain("123 Main St");
+			expect(result).not.toContain("Individual");
+			expect(result).not.toContain("SDN List");
 		});
 
 		it("should handle entry with minimal data", () => {
@@ -59,8 +62,9 @@ describe("OFAC Vectorize Service", () => {
 			const result = composeOfacVectorText(entry);
 
 			expect(result).toContain("JOHN DOE");
-			expect(result).toContain("Individual");
-			expect(result).toContain("SDN List");
+			// Should NOT include partyType and sourceList in new version
+			expect(result).not.toContain("Individual");
+			expect(result).not.toContain("SDN List");
 			expect(result).not.toContain("Born:");
 		});
 
@@ -97,18 +101,35 @@ describe("OFAC Vectorize Service", () => {
 			const result = composeOfacVectorText(entry);
 
 			expect(result).toContain("EVIL CORP");
-			expect(result).toContain("Entity");
+			// Entity type should NOT be in text in new version
+			expect(result).not.toContain("Entity");
+		});
+
+		it("should include identifiers with ID: prefix", () => {
+			const entry = createMockEntry({
+				identifiers: JSON.stringify([
+					{ type: "Passport", number: "ABC123" },
+					{ type: "RFC", number: "HEMA-621127" },
+				]),
+			});
+
+			const result = composeOfacVectorText(entry);
+
+			expect(result).toContain("ID:ABC123");
+			expect(result).toContain("ID:HEMA-621127");
 		});
 	});
 
 	describe("composeOfacVectorMetadata", () => {
-		it("should compose metadata from entry", () => {
+		it("should compose enriched metadata from entry", () => {
 			const entry = createMockEntry();
 			const result = composeOfacVectorMetadata(entry);
 
 			expect(result.dataset).toBe("ofac_sdn");
+			expect(result.recordId).toBe("12345");
 			expect(result.partyType).toBe("Individual");
 			expect(result.sourceList).toBe("SDN List");
+			expect(result.birthDate).toBe("1980-01-15");
 		});
 
 		it("should handle different party types", () => {
@@ -116,6 +137,15 @@ describe("OFAC Vectorize Service", () => {
 			const result = composeOfacVectorMetadata(entry);
 
 			expect(result.partyType).toBe("Vessel");
+			expect(result.recordId).toBe("12345");
+		});
+
+		it("should handle missing birthDate", () => {
+			const entry = createMockEntry({ birthDate: null });
+			const result = composeOfacVectorMetadata(entry);
+
+			expect(result.birthDate).toBeUndefined();
+			expect(result.recordId).toBe("12345");
 		});
 	});
 

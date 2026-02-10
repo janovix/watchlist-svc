@@ -37,6 +37,8 @@ import {
 	InternalVectorizeDeleteByDatasetEndpoint,
 	InternalVectorizeIndexBatchEndpoint,
 	InternalVectorizeCompleteEndpoint,
+	InternalVectorizeSearchEndpoint,
+	InternalVectorizeSearchHydratedEndpoint,
 } from "./endpoints/watchlist/internalVectorize";
 import { AdminVectorizeReindexEndpoint } from "./endpoints/watchlist/adminVectorize";
 
@@ -200,6 +202,13 @@ openapi.post(
 	InternalVectorizeIndexBatchEndpoint,
 );
 openapi.post("/internal/vectorize/complete", InternalVectorizeCompleteEndpoint);
+
+// Internal vectorize debug endpoints
+openapi.post("/internal/vectorize/search", InternalVectorizeSearchEndpoint);
+openapi.post(
+	"/internal/vectorize/search-hydrated",
+	InternalVectorizeSearchHydratedEndpoint,
+);
 
 // Sentry is enabled only when SENTRY_DSN environment variable is set.
 // Configure it via wrangler secrets: `wrangler secret put SENTRY_DSN`

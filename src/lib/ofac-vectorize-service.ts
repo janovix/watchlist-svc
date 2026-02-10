@@ -10,10 +10,13 @@ import type { OfacSdnEntry } from "@prisma/client";
 /**
  * Compose the text representation for semantic search embedding.
  * Concatenates key fields from OFAC SDN entry for embedding generation.
+ * Identity-focused: includes name, aliases, and ID-prefixed identifiers.
+ * Excludes noise fields like addresses, birthPlace, partyType, sourceList.
  */
 export function composeOfacVectorText(entry: OfacSdnEntry): string {
 	const parts: string[] = [entry.primaryName];
 
+	// Add aliases
 	if (entry.aliases) {
 		try {
 			const aliases = JSON.parse(entry.aliases) as string[];
@@ -25,26 +28,22 @@ export function composeOfacVectorText(entry: OfacSdnEntry): string {
 		}
 	}
 
-	if (entry.birthDate) {
-		parts.push(`Born: ${entry.birthDate}`);
-	}
-
-	if (entry.birthPlace) {
-		parts.push(entry.birthPlace);
-	}
-
-	if (entry.addresses) {
+	// Add identifiers with ID: prefix
+	if (entry.identifiers) {
 		try {
-			const addresses = JSON.parse(entry.addresses) as string[];
-			if (addresses.length > 0) {
-				parts.push(...addresses);
+			const identifiers = JSON.parse(entry.identifiers) as Array<{
+				type?: string;
+				number?: string;
+			}>;
+			for (const identifier of identifiers) {
+				if (identifier.number) {
+					parts.push(`ID:${identifier.number}`);
+				}
 			}
 		} catch {
-			// Invalid JSON, skip addresses
+			// Invalid JSON, skip identifiers
 		}
 	}
-
-	parts.push(entry.partyType, entry.sourceList);
 
 	return parts.join(" ");
 }
@@ -52,15 +51,23 @@ export function composeOfacVectorText(entry: OfacSdnEntry): string {
 /**
  * Compose metadata for filtering in Vectorize.
  * This metadata is stored alongside the vector and can be used for filtering queries.
+ * Enriched with recordId and birthDate for hybrid search.
  */
 export function composeOfacVectorMetadata(
 	entry: OfacSdnEntry,
 ): Record<string, string | number | boolean | string[]> {
-	return {
+	const metadata: Record<string, string | number | boolean | string[]> = {
 		dataset: "ofac_sdn",
+		recordId: entry.id,
 		partyType: entry.partyType,
 		sourceList: entry.sourceList,
 	};
+
+	if (entry.birthDate) {
+		metadata.birthDate = entry.birthDate;
+	}
+
+	return metadata;
 }
 
 /**
