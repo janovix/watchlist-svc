@@ -47,5 +47,12 @@ describe("Watchlist Base Utilities", () => {
 			const result = serializeJsonField({ key: "value" });
 			expect(result).toBe('{"key":"value"}');
 		});
+
+		it("should return null when JSON.stringify throws (e.g. circular reference)", () => {
+			const circular: Record<string, unknown> = {};
+			circular.self = circular;
+			const result = serializeJsonField(circular);
+			expect(result).toBeNull();
+		});
 	});
 });

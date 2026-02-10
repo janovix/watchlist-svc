@@ -184,10 +184,10 @@ export class InternalOfacBatchEndpoint extends OpenAPIRoute {
 
 	async handle(c: { env: Bindings; req: Request }) {
 		const body = await c.req.json();
-		const { run_id, batch_number, total_batches, records } = body as {
+		const { run_id, batch_number, records } = body as {
 			run_id: number;
 			batch_number: number;
-			total_batches?: number;
+			total_batches?: number; // Optional, not used in new calculation
 			records: OfacRecord[];
 		};
 
@@ -297,26 +297,34 @@ export class InternalOfacBatchEndpoint extends OpenAPIRoute {
 
 		// Update progress (if run exists)
 		const prisma = createPrismaClient(c.env.DB);
-		const percentage = total_batches
-			? Math.round((batch_number / total_batches) * 100)
-			: 0;
 
 		try {
-			// Get current progress to accumulate records processed
+			// Get current progress to accumulate records processed and calculate percentage
 			const currentRun = await prisma.watchlistIngestionRun.findUnique({
 				where: { id: run_id },
-				select: { progressRecordsProcessed: true },
+				select: {
+					progressRecordsProcessed: true,
+					progressTotalEstimate: true,
+				},
 			});
 
 			const totalProcessed =
 				(currentRun?.progressRecordsProcessed ?? 0) + inserted;
+			const totalEstimate = currentRun?.progressTotalEstimate ?? 0;
+
+			// Calculate percentage based on records processed (0-70% for ingestion phase)
+			// We reserve 70-100% for vectorization
+			const ingestionPercentage =
+				totalEstimate > 0
+					? Math.min(70, Math.round((totalProcessed / totalEstimate) * 70))
+					: 0;
 
 			await prisma.watchlistIngestionRun.update({
 				where: { id: run_id },
 				data: {
 					progressPhase: "inserting",
 					progressRecordsProcessed: totalProcessed,
-					progressPercentage: percentage,
+					progressPercentage: ingestionPercentage,
 					progressCurrentBatch: batch_number,
 					progressUpdatedAt: new Date(),
 				},
@@ -480,6 +488,26 @@ export class InternalOfacCompleteEndpoint extends OpenAPIRoute {
 					console.log(
 						`[InternalOfac] Vectorization thread created: ${vectorizationThreadId}`,
 					);
+
+					// Update the run with the vectorize thread ID and phase
+					try {
+						await prisma.watchlistIngestionRun.update({
+							where: { id: run_id },
+							data: {
+								vectorizeThreadId: vectorizationThreadId,
+								progressPhase: "vectorizing",
+								progressUpdatedAt: new Date(),
+							},
+						});
+						console.log(
+							`[InternalOfac] Run ${run_id} updated with vectorize thread ID`,
+						);
+					} catch (updateErr) {
+						console.error(
+							`[InternalOfac] Failed to update run with vectorize thread ID:`,
+							updateErr,
+						);
+					}
 				} else {
 					console.error(
 						`[InternalOfac] Failed to create vectorization thread: ${response.status}`,

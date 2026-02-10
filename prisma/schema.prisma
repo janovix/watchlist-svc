@@ -80,6 +80,9 @@ model WatchlistIngestionRun {
   progressCurrentBatch     Int?      @map("progress_current_batch")
   progressUpdatedAt        DateTime? @map("progress_updated_at")
 
+  // Vectorization thread tracking
+  vectorizeThreadId String? @map("vectorize_thread_id") // ID del thread de vectorización (si aplica)
+
   @@map("watchlist_ingestion_run")
   @@index([status])
   @@index([startedAt(sort: Desc)])

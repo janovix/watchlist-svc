@@ -80,7 +80,9 @@ CREATE TABLE watchlist_ingestion_run (
     progress_total_estimate INTEGER,               -- Estimated total records
     progress_percentage INTEGER,                   -- Completion percentage (0-100)
     progress_current_batch INTEGER,                -- Current batch number
-    progress_updated_at DATETIME                   -- Last progress update timestamp
+    progress_updated_at DATETIME,                  -- Last progress update timestamp
+    -- Vectorization thread tracking
+    vectorize_thread_id TEXT                       -- ID del thread de vectorización (si aplica)
 );
 
 -- ============================================================================
