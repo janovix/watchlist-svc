@@ -1,3 +1,10 @@
+# [1.4.0-rc.11](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.10...v1.4.0-rc.11) (2026-02-10)
+
+
+### Features
+
+* **watchlist:** implement watchlist identifier table and hybrid search logic ([390274f](https://github.com/janovix/watchlist-svc/commit/390274f93dfad6bb6805c812152a3632960a2dad))
+
 # [1.4.0-rc.10](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.9...v1.4.0-rc.10) (2026-02-10)
 
 
