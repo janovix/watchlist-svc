@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	getEnvironmentPrefix,
 	generateSdnXmlKey,
@@ -6,6 +6,7 @@ import {
 	validateR2Config,
 	generatePresignedDownloadUrl,
 	generatePresignedUploadUrl,
+	checkFileExistsInR2,
 	type R2PresignedConfig,
 } from "../../src/lib/r2-presigned";
 
@@ -214,6 +215,67 @@ describe("R2 Presigned URL Utilities", () => {
 			);
 
 			expect(result.url).toContain("X-Amz-Expires=600");
+		});
+	});
+
+	describe("checkFileExistsInR2", () => {
+		const testConfig: R2PresignedConfig = {
+			accountId: "test-account-id",
+			accessKeyId: "test-access-key",
+			secretAccessKey: "test-secret-key",
+			bucketName: "test-bucket",
+		};
+
+		it("should return exists true with size and etag when response is ok", async () => {
+			vi.stubGlobal(
+				"fetch",
+				vi.fn().mockResolvedValue({
+					ok: true,
+					headers: {
+						get: (name: string) => {
+							if (name === "content-length") return "1024";
+							if (name === "etag") return '"abc123"';
+							if (name === "last-modified")
+								return "Mon, 10 Feb 2025 12:00:00 GMT";
+							return null;
+						},
+					},
+				}),
+			);
+
+			const result = await checkFileExistsInR2(testConfig, "test/file.xml");
+
+			expect(result.exists).toBe(true);
+			expect(result.size).toBe(1024);
+			expect(result.etag).toBe('"abc123"');
+			expect(result.lastModified).toEqual(
+				new Date("Mon, 10 Feb 2025 12:00:00 GMT"),
+			);
+
+			vi.unstubAllGlobals();
+		});
+
+		it("should return exists false when response is not ok", async () => {
+			vi.stubGlobal(
+				"fetch",
+				vi.fn().mockResolvedValue({ ok: false, headers: { get: () => null } }),
+			);
+
+			const result = await checkFileExistsInR2(testConfig, "test/missing.xml");
+
+			expect(result.exists).toBe(false);
+
+			vi.unstubAllGlobals();
+		});
+
+		it("should return exists false when fetch throws", async () => {
+			vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network")));
+
+			const result = await checkFileExistsInR2(testConfig, "test/file.xml");
+
+			expect(result.exists).toBe(false);
+
+			vi.unstubAllGlobals();
 		});
 	});
 });

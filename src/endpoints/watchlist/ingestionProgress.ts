@@ -59,6 +59,7 @@ export class IngestionProgressEndpoint extends OpenAPIRoute {
 				progressPercentage: true,
 				progressCurrentBatch: true,
 				progressUpdatedAt: true,
+				vectorizeThreadId: true,
 			},
 		});
 
@@ -69,8 +70,43 @@ export class IngestionProgressEndpoint extends OpenAPIRoute {
 			throw error;
 		}
 
-		// Map status to phase if progress fields are not yet populated
-		const phase = run.progressPhase ?? mapStatusToPhase(run.status);
+		let finalPercentage = run.progressPercentage ?? 0;
+		let phase = run.progressPhase ?? mapStatusToPhase(run.status);
+
+		// Si hay vectorización en progreso, consultar su progreso
+		if (run.vectorizeThreadId && c.env.THREAD_SVC) {
+			try {
+				const threadResponse = await c.env.THREAD_SVC.fetch(
+					`http://thread-svc/threads/${run.vectorizeThreadId}`,
+				);
+
+				if (threadResponse.ok) {
+					const thread = (await threadResponse.json()) as {
+						status: string;
+						progress?: number;
+						phase?: string;
+					};
+
+					// Si vectorización está en progreso, combinar porcentajes
+					if (thread.status === "RUNNING") {
+						const vectorizeProgress = thread.progress ?? 0; // 0-100
+						// Ingestion = 0-70%, Vectorize = 70-100%
+						finalPercentage = 70 + Math.round(vectorizeProgress * 0.3);
+						phase = thread.phase ?? "vectorizing";
+					} else if (thread.status === "COMPLETED") {
+						finalPercentage = 100;
+						phase = "completed";
+					} else if (thread.status === "FAILED") {
+						phase = "vectorize_failed";
+					}
+				}
+			} catch (e) {
+				console.error(
+					"[IngestionProgress] Failed to fetch vectorize thread:",
+					e,
+				);
+			}
+		}
 
 		return {
 			success: true,
@@ -78,7 +114,7 @@ export class IngestionProgressEndpoint extends OpenAPIRoute {
 				phase,
 				recordsProcessed: run.progressRecordsProcessed ?? 0,
 				totalRecordsEstimate: run.progressTotalEstimate ?? 0,
-				percentage: run.progressPercentage ?? 0,
+				percentage: finalPercentage,
 				currentBatch: run.progressCurrentBatch ?? 0,
 				updatedAt: run.progressUpdatedAt?.toISOString() ?? null,
 			},

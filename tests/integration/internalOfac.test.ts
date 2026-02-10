@@ -234,6 +234,12 @@ describe("Internal OFAC Endpoints", () => {
 				source_list: "SDN List",
 			};
 
+			// Update run with total estimate for progress calculation
+			await prisma.watchlistIngestionRun.update({
+				where: { id: testRunId },
+				data: { progressTotalEstimate: 2 },
+			});
+
 			// Send first batch
 			await SELF.fetch("http://local.test/internal/ofac/batch", {
 				method: "POST",
@@ -264,7 +270,8 @@ describe("Internal OFAC Endpoints", () => {
 			});
 			expect(run?.progressRecordsProcessed).toBe(2);
 			expect(run?.progressCurrentBatch).toBe(2);
-			expect(run?.progressPercentage).toBe(100); // 2/2 = 100%
+			// With new calculation: (2/2) * 70% = 70% (ingestion phase max)
+			expect(run?.progressPercentage).toBe(70);
 		});
 	});
 

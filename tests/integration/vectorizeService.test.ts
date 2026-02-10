@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	composeVectorText,
 	composeVectorMetadata,
+	upsertVectors,
 } from "../../src/lib/vectorize-service";
 import type { WatchlistCSVRow } from "../../src/lib/csv-parser";
 
@@ -142,6 +143,37 @@ describe("Vectorize Service", () => {
 			const result = composeVectorMetadata(row);
 
 			expect(result).toEqual({});
+		});
+	});
+
+	describe("upsertVectors", () => {
+		it("should return without calling upsert when vectors array is empty", async () => {
+			const upsert = vi.fn().mockResolvedValue(undefined);
+			const vectorize = {
+				upsert,
+			} as unknown as Parameters<typeof upsertVectors>[0];
+
+			await upsertVectors(vectorize, []);
+
+			expect(upsert).not.toHaveBeenCalled();
+		});
+
+		it("should call upsert with batched vectors and default metadata", async () => {
+			const upsert = vi.fn().mockResolvedValue(undefined);
+			const vectorize = {
+				upsert,
+			} as unknown as Parameters<typeof upsertVectors>[0];
+
+			await upsertVectors(vectorize, [
+				{ id: "v1", values: [0.1, 0.2], metadata: { dataset: "test" } },
+				{ id: "v2", values: [0.3, 0.4] },
+			]);
+
+			expect(upsert).toHaveBeenCalledTimes(1);
+			expect(upsert).toHaveBeenCalledWith([
+				{ id: "v1", values: [0.1, 0.2], metadata: { dataset: "test" } },
+				{ id: "v2", values: [0.3, 0.4], metadata: {} },
+			]);
 		});
 	});
 });
