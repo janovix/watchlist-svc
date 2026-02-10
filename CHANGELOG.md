@@ -1,3 +1,10 @@
+# [1.4.0-rc.10](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.9...v1.4.0-rc.10) (2026-02-10)
+
+
+### Features
+
+* **ingestion:** add vectorization thread tracking to ingestion progress and update calculations ([7b93fca](https://github.com/janovix/watchlist-svc/commit/7b93fca55ada01bc03fd62ef0ad12b908930e018))
+
 # [1.4.0-rc.9](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.8...v1.4.0-rc.9) (2026-02-10)
 
 
