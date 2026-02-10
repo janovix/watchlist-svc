@@ -1,3 +1,10 @@
+# [1.4.0-rc.9](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.8...v1.4.0-rc.9) (2026-02-10)
+
+
+### Features
+
+* **r2-presigned:** add generatePresignedDownloadUrl function and integrate into ingestion endpoints ([94fb94a](https://github.com/janovix/watchlist-svc/commit/94fb94a9feff85c48cdd5d9f436638dd10f25dda))
+
 # [1.4.0-rc.8](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.7...v1.4.0-rc.8) (2026-02-09)
 
 
