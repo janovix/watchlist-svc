@@ -98,6 +98,47 @@ export async function generatePresignedUploadUrl(
 }
 
 /**
+ * Generate a presigned URL for downloading a file from R2
+ *
+ * @param config R2 configuration with credentials
+ * @param key The object key (path) in the bucket
+ * @param expiresInSeconds How long the URL should be valid (default: 2 hours)
+ * @returns Presigned URL and metadata
+ */
+export async function generatePresignedDownloadUrl(
+	config: R2PresignedConfig,
+	key: string,
+	expiresInSeconds: number = 7200,
+): Promise<PresignedUrlResult> {
+	const endpoint = getR2Endpoint(config.accountId);
+
+	// Build URL with X-Amz-Expires BEFORE signing
+	const urlObj = new URL(`${endpoint}/${config.bucketName}/${key}`);
+	urlObj.searchParams.set("X-Amz-Expires", expiresInSeconds.toString());
+
+	const expiresAt = new Date(Date.now() + expiresInSeconds * 1000);
+
+	// Use AwsV4Signer with GET method for downloads
+	const signer = new AwsV4Signer({
+		accessKeyId: config.accessKeyId,
+		secretAccessKey: config.secretAccessKey,
+		service: "s3",
+		region: "auto",
+		method: "GET",
+		url: urlObj.toString(),
+		signQuery: true,
+	});
+
+	const signed = await signer.sign();
+
+	return {
+		url: signed.url.toString(),
+		key,
+		expiresAt,
+	};
+}
+
+/**
  * Result of checking if a file exists in R2
  */
 export interface R2FileInfo {

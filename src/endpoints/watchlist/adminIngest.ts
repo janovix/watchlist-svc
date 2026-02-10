@@ -5,6 +5,10 @@ import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import { watchlistIngestionRun } from "./base";
 import { transformIngestionRun } from "../../lib/transformers";
+import {
+	generatePresignedDownloadUrl,
+	validateR2Config,
+} from "../../lib/r2-presigned";
 
 export class AdminIngestEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -226,10 +230,27 @@ export class AdminIngestSdnXmlEndpoint extends OpenAPIRoute {
 		// Build callback URL for container to call back to watchlist-svc
 		const callbackUrl = new URL(c.req.url).origin + "/internal/ofac";
 
+		// Generate presigned download URL for container to fetch the file
+		const r2Config = validateR2Config(c.env);
+		let r2PresignedUrl: string | undefined;
+		let r2UrlExpiresAt: string | undefined;
+
+		if (r2Config) {
+			const presignedDownload = await generatePresignedDownloadUrl(
+				r2Config,
+				validatedData.body.r2Key,
+				7200, // 2 hours expiration
+			);
+			r2PresignedUrl = presignedDownload.url;
+			r2UrlExpiresAt = presignedDownload.expiresAt.toISOString();
+		}
+
 		const threadPayload = {
 			task_type: "ofac_parse",
 			job_params: {
 				r2_key: validatedData.body.r2Key,
+				r2_presigned_url: r2PresignedUrl,
+				r2_url_expires_at: r2UrlExpiresAt,
 				callback_url: callbackUrl,
 				truncate_before: true,
 				run_id: run.id,
