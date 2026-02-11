@@ -160,6 +160,30 @@ describe("matching-utils", () => {
 			const score = bestNameScore("Juan Perez", "Juan Perez Lopez", []);
 			expect(score).toBeGreaterThan(0.8);
 		});
+
+		it("should handle name reordering with token-sorted matching", () => {
+			// "Joaquin GUZMAN LOERA" vs "GUZMAN LOERA Joaquin" should score high
+			const score = bestNameScore(
+				"Joaquin GUZMAN LOERA",
+				"GUZMAN LOERA Joaquin",
+				null,
+			);
+			expect(score).toBe(1.0); // Tokens are the same, just reordered
+		});
+
+		it("should handle partial name reordering", () => {
+			// "LOERA GUZMAN" vs "GUZMAN LOERA" should score high with token-sorted
+			const score = bestNameScore("LOERA GUZMAN", "GUZMAN LOERA", null);
+			expect(score).toBe(1.0);
+		});
+
+		it("should still find best match with reordered aliases", () => {
+			const score = bestNameScore("Carlos Juan Perez", "Juan Carlos Perez", [
+				"Perez Juan Carlos",
+				"JC Perez",
+			]);
+			expect(score).toBe(1.0); // Should match via token-sorted
+		});
 	});
 
 	describe("computeMetaScore", () => {
@@ -210,12 +234,12 @@ describe("matching-utils", () => {
 	});
 
 	describe("computeHybridScore", () => {
-		it("should apply correct weights: 0.55v + 0.35n + 0.10m", () => {
+		it("should apply correct weights: 0.35v + 0.55n + 0.10m", () => {
 			const score = computeHybridScore(1.0, 1.0, 1.0);
 			expect(score).toBe(1.0);
 
 			const score2 = computeHybridScore(0.9, 0.8, 0.5);
-			const expected = 0.55 * 0.9 + 0.35 * 0.8 + 0.1 * 0.5;
+			const expected = 0.35 * 0.9 + 0.55 * 0.8 + 0.1 * 0.5;
 			expect(score2).toBeCloseTo(expected);
 		});
 
@@ -224,12 +248,12 @@ describe("matching-utils", () => {
 			expect(score).toBe(0.0);
 		});
 
-		it("should prioritize vector score (55%)", () => {
+		it("should prioritize name score (55%)", () => {
 			const score1 = computeHybridScore(1.0, 0.0, 0.0);
-			expect(score1).toBe(0.55);
+			expect(score1).toBe(0.35);
 
 			const score2 = computeHybridScore(0.0, 1.0, 0.0);
-			expect(score2).toBe(0.35);
+			expect(score2).toBe(0.55);
 
 			const score3 = computeHybridScore(0.0, 0.0, 1.0);
 			expect(score3).toBe(0.1);
@@ -238,11 +262,20 @@ describe("matching-utils", () => {
 		it("should handle edge case scenarios", () => {
 			// High vector, low name/meta
 			const score1 = computeHybridScore(0.95, 0.3, 0.0);
-			expect(score1).toBeCloseTo(0.55 * 0.95 + 0.35 * 0.3);
+			expect(score1).toBeCloseTo(0.35 * 0.95 + 0.55 * 0.3);
 
 			// Low vector, high name/meta
 			const score2 = computeHybridScore(0.3, 0.95, 1.0);
-			expect(score2).toBeCloseTo(0.55 * 0.3 + 0.35 * 0.95 + 0.1 * 1.0);
+			expect(score2).toBeCloseTo(0.35 * 0.3 + 0.55 * 0.95 + 0.1 * 1.0);
+		});
+
+		it("should allow GUZMAN LOERA case to pass threshold 0.7", () => {
+			// nameScore = 1.0 (exact match after normalization)
+			// vectorScore = 0.65 (estimated from real case)
+			// metaScore = 0 (no metadata provided)
+			const score = computeHybridScore(0.65, 1.0, 0.0);
+			expect(score).toBeCloseTo(0.35 * 0.65 + 0.55 * 1.0); // ~0.7775
+			expect(score).toBeGreaterThan(0.7); // Should pass threshold
 		});
 	});
 });
