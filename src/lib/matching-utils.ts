@@ -124,6 +124,7 @@ export function jaroWinkler(s1: string, s2: string, prefixScale = 0.1): number {
 /**
  * Find the best name score by comparing query against name and all aliases
  * Uses Jaro-Winkler similarity with normalized strings
+ * Includes token-sorted comparison to handle name reordering (e.g., "Joaquin GUZMAN" vs "GUZMAN Joaquin")
  *
  * @param query - Search query name
  * @param name - Primary name
@@ -138,15 +139,22 @@ export function bestNameScore(
 	const normalizedQuery = normalizeName(query);
 	const normalizedName = normalizeName(name);
 
+	// Full-string Jaro-Winkler
 	let maxScore = jaroWinkler(normalizedQuery, normalizedName);
+
+	// Token-sorted Jaro-Winkler (handles name reordering)
+	const sortedQuery = normalizedQuery.split(" ").sort().join(" ");
+	const sortedName = normalizedName.split(" ").sort().join(" ");
+	const tokenSortedScore = jaroWinkler(sortedQuery, sortedName);
+	maxScore = Math.max(maxScore, tokenSortedScore);
 
 	if (aliases && aliases.length > 0) {
 		for (const alias of aliases) {
 			const normalizedAlias = normalizeName(alias);
-			const score = jaroWinkler(normalizedQuery, normalizedAlias);
-			if (score > maxScore) {
-				maxScore = score;
-			}
+			const fullScore = jaroWinkler(normalizedQuery, normalizedAlias);
+			const sortedAlias = normalizedAlias.split(" ").sort().join(" ");
+			const tokenScore = jaroWinkler(sortedQuery, sortedAlias);
+			maxScore = Math.max(maxScore, fullScore, tokenScore);
 		}
 	}
 
@@ -197,7 +205,12 @@ export function computeMetaScore(
 
 /**
  * Compute hybrid score from vector, name, and meta scores
- * Formula: 0.55 * vectorScore + 0.35 * nameScore + 0.10 * metaScore
+ * Formula: 0.35 * vectorScore + 0.55 * nameScore + 0.10 * metaScore
+ *
+ * Name score is the primary signal (55%), aligned with industry best practices
+ * where name matching has the highest weight in sanctions screening.
+ * Vector score provides semantic recall (35%) for name variations.
+ * Metadata score provides additional confidence boost (10%).
  *
  * @param vectorScore - Cosine similarity from Vectorize (0-1)
  * @param nameScore - Jaro-Winkler name similarity (0-1)
@@ -209,5 +222,5 @@ export function computeHybridScore(
 	nameScore: number,
 	metaScore: number,
 ): number {
-	return 0.55 * vectorScore + 0.35 * nameScore + 0.1 * metaScore;
+	return 0.35 * vectorScore + 0.55 * nameScore + 0.1 * metaScore;
 }

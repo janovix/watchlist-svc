@@ -28,7 +28,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 					birthDate: z.string().optional(),
 					identifiers: z.array(z.string()).optional(),
 					topK: z.number().int().min(1).max(100).optional().default(20),
-					threshold: z.number().min(0).max(1).optional().default(0.8),
+					threshold: z.number().min(0).max(1).optional().default(0.7),
 				}),
 			),
 		},
@@ -446,6 +446,17 @@ export class SearchEndpoint extends OpenAPIRoute {
 					nameScore,
 					metaScore,
 				);
+
+				// Log candidate score for diagnostics
+				console.log("[Search] Candidate score", {
+					recordId: _recordId,
+					name: target.name,
+					vectorScore: candidate.vectorScore,
+					nameScore,
+					metaScore,
+					hybridScore: finalScore,
+					passesThreshold: finalScore >= data.body.threshold,
+				});
 
 				matches.push({
 					target: candidate.target,
