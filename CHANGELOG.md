@@ -1,3 +1,10 @@
+# [1.4.0-rc.12](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.11...v1.4.0-rc.12) (2026-02-12)
+
+
+### Features
+
+* **peps:** implement PEP search results handling with SSE support and caching ([f2884e5](https://github.com/janovix/watchlist-svc/commit/f2884e5ed25d5050ba3933ae364f82bdc39d478e))
+
 # [1.4.0-rc.11](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.10...v1.4.0-rc.11) (2026-02-10)
 
 
