@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS watchlist_vector_state;
 DROP TABLE IF EXISTS watchlist_ingestion_run;
 DROP TABLE IF EXISTS watchlist_target;
 DROP TABLE IF EXISTS ofac_sdn_entry;
+DROP TABLE IF EXISTS sat_69b_entry;
 
 -- ============================================================================
 -- Original Watchlist Domain (CSV-based)
@@ -139,3 +140,43 @@ CREATE TABLE watchlist_identifier (
 -- Watchlist identifier indexes
 CREATE INDEX IF NOT EXISTS idx_watchlist_identifier_norm ON watchlist_identifier(identifier_norm);
 CREATE INDEX IF NOT EXISTS idx_watchlist_identifier_dataset_record ON watchlist_identifier(dataset, record_id);
+
+-- ============================================================================
+-- SAT 69-B Domain (NEW - CSV-based)
+-- ============================================================================
+
+-- SAT 69-B Entry table - Listado completo de contribuyentes Art. 69-B del CFF
+-- Contains data from Mexican tax authority (SAT) about taxpayers with presumably non-existent operations
+-- Note: Search is via Vectorize, so no secondary indexes needed (only PK)
+CREATE TABLE sat_69b_entry (
+    id TEXT PRIMARY KEY NOT NULL,              -- RFC (used as unique identifier)
+    row_number INTEGER,                         -- Original row number from CSV
+    rfc TEXT NOT NULL,                          -- RFC del contribuyente (tax ID)
+    taxpayer_name TEXT NOT NULL,               -- Nombre del Contribuyente
+    taxpayer_status TEXT NOT NULL,             -- Situacion: Presunto, Desvirtuado, Definitivo, Sentencia Favorable
+    -- Presumption phase (Phase 1)
+    presumption_sat_notice TEXT,               -- Numero y fecha de oficio global de presuncion SAT
+    presumption_sat_date TEXT,                 -- Publicacion pagina SAT presuntos
+    presumption_dof_notice TEXT,               -- Numero y fecha de oficio global de presuncion DOF
+    presumption_dof_date TEXT,                 -- Publicacion DOF presuntos
+    -- Rebuttal phase (Phase 2)
+    rebuttal_sat_notice TEXT,                  -- Numero y fecha de oficio global de contribuyentes que desvirtuaron SAT
+    rebuttal_sat_date TEXT,                    -- Publicacion pagina SAT desvirtuados
+    rebuttal_dof_notice TEXT,                  -- Numero y fecha de oficio global de contribuyentes que desvirtuaron DOF
+    rebuttal_dof_date TEXT,                    -- Publicacion DOF desvirtuados
+    -- Definitive phase (Phase 3)
+    definitive_sat_notice TEXT,                -- Numero y fecha de oficio global de definitivos SAT
+    definitive_sat_date TEXT,                  -- Publicacion pagina SAT definitivos
+    definitive_dof_notice TEXT,                -- Numero y fecha de oficio global de definitivos DOF
+    definitive_dof_date TEXT,                  -- Publicacion DOF definitivos
+    -- Favorable sentence phase (Phase 4)
+    favorable_sat_notice TEXT,                 -- Numero y fecha de oficio global de sentencia favorable SAT
+    favorable_sat_date TEXT,                   -- Publicacion pagina SAT sentencia favorable
+    favorable_dof_notice TEXT,                 -- Numero y fecha de oficio global de sentencia favorable DOF
+    favorable_dof_date TEXT,                   -- Publicacion DOF sentencia favorable
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- SAT 69-B Entry indexes: None - search is via Vectorize, lookup by PK and RFC only
+CREATE INDEX IF NOT EXISTS idx_sat_69b_entry_rfc ON sat_69b_entry(rfc);

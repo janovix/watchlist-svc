@@ -48,6 +48,17 @@ export function generateSdnXmlKey(environment: string | undefined): string {
 }
 
 /**
+ * Generate a unique key for SAT 69-B CSV storage
+ * Format: {env}/sat-69b/{timestamp}-{random}.csv
+ */
+export function generateSat69bCsvKey(environment: string | undefined): string {
+	const envPrefix = getEnvironmentPrefix(environment);
+	const timestamp = Date.now();
+	const random = Math.random().toString(36).substring(2, 8);
+	return `${envPrefix}/sat-69b/${timestamp}-${random}.csv`;
+}
+
+/**
  * Get the R2 S3-compatible endpoint URL
  */
 export function getR2Endpoint(accountId: string): string {

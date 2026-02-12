@@ -171,6 +171,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 							// Group by dataset
 							const ofacIds: string[] = [];
 							const csvIds: string[] = [];
+							const sat69bIds: string[] = [];
 
 							for (const row of identifierMatches.results) {
 								const dataset = (row as { dataset: string }).dataset;
@@ -178,6 +179,8 @@ export class SearchEndpoint extends OpenAPIRoute {
 
 								if (dataset === "ofac_sdn") {
 									ofacIds.push(recordId);
+								} else if (dataset === "sat_69b") {
+									sat69bIds.push(recordId);
 								} else {
 									csvIds.push(recordId);
 								}
@@ -221,6 +224,44 @@ export class SearchEndpoint extends OpenAPIRoute {
 										vectorScore: 0, // Will be updated if also found in vector search
 										identifierMatch: true,
 										dataset: "ofac_sdn",
+									});
+								}
+							}
+
+							// Fetch SAT 69-B records
+							if (sat69bIds.length > 0) {
+								const sat69bRecords = await prisma.sat69bEntry.findMany({
+									where: { id: { in: sat69bIds } },
+								});
+
+								for (const record of sat69bRecords) {
+									// Transform SAT 69-B record to watchlist target format
+									const target = {
+										id: record.id,
+										schema: null,
+										name: record.taxpayerName,
+										aliases: null,
+										birthDate: null,
+										countries: ["MX"], // SAT 69-B is Mexico-specific
+										addresses: null,
+										identifiers: [{ type: "RFC", number: record.rfc }],
+										sanctions: [record.taxpayerStatus],
+										phones: null,
+										emails: null,
+										programIds: null,
+										dataset: "sat_69b",
+										firstSeen: null,
+										lastSeen: null,
+										lastChange: null,
+										createdAt: record.createdAt.toISOString(),
+										updatedAt: record.updatedAt.toISOString(),
+									};
+
+									candidateMap.set(record.id, {
+										target,
+										vectorScore: 0,
+										identifierMatch: true,
+										dataset: "sat_69b",
 									});
 								}
 							}
@@ -303,6 +344,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 
 			const ofacIdsToFetch: string[] = [];
 			const csvIdsToFetch: string[] = [];
+			const sat69bIdsToFetch: string[] = [];
 
 			for (const match of vectorizeResults.matches) {
 				const metadata = match.metadata as {
@@ -334,6 +376,8 @@ export class SearchEndpoint extends OpenAPIRoute {
 				// Queue for fetching
 				if (dataset === "ofac_sdn") {
 					ofacIdsToFetch.push(recordId);
+				} else if (dataset === "sat_69b") {
+					sat69bIdsToFetch.push(recordId);
 				} else {
 					csvIdsToFetch.push(recordId);
 				}
@@ -372,6 +416,39 @@ export class SearchEndpoint extends OpenAPIRoute {
 							emails: null,
 							programIds: null,
 							dataset: "ofac_sdn",
+							firstSeen: null,
+							lastSeen: null,
+							lastChange: null,
+							createdAt: record.createdAt.toISOString(),
+							updatedAt: record.updatedAt.toISOString(),
+						};
+					}
+				}
+			}
+
+			// Fetch SAT 69-B records
+			if (sat69bIdsToFetch.length > 0) {
+				const sat69bRecords = await prisma.sat69bEntry.findMany({
+					where: { id: { in: sat69bIdsToFetch } },
+				});
+
+				for (const record of sat69bRecords) {
+					const candidate = candidateMap.get(record.id);
+					if (candidate) {
+						candidate.target = {
+							id: record.id,
+							schema: null,
+							name: record.taxpayerName,
+							aliases: null,
+							birthDate: null,
+							countries: ["MX"], // SAT 69-B is Mexico-specific
+							addresses: null,
+							identifiers: [{ type: "RFC", number: record.rfc }],
+							sanctions: [record.taxpayerStatus],
+							phones: null,
+							emails: null,
+							programIds: null,
+							dataset: "sat_69b",
 							firstSeen: null,
 							lastSeen: null,
 							lastChange: null,
