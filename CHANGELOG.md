@@ -1,3 +1,10 @@
+# [1.4.0-rc.13](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.12...v1.4.0-rc.13) (2026-02-12)
+
+
+### Features
+
+* **peps:** add PEP_CACHE binding and enable durable objects in wrangler configuration ([cd48340](https://github.com/janovix/watchlist-svc/commit/cd48340996a8915598cafc609f92527bdae99ed1))
+
 # [1.4.0-rc.12](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.11...v1.4.0-rc.12) (2026-02-12)
 
 
