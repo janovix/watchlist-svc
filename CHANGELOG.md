@@ -1,3 +1,10 @@
+# [1.4.0-rc.15](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.14...v1.4.0-rc.15) (2026-02-12)
+
+
+### Features
+
+* **sat69b:** add SAT 69-B entry table and related ingestion, search, and vectorization functionality ([daf8966](https://github.com/janovix/watchlist-svc/commit/daf89667ac66a07f9ab66e1b47f7e52b1d87a76c))
+
 # [1.4.0-rc.14](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.13...v1.4.0-rc.14) (2026-02-12)
 
 
