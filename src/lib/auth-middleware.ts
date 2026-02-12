@@ -173,6 +173,7 @@ export function authMiddleware(options?: {
 		user?: AuthUser;
 		token?: string;
 		tokenPayload?: AuthTokenPayload;
+		organization?: { id: string } | null;
 	};
 }> {
 	const { optional = false } = options ?? {};
@@ -186,6 +187,7 @@ export function authMiddleware(options?: {
 				email: "test@example.com",
 				name: "Test User",
 				role: "admin",
+				organizationId: "test-org-id",
 			};
 			c.set("user", {
 				id: mockPayload.sub,
@@ -193,6 +195,7 @@ export function authMiddleware(options?: {
 				name: mockPayload.name,
 			});
 			c.set("tokenPayload", mockPayload);
+			c.set("organization", { id: "test-org-id" });
 			return next();
 		}
 
@@ -246,6 +249,12 @@ export function authMiddleware(options?: {
 			c.set("user", user);
 			c.set("token", token);
 			c.set("tokenPayload", payload);
+
+			// Set organization context from JWT for subscription/license checks
+			const organization = payload.organizationId
+				? { id: payload.organizationId }
+				: null;
+			c.set("organization", organization);
 
 			return next();
 		} catch (error) {
@@ -347,6 +356,7 @@ export function adminMiddleware(): MiddlewareHandler<{
 		user?: AuthUser;
 		token?: string;
 		tokenPayload?: AuthTokenPayload;
+		organization?: { id: string } | null;
 	};
 }> {
 	return async (c, next) => {

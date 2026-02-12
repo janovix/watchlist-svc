@@ -13,6 +13,7 @@ import {
 	computeHybridScore,
 } from "../../lib/matching-utils";
 import { createHash } from "crypto";
+import { createUsageRightsClient } from "../../lib/usage-rights-client";
 
 export class SearchEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -100,6 +101,39 @@ export class SearchEndpoint extends OpenAPIRoute {
 		});
 
 		try {
+			// Check usage rights: gate-and-meter for watchlist queries
+			const organization = c.get("organization");
+			if (!organization) {
+				const error = new ApiException("Organization context required");
+				error.status = 403;
+				error.code = 403;
+				throw error;
+			}
+
+			const usageRights = createUsageRightsClient(c.env);
+			const gateResult = await usageRights.gate(
+				organization.id,
+				"watchlistQueries",
+			);
+
+			if (!gateResult.allowed) {
+				return c.json(
+					{
+						success: false,
+						error: gateResult.error ?? "usage_limit_exceeded",
+						code: "USAGE_LIMIT_EXCEEDED",
+						upgradeRequired: true,
+						metric: "watchlistQueries",
+						used: gateResult.used,
+						limit: gateResult.limit,
+						entitlementType: gateResult.entitlementType,
+						message:
+							"Daily watchlist query limit reached. Please upgrade or try again tomorrow.",
+					},
+					403,
+				);
+			}
+
 			// Check required bindings
 			if (!c.env.AI) {
 				console.error("[Search] AI binding not available");
