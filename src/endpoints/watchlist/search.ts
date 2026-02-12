@@ -545,26 +545,28 @@ export class SearchEndpoint extends OpenAPIRoute {
 						},
 					};
 
-					// Fire-and-forget: don't await
-					c.env.THREAD_SVC.fetch("http://thread-svc/threads", {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify(threadPayload),
-					})
-						.then((response) => {
-							if (response.ok) {
-								console.log(
-									`[Search] PEP search thread created for query "${data.body.q}"`,
-								);
-							} else {
-								console.error(
-									`[Search] Failed to create PEP thread: ${response.status}`,
-								);
-							}
+					// Fire-and-forget: use waitUntil to prevent cancellation
+					c.executionCtx.waitUntil(
+						c.env.THREAD_SVC.fetch("http://thread-svc/threads", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify(threadPayload),
 						})
-						.catch((error) => {
-							console.error(`[Search] Error creating PEP thread:`, error);
-						});
+							.then((response) => {
+								if (response.ok) {
+									console.log(
+										`[Search] PEP search thread created for query "${data.body.q}"`,
+									);
+								} else {
+									console.error(
+										`[Search] Failed to create PEP thread: ${response.status}`,
+									);
+								}
+							})
+							.catch((error) => {
+								console.error(`[Search] Error creating PEP thread:`, error);
+							}),
+					);
 
 					pepSearchInfo = {
 						searchId: pepSearchId,
