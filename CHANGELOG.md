@@ -1,3 +1,10 @@
+# [1.4.0-rc.16](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.15...v1.4.0-rc.16) (2026-02-12)
+
+
+### Features
+
+* **usage-rights:** implement usage rights client and integrate into watchlist endpoints ([52fabcd](https://github.com/janovix/watchlist-svc/commit/52fabcd41e158a5a0b628236d3fb1d1f1bf13e6c))
+
 # [1.4.0-rc.15](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.14...v1.4.0-rc.15) (2026-02-12)
 
 
