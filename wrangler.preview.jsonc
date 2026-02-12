@@ -48,7 +48,6 @@
 			{
 				"name": "PEP_EVENTS_DO",
 				"class_name": "PepEventsDO",
-				"script_name": "watchlist-svc-preview",
 			},
 		],
 	},

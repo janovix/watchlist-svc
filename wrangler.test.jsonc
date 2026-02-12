@@ -18,6 +18,10 @@
 			"binding": "WATCHLIST_KV",
 			"id": "54315aed6339476a82f36c31ec23382c",
 		},
+		{
+			"binding": "PEP_CACHE",
+			"id": "78b4f30524ca47dfac5a7e3aa9395a4b",
+		},
 	],
 	"vectorize": [
 		{
