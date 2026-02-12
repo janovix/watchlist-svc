@@ -10,6 +10,7 @@ import { watchlistIngestionRun } from "./base";
 import { transformIngestionRun } from "../../lib/transformers";
 import {
 	generateSdnXmlKey,
+	generateSat69bCsvKey,
 	generatePresignedUploadUrl,
 	generatePresignedDownloadUrl,
 	validateR2Config,
@@ -17,12 +18,13 @@ import {
 } from "../../lib/r2-presigned";
 
 // Allowed source types for ingestion
-const SOURCE_TYPES = ["sdn_xml"] as const;
+const SOURCE_TYPES = ["sdn_xml", "sat_69b_csv"] as const;
 type SourceType = (typeof SOURCE_TYPES)[number];
 
 // Content types by source type
 const CONTENT_TYPES: Record<SourceType, string[]> = {
 	sdn_xml: ["application/xml", "text/xml"],
+	sat_69b_csv: ["text/csv", "application/csv", "text/plain"],
 };
 
 // Presigned URL expiration time (10 minutes)
@@ -144,6 +146,10 @@ Initiates a new ingestion process and returns a presigned URL for direct file up
 			case "sdn_xml":
 				r2Key = generateSdnXmlKey(c.env.ENVIRONMENT);
 				contentTypes = CONTENT_TYPES.sdn_xml;
+				break;
+			case "sat_69b_csv":
+				r2Key = generateSat69bCsvKey(c.env.ENVIRONMENT);
+				contentTypes = CONTENT_TYPES.sat_69b_csv;
 				break;
 			default: {
 				const error = new ApiException(
@@ -356,7 +362,24 @@ This will verify the file exists in R2 and queue the ingestion job for processin
 		}
 
 		// Build callback URL for container to call back to watchlist-svc
-		const callbackUrl = new URL(c.req.url).origin + "/internal/ofac";
+		// Determine callback URL based on source type
+		let callbackUrl: string;
+		let taskType: string;
+
+		switch (run.sourceType) {
+			case "sdn_xml":
+				callbackUrl = new URL(c.req.url).origin + "/internal/ofac";
+				taskType = "ofac_parse";
+				break;
+			case "sat_69b_csv":
+				callbackUrl = new URL(c.req.url).origin + "/internal/sat69b";
+				taskType = "sat_69b_parse";
+				break;
+			default:
+				callbackUrl = new URL(c.req.url).origin + "/internal/ofac";
+				taskType = "ofac_parse";
+				break;
+		}
 
 		// Generate presigned download URL for container to fetch the file
 		const r2Config = validateR2Config(c.env);
@@ -375,7 +398,7 @@ This will verify the file exists in R2 and queue the ingestion job for processin
 
 		// Create thread in thread-svc
 		const threadPayload = {
-			task_type: "ofac_parse",
+			task_type: taskType,
 			job_params: {
 				r2_key: r2Key,
 				r2_presigned_url: r2PresignedUrl,

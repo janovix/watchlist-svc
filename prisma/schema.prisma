@@ -109,8 +109,8 @@ model WatchlistVectorState {
 /// Used for hybrid search to match documents like passports, RFCs, NITs, etc.
 model WatchlistIdentifier {
   id             Int      @id @default(autoincrement())
-  dataset        String   // e.g., "ofac_sdn", "csv_target"
-  recordId       String   @map("record_id") // FK to ofac_sdn_entry.id or watchlist_target.id
+  dataset        String   // e.g., "ofac_sdn", "csv_target", "sat_69b"
+  recordId       String   @map("record_id") // FK to ofac_sdn_entry.id, watchlist_target.id, or sat_69b_entry.id
   identifierType String?  @map("identifier_type") // e.g., "PASSPORT", "RFC", "NIT"
   identifierRaw  String   @map("identifier_raw") // Original identifier value
   identifierNorm String   @map("identifier_norm") // Normalized (uppercase, stripped) for exact lookup
@@ -119,4 +119,45 @@ model WatchlistIdentifier {
   @@index([identifierNorm], name: "idx_watchlist_identifier_norm")
   @@index([dataset, recordId], name: "idx_watchlist_identifier_dataset_record")
   @@map("watchlist_identifier")
+}
+
+/// SAT 69-B Entry - Listado completo de contribuyentes Art. 69-B del CFF
+/// Contains data from Mexican tax authority (SAT) about taxpayers with presumably non-existent operations
+/// Note: Search is via Vectorize, so no secondary indexes needed (only PK and RFC)
+model Sat69bEntry {
+  id          String   @id // RFC (used as unique identifier)
+  rowNumber   Int?     @map("row_number") // Original row number from CSV
+  rfc         String   // RFC del contribuyente (tax ID)
+  taxpayerName String  @map("taxpayer_name") // Nombre del Contribuyente
+  taxpayerStatus String @map("taxpayer_status") // Situacion: Presunto, Desvirtuado, Definitivo, Sentencia Favorable
+  
+  // Presumption phase (Phase 1)
+  presumptionSatNotice String? @map("presumption_sat_notice") // Numero y fecha de oficio global de presuncion SAT
+  presumptionSatDate   String? @map("presumption_sat_date") // Publicacion pagina SAT presuntos
+  presumptionDofNotice String? @map("presumption_dof_notice") // Numero y fecha de oficio global de presuncion DOF
+  presumptionDofDate   String? @map("presumption_dof_date") // Publicacion DOF presuntos
+  
+  // Rebuttal phase (Phase 2)
+  rebuttalSatNotice String? @map("rebuttal_sat_notice") // Numero y fecha de oficio global de contribuyentes que desvirtuaron SAT
+  rebuttalSatDate   String? @map("rebuttal_sat_date") // Publicacion pagina SAT desvirtuados
+  rebuttalDofNotice String? @map("rebuttal_dof_notice") // Numero y fecha de oficio global de contribuyentes que desvirtuaron DOF
+  rebuttalDofDate   String? @map("rebuttal_dof_date") // Publicacion DOF desvirtuados
+  
+  // Definitive phase (Phase 3)
+  definitiveSatNotice String? @map("definitive_sat_notice") // Numero y fecha de oficio global de definitivos SAT
+  definitiveSatDate   String? @map("definitive_sat_date") // Publicacion pagina SAT definitivos
+  definitiveDofNotice String? @map("definitive_dof_notice") // Numero y fecha de oficio global de definitivos DOF
+  definitiveDofDate   String? @map("definitive_dof_date") // Publicacion DOF definitivos
+  
+  // Favorable sentence phase (Phase 4)
+  favorableSatNotice String? @map("favorable_sat_notice") // Numero y fecha de oficio global de sentencia favorable SAT
+  favorableSatDate   String? @map("favorable_sat_date") // Publicacion pagina SAT sentencia favorable
+  favorableDofNotice String? @map("favorable_dof_notice") // Numero y fecha de oficio global de sentencia favorable DOF
+  favorableDofDate   String? @map("favorable_dof_date") // Publicacion DOF sentencia favorable
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([rfc], name: "idx_sat_69b_entry_rfc")
+  @@map("sat_69b_entry")
 }
