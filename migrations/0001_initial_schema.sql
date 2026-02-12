@@ -6,6 +6,7 @@
 DROP TABLE IF EXISTS tasks;
 
 -- Drop all existing tables to ensure clean state
+DROP TABLE IF EXISTS watchlist_identifier;
 DROP TABLE IF EXISTS watchlist_vector_state;
 DROP TABLE IF EXISTS watchlist_ingestion_run;
 DROP TABLE IF EXISTS watchlist_target;
