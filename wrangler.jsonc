@@ -71,7 +71,6 @@
 	"vars": {
 		"ENVIRONMENT": "dev",
 		"TRUSTED_ORIGINS": "*.janovix.workers.dev,http://localhost:*",
-		"AUTH_SERVICE_URL": "https://auth-svc.janovix.workers.dev",
 		"AUTH_JWKS_CACHE_TTL": "3600",
 		"PEP_CACHE_ENABLED": "false",
 		// R2 presigned URL configuration (set via wrangler secret)
