@@ -33,6 +33,11 @@ import {
 	InternalOfacFailedEndpoint,
 } from "./endpoints/watchlist/internalOfac";
 import {
+	InternalPepResultsEndpoint,
+	InternalPepFailedEndpoint,
+} from "./endpoints/watchlist/internalPep";
+import pepEventsRouter from "./endpoints/watchlist/pepEvents";
+import {
 	InternalVectorizeCountEndpoint,
 	InternalVectorizeDeleteByDatasetEndpoint,
 	InternalVectorizeIndexBatchEndpoint,
@@ -41,6 +46,9 @@ import {
 	InternalVectorizeSearchHydratedEndpoint,
 } from "./endpoints/watchlist/internalVectorize";
 import { AdminVectorizeReindexEndpoint } from "./endpoints/watchlist/adminVectorize";
+
+// Export Durable Objects
+export { PepEventsDO } from "./durable-objects/pep-events";
 
 /**
  * Extended environment bindings with Sentry support.
@@ -93,6 +101,18 @@ export type Bindings = Env & {
 	 * Thread service binding for creating and tracking threads.
 	 */
 	THREAD_SVC?: Fetcher;
+	/**
+	 * PEP cache KV namespace for temporary 24h result caching.
+	 */
+	PEP_CACHE?: KVNamespace;
+	/**
+	 * Enable/disable PEP cache (default: "false").
+	 */
+	PEP_CACHE_ENABLED?: string;
+	/**
+	 * PEP Events Durable Object for SSE streaming.
+	 */
+	PEP_EVENTS_DO?: DurableObjectNamespace;
 };
 
 // Start a Hono app
@@ -190,6 +210,13 @@ openapi.post("/internal/ofac/truncate", InternalOfacTruncateEndpoint);
 openapi.post("/internal/ofac/batch", InternalOfacBatchEndpoint);
 openapi.post("/internal/ofac/complete", InternalOfacCompleteEndpoint);
 openapi.post("/internal/ofac/failed", InternalOfacFailedEndpoint);
+
+// Internal PEP endpoints for container callbacks
+openapi.post("/internal/pep/results", InternalPepResultsEndpoint);
+openapi.post("/internal/pep/failed", InternalPepFailedEndpoint);
+
+// PEP Events SSE endpoint (public, authenticated via query param or JWT)
+app.route("/pep/events", pepEventsRouter);
 
 // Internal vectorize endpoints for indexing
 openapi.get("/internal/vectorize/count", InternalVectorizeCountEndpoint);

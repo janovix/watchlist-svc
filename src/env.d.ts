@@ -32,6 +32,18 @@ declare namespace Cloudflare {
 		 */
 		THREAD_SVC?: Service;
 		/**
+		 * PEP cache KV namespace for temporary 24h result caching.
+		 */
+		PEP_CACHE?: KVNamespace;
+		/**
+		 * Enable/disable PEP cache (default: "false").
+		 */
+		PEP_CACHE_ENABLED?: string;
+		/**
+		 * PEP Events Durable Object for SSE streaming.
+		 */
+		PEP_EVENTS_DO?: DurableObjectNamespace;
+		/**
 		 * R2 Access Key ID for generating presigned URLs.
 		 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
 		 */

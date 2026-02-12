@@ -40,6 +40,9 @@ export default defineWorkersConfig({
 				"src/endpoints/watchlist/adminIngest.ts", // Requires WATCHLIST_INGEST_QUEUE binding
 				"src/endpoints/watchlist/ingestionUpload.ts", // Requires WATCHLIST_INGEST_QUEUE binding
 				"src/routes/upload.ts", // Requires R2 bucket binding for file uploads
+				"src/endpoints/watchlist/pepEvents.ts", // Requires PEP_EVENTS_DO binding
+				"src/durable-objects/pep-events.ts", // Durable Object - hard to test in vitest environment
+				"src/endpoints/watchlist/internalPep.ts", // Requires PEP_CACHE and PEP_EVENTS_DO bindings
 			],
 			thresholds: {
 				lines: 85,
