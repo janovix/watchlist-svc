@@ -12,6 +12,7 @@ import {
 	computeMetaScore,
 	computeHybridScore,
 } from "../../lib/matching-utils";
+import { createHash } from "crypto";
 
 export class SearchEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -51,6 +52,13 @@ export class SearchEndpoint extends OpenAPIRoute {
 							}),
 						),
 						count: z.number(),
+						pepSearch: z
+							.object({
+								searchId: z.string(),
+								status: z.enum(["completed", "pending"]),
+								results: z.any().nullable(),
+							})
+							.optional(),
 					}),
 				}),
 			},
@@ -482,11 +490,102 @@ export class SearchEndpoint extends OpenAPIRoute {
 					.length,
 			});
 
+			// ===================================================================
+			// PEP Search (Parallel, Fire-and-Forget)
+			// ===================================================================
+			let pepSearchInfo:
+				| {
+						searchId: string;
+						status: "completed" | "pending";
+						results: unknown | null;
+				  }
+				| undefined = undefined;
+
+			// Generate search ID from query hash
+			const pepSearchId = this.generatePepSearchId(data.body.q);
+
+			// Check KV cache if enabled
+			const cacheEnabled = c.env.PEP_CACHE_ENABLED === "true";
+			let cachedPepResults: unknown = null;
+
+			if (cacheEnabled && c.env.PEP_CACHE) {
+				try {
+					const cacheKey = this.generatePepCacheKey(data.body.q);
+					const cached = await c.env.PEP_CACHE.get(cacheKey, "json");
+					if (cached) {
+						cachedPepResults = cached;
+						console.log(`[Search] PEP cache hit for query "${data.body.q}"`);
+						pepSearchInfo = {
+							searchId: pepSearchId,
+							status: "completed",
+							results: cachedPepResults,
+						};
+					}
+				} catch (error) {
+					console.warn(`[Search] Failed to check PEP cache:`, error);
+				}
+			}
+
+			// If not cached, trigger PEP search in background
+			if (!cachedPepResults && c.env.THREAD_SVC) {
+				try {
+					const callbackUrl = new URL(c.req.url).origin + "/internal/pep";
+
+					const threadPayload = {
+						task_type: "pep_search",
+						job_params: {
+							query: data.body.q,
+							callback_url: callbackUrl,
+							search_id: pepSearchId,
+							max_results: 1000,
+						},
+						metadata: {
+							source: "watchlist-svc",
+							triggered_by: "search",
+						},
+					};
+
+					// Fire-and-forget: don't await
+					c.env.THREAD_SVC.fetch("http://thread-svc/threads", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(threadPayload),
+					})
+						.then((response) => {
+							if (response.ok) {
+								console.log(
+									`[Search] PEP search thread created for query "${data.body.q}"`,
+								);
+							} else {
+								console.error(
+									`[Search] Failed to create PEP thread: ${response.status}`,
+								);
+							}
+						})
+						.catch((error) => {
+							console.error(`[Search] Error creating PEP thread:`, error);
+						});
+
+					pepSearchInfo = {
+						searchId: pepSearchId,
+						status: "pending",
+						results: null,
+					};
+				} catch (error) {
+					console.error(`[Search] Failed to trigger PEP search:`, error);
+					// Don't fail the whole search if PEP fails
+				}
+			}
+
+			// ===================================================================
+			// Return Results
+			// ===================================================================
 			return {
 				success: true,
 				result: {
 					matches: filteredMatches,
 					count: filteredMatches.length,
+					pepSearch: pepSearchInfo,
 				},
 			};
 		} catch (error) {
@@ -510,5 +609,23 @@ export class SearchEndpoint extends OpenAPIRoute {
 			apiError.code = 500;
 			throw apiError;
 		}
+	}
+
+	/**
+	 * Generate PEP search ID from query
+	 */
+	private generatePepSearchId(query: string): string {
+		const normalized = query.toLowerCase().trim();
+		const hash = createHash("sha256").update(normalized).digest("hex");
+		return `pep_${hash.substring(0, 16)}`;
+	}
+
+	/**
+	 * Generate PEP cache key from query
+	 */
+	private generatePepCacheKey(query: string): string {
+		const normalized = query.toLowerCase().trim();
+		const hash = createHash("sha256").update(normalized).digest("hex");
+		return `pep_search:${hash}`;
 	}
 }
