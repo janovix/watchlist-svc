@@ -1,3 +1,10 @@
+# [1.4.0-rc.14](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.13...v1.4.0-rc.14) (2026-02-12)
+
+
+### Bug Fixes
+
+* **search:** use waitUntil for thread creation to prevent cancellation ([94d9aaa](https://github.com/janovix/watchlist-svc/commit/94d9aaab240aa198d2889e5e86d578d11834a5b6))
+
 # [1.4.0-rc.13](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.12...v1.4.0-rc.13) (2026-02-12)
 
 
