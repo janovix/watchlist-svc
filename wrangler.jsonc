@@ -25,8 +25,7 @@
 		},
 		{
 			"binding": "PEP_CACHE",
-			"id": "pep-cache-dev",
-			"preview_id": "pep-cache-preview",
+			"id": "78b4f30524ca47dfac5a7e3aa9395a4b",
 		},
 	],
 	"vectorize": [
@@ -49,7 +48,6 @@
 			{
 				"name": "PEP_EVENTS_DO",
 				"class_name": "PepEventsDO",
-				"script_name": "watchlist-svc",
 			},
 		],
 	},

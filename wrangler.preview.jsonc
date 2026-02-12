@@ -23,6 +23,10 @@
 			"binding": "WATCHLIST_KV",
 			"id": "7671b1f049bc46a4b7534fa6d73ddd73",
 		},
+		{
+			"binding": "PEP_CACHE",
+			"id": "d68cf8cb8e5840188c769d55c5efeb31",
+		},
 	],
 	"vectorize": [
 		{
@@ -37,6 +41,20 @@
 		{
 			"binding": "WATCHLIST_UPLOADS_BUCKET",
 			"bucket_name": "watchlist-uploads-preview",
+		},
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "PEP_EVENTS_DO",
+				"class_name": "PepEventsDO",
+			},
+		],
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["PepEventsDO"],
 		},
 	],
 	// Queue removed - now using thread-svc for ingestion
@@ -55,6 +73,7 @@
 		"TRUSTED_ORIGINS": "*.janovix.workers.dev,http://localhost:*",
 		"AUTH_SERVICE_URL": "https://auth-svc.janovix.workers.dev",
 		"AUTH_JWKS_CACHE_TTL": "3600",
+		"PEP_CACHE_ENABLED": "false",
 		// R2 presigned URL configuration (set via wrangler secret)
 		// "R2_ACCESS_KEY_ID": "set-via-secret",
 		// "R2_SECRET_ACCESS_KEY": "set-via-secret",
