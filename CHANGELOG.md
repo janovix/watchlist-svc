@@ -1,3 +1,10 @@
+# [1.4.0-rc.17](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.16...v1.4.0-rc.17) (2026-02-13)
+
+
+### Features
+
+* **unsc:** implement UNSC entry table, ingestion endpoints, and vectorization support ([462a1f5](https://github.com/janovix/watchlist-svc/commit/462a1f56ea581a1f8bb8bc2c36498e1677a9fcf0))
+
 # [1.4.0-rc.16](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.15...v1.4.0-rc.16) (2026-02-12)
 
 
