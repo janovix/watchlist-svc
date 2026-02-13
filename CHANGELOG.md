@@ -1,3 +1,10 @@
+# [1.4.0-rc.18](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.17...v1.4.0-rc.18) (2026-02-13)
+
+
+### Bug Fixes
+
+* **internalUnsc:** enhance error handling for sub-batch inserts by implementing fallback to individual record upserts ([a0901cb](https://github.com/janovix/watchlist-svc/commit/a0901cb2e117f90052e8ebd012d4b94ff05f547a))
+
 # [1.4.0-rc.17](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.16...v1.4.0-rc.17) (2026-02-13)
 
 
