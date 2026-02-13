@@ -181,3 +181,30 @@ CREATE TABLE sat_69b_entry (
 
 -- SAT 69-B Entry indexes: None - search is via Vectorize, lookup by PK and RFC only
 CREATE INDEX IF NOT EXISTS idx_sat_69b_entry_rfc ON sat_69b_entry(rfc);
+
+-- ============================================================================
+-- UN Security Council Consolidated List Domain (NEW - XML-based)
+-- ============================================================================
+
+-- UN Security Council Entry table - Contains individuals and entities from UN sanctions lists
+-- Note: Search is via Vectorize, so no secondary indexes needed (only PK)
+DROP TABLE IF EXISTS unsc_entry;
+CREATE TABLE unsc_entry (
+    id TEXT PRIMARY KEY NOT NULL,           -- DATAID
+    party_type TEXT NOT NULL,               -- Individual o Entity
+    primary_name TEXT NOT NULL,             -- Nombre completo construido
+    aliases TEXT,                           -- JSON array de alias
+    birth_date TEXT,                        -- Fecha de nacimiento (ISO 8601)
+    birth_place TEXT,                       -- Lugar de nacimiento
+    gender TEXT,                            -- Male/Female
+    addresses TEXT,                         -- JSON array de direcciones
+    nationalities TEXT,                     -- JSON array de nacionalidades
+    identifiers TEXT,                       -- JSON array de documentos
+    designations TEXT,                      -- JSON array de cargos
+    remarks TEXT,                           -- COMMENTS1
+    un_list_type TEXT NOT NULL,             -- DRC, AFG, TAL, etc.
+    reference_number TEXT,                  -- CDi.001, etc.
+    listed_on TEXT,                         -- Fecha de listado
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

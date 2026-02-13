@@ -39,6 +39,12 @@ import {
 	InternalSat69bFailedEndpoint,
 } from "./endpoints/watchlist/internalSat69b";
 import {
+	InternalUnscTruncateEndpoint,
+	InternalUnscBatchEndpoint,
+	InternalUnscCompleteEndpoint,
+	InternalUnscFailedEndpoint,
+} from "./endpoints/watchlist/internalUnsc";
+import {
 	InternalPepResultsEndpoint,
 	InternalPepFailedEndpoint,
 } from "./endpoints/watchlist/internalPep";
@@ -222,6 +228,12 @@ openapi.post("/internal/sat69b/truncate", InternalSat69bTruncateEndpoint);
 openapi.post("/internal/sat69b/batch", InternalSat69bBatchEndpoint);
 openapi.post("/internal/sat69b/complete", InternalSat69bCompleteEndpoint);
 openapi.post("/internal/sat69b/failed", InternalSat69bFailedEndpoint);
+
+// Internal UNSC endpoints for container callbacks
+openapi.post("/internal/unsc/truncate", InternalUnscTruncateEndpoint);
+openapi.post("/internal/unsc/batch", InternalUnscBatchEndpoint);
+openapi.post("/internal/unsc/complete", InternalUnscCompleteEndpoint);
+openapi.post("/internal/unsc/failed", InternalUnscFailedEndpoint);
 
 // Internal PEP endpoints for container callbacks
 openapi.post("/internal/pep/results", InternalPepResultsEndpoint);

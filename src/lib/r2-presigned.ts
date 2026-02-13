@@ -59,6 +59,17 @@ export function generateSat69bCsvKey(environment: string | undefined): string {
 }
 
 /**
+ * Generate a unique key for UNSC XML storage
+ * Format: {env}/unsc-xml/{timestamp}-{random}.xml
+ */
+export function generateUnscXmlKey(environment: string | undefined): string {
+	const envPrefix = getEnvironmentPrefix(environment);
+	const timestamp = Date.now();
+	const random = Math.random().toString(36).substring(2, 8);
+	return `${envPrefix}/unsc-xml/${timestamp}-${random}.xml`;
+}
+
+/**
  * Get the R2 S3-compatible endpoint URL
  */
 export function getR2Endpoint(accountId: string): string {

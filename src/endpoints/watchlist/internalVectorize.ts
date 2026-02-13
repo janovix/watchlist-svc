@@ -22,6 +22,11 @@ import {
 	composeSat69bVectorMetadata,
 	getSat69bVectorId,
 } from "../../lib/sat69b-vectorize-service";
+import {
+	composeUnscVectorText,
+	composeUnscVectorMetadata,
+	getUnscVectorId,
+} from "../../lib/unsc-vectorize-service";
 
 // =============================================================================
 // Constants
@@ -86,6 +91,9 @@ export class InternalVectorizeCountEndpoint extends OpenAPIRoute {
 				break;
 			case "sat_69b":
 				count = await prisma.sat69bEntry.count();
+				break;
+			case "unsc":
+				count = await prisma.unscEntry.count();
 				break;
 			// Add more datasets here as needed
 			default:
@@ -159,7 +167,7 @@ export class InternalVectorizeDeleteByDatasetEndpoint extends OpenAPIRoute {
 		console.log(`[InternalVectorize] Deleting vectors for dataset: ${dataset}`);
 
 		// Validate dataset first
-		const validDatasets = ["ofac_sdn", "sat_69b"];
+		const validDatasets = ["ofac_sdn", "sat_69b", "unsc"];
 		if (!validDatasets.includes(dataset)) {
 			return Response.json(
 				{
@@ -199,6 +207,13 @@ export class InternalVectorizeDeleteByDatasetEndpoint extends OpenAPIRoute {
 					select: { id: true },
 				});
 				ids = entries.map((e) => getSat69bVectorId(e.id));
+				break;
+			}
+			case "unsc": {
+				const entries = await prisma.unscEntry.findMany({
+					select: { id: true },
+				});
+				ids = entries.map((e) => getUnscVectorId(e.id));
 				break;
 			}
 		}
@@ -309,7 +324,7 @@ export class InternalVectorizeIndexBatchEndpoint extends OpenAPIRoute {
 		);
 
 		// Validate dataset first
-		const validDatasets = ["ofac_sdn", "sat_69b"];
+		const validDatasets = ["ofac_sdn", "sat_69b", "unsc"];
 		if (!validDatasets.includes(dataset)) {
 			return Response.json(
 				{
@@ -482,6 +497,81 @@ export class InternalVectorizeIndexBatchEndpoint extends OpenAPIRoute {
 							id: getSat69bVectorId(entry.id),
 							values: embeddings[idx],
 							metadata: composeSat69bVectorMetadata(entry),
+						}));
+
+						// Upsert to Vectorize in smaller batches
+						for (let j = 0; j < vectors.length; j += VECTORIZE_BATCH_SIZE) {
+							const vectorBatch = vectors.slice(j, j + VECTORIZE_BATCH_SIZE);
+							try {
+								await vectorize.upsert(vectorBatch);
+								indexedCount += vectorBatch.length;
+							} catch (error) {
+								const errorMsg = `Failed to upsert vectors: ${error instanceof Error ? error.message : error}`;
+								console.error(`[InternalVectorize] ${errorMsg}`);
+								errors.push(errorMsg);
+							}
+						}
+					}
+					break;
+				}
+				case "unsc": {
+					// Fetch records from D1
+					const entries = await prisma.unscEntry.findMany({
+						skip: offset,
+						take: limit,
+						orderBy: { id: "asc" },
+					});
+
+					if (entries.length === 0) {
+						console.log(
+							`[InternalVectorize] No records found at offset ${offset}`,
+						);
+						return Response.json({
+							success: true,
+							dataset,
+							indexed_count: 0,
+							errors: [],
+						});
+					}
+
+					console.log(
+						`[InternalVectorize] Processing ${entries.length} UNSC entries`,
+					);
+
+					// Process in embedding batches
+					for (let i = 0; i < entries.length; i += EMBEDDING_BATCH_SIZE) {
+						const embeddingBatch = entries.slice(i, i + EMBEDDING_BATCH_SIZE);
+
+						// Compose texts for embedding
+						const texts = embeddingBatch.map((entry) =>
+							composeUnscVectorText(entry),
+						);
+
+						// Generate embeddings
+						let embeddings: number[][];
+						try {
+							const result = await ai.run(EMBEDDING_MODEL, { text: texts });
+							// Type guard: check if result has data property (not async response)
+							if (
+								!result ||
+								!("data" in result) ||
+								!Array.isArray(result.data)
+							) {
+								throw new Error("Invalid embedding response format");
+							}
+							embeddings = result.data as number[][];
+						} catch (error) {
+							const errorMsg = `Failed to generate embeddings: ${error instanceof Error ? error.message : error}`;
+							console.error(`[InternalVectorize] ${errorMsg}`);
+							errors.push(errorMsg);
+							continue;
+						}
+
+						// Prepare vectors for upsert
+						const vectors = embeddingBatch.map((entry, idx) => ({
+							id: getUnscVectorId(entry.id),
+							values: embeddings[idx],
+							metadata: composeUnscVectorMetadata(entry),
 						}));
 
 						// Upsert to Vectorize in smaller batches
