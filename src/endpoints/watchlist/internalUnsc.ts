@@ -248,22 +248,14 @@ export class InternalUnscBatchEndpoint extends OpenAPIRoute {
 						record.id,
 						record.party_type,
 						record.primary_name,
-						record.aliases.length > 0 ? JSON.stringify(record.aliases) : null,
+						JSON.stringify(record.aliases),
 						record.birth_date,
 						record.birth_place,
 						record.gender,
-						record.addresses.length > 0
-							? JSON.stringify(record.addresses)
-							: null,
-						record.nationalities.length > 0
-							? JSON.stringify(record.nationalities)
-							: null,
-						record.identifiers.length > 0
-							? JSON.stringify(record.identifiers)
-							: null,
-						record.designations.length > 0
-							? JSON.stringify(record.designations)
-							: null,
+						JSON.stringify(record.addresses),
+						JSON.stringify(record.nationalities),
+						JSON.stringify(record.identifiers),
+						JSON.stringify(record.designations),
 						record.remarks,
 						record.un_list_type,
 						record.reference_number,
@@ -282,10 +274,58 @@ export class InternalUnscBatchEndpoint extends OpenAPIRoute {
 				await stmt.bind(...values).run();
 
 				inserted += subBatch.length;
-			} catch (e) {
-				const errorMsg = `Failed to insert sub-batch ${i / SUB_BATCH_SIZE + 1}: ${e}`;
-				console.error(`[InternalUnsc] ${errorMsg}`);
-				errors.push(errorMsg);
+			} catch (error) {
+				// If sub-batch fails, fallback to individual inserts for this sub-batch only
+				const errorMsg = error instanceof Error ? error.message : String(error);
+				console.warn(
+					`[InternalUnsc] Sub-batch insert failed, using individual inserts: ${errorMsg}`,
+				);
+
+				for (const record of subBatch) {
+					try {
+						await prisma.unscEntry.upsert({
+							where: { id: record.id },
+							create: {
+								id: record.id,
+								partyType: record.party_type,
+								primaryName: record.primary_name,
+								aliases: JSON.stringify(record.aliases),
+								birthDate: record.birth_date,
+								birthPlace: record.birth_place,
+								gender: record.gender,
+								addresses: JSON.stringify(record.addresses),
+								nationalities: JSON.stringify(record.nationalities),
+								identifiers: JSON.stringify(record.identifiers),
+								designations: JSON.stringify(record.designations),
+								remarks: record.remarks,
+								unListType: record.un_list_type,
+								referenceNumber: record.reference_number,
+								listedOn: record.listed_on,
+							},
+							update: {
+								partyType: record.party_type,
+								primaryName: record.primary_name,
+								aliases: JSON.stringify(record.aliases),
+								birthDate: record.birth_date,
+								birthPlace: record.birth_place,
+								gender: record.gender,
+								addresses: JSON.stringify(record.addresses),
+								nationalities: JSON.stringify(record.nationalities),
+								identifiers: JSON.stringify(record.identifiers),
+								designations: JSON.stringify(record.designations),
+								remarks: record.remarks,
+								unListType: record.un_list_type,
+								referenceNumber: record.reference_number,
+								listedOn: record.listed_on,
+							},
+						});
+						inserted++;
+					} catch (err) {
+						const individualError = `Failed to insert ${record.id}: ${err}`;
+						console.error(`[InternalUnsc] ${individualError}`);
+						errors.push(individualError);
+					}
+				}
 			}
 		}
 
@@ -396,14 +436,13 @@ export class InternalUnscBatchEndpoint extends OpenAPIRoute {
 
 /**
  * POST /internal/unsc/complete
- * Marks ingestion as complete and optionally triggers vectorization
+ * Marks an ingestion run as completed
  */
 export class InternalUnscCompleteEndpoint extends OpenAPIRoute {
 	schema = {
 		tags: ["Internal"],
-		summary: "Mark UNSC ingestion complete (internal)",
-		description:
-			"Marks the ingestion run as complete and optionally triggers vectorization. Called by container after all batches.",
+		summary: "Complete UNSC ingestion (internal)",
+		description: "Marks the ingestion run as completed with final statistics.",
 		security: [],
 		request: {
 			body: {
@@ -415,11 +454,19 @@ export class InternalUnscCompleteEndpoint extends OpenAPIRoute {
 								.number()
 								.int()
 								.describe("Total records processed"),
-							total_batches: z.number().int().describe("Total batches sent"),
+							total_batches: z
+								.number()
+								.int()
+								.describe("Total batches processed"),
+							errors: z
+								.array(z.string())
+								.optional()
+								.describe("Any errors encountered"),
 							skip_vectorization: z
 								.boolean()
 								.optional()
-								.describe("Skip auto-vectorization (default: false)"),
+								.default(false)
+								.describe("Skip automatic vectorization trigger"),
 						}),
 					},
 				},
@@ -427,12 +474,12 @@ export class InternalUnscCompleteEndpoint extends OpenAPIRoute {
 		},
 		responses: {
 			"200": {
-				description: "Ingestion marked complete",
+				description: "Ingestion marked as complete",
 				content: {
 					"application/json": {
 						schema: z.object({
 							success: z.boolean(),
-							vectorize_thread_id: z.string().optional(),
+							vectorize_thread_id: z.string().nullable().optional(),
 						}),
 					},
 				},
@@ -442,99 +489,114 @@ export class InternalUnscCompleteEndpoint extends OpenAPIRoute {
 
 	async handle(c: { env: Bindings; req: Request }) {
 		const body = await c.req.json();
-		const { run_id, total_records, total_batches, skip_vectorization } =
+		const { run_id, total_records, total_batches, errors, skip_vectorization } =
 			body as {
 				run_id: number;
 				total_records: number;
 				total_batches: number;
+				errors?: string[];
 				skip_vectorization?: boolean;
 			};
 
 		console.log(
-			`[InternalUnsc] Marking run ${run_id} complete: ${total_records} records in ${total_batches} batches`,
+			`[InternalUnsc] Completing run ${run_id}: total_records=${total_records}, total_batches=${total_batches}`,
 		);
 
 		const prisma = createPrismaClient(c.env.DB);
 
-		// Update run status
-		await prisma.watchlistIngestionRun.update({
-			where: { id: run_id },
-			data: {
-				status: "completed",
-				finishedAt: new Date(),
-				progressPhase: "completed",
-				progressRecordsProcessed: total_records,
-				progressTotalEstimate: total_records,
-				progressPercentage: 100,
-				progressUpdatedAt: new Date(),
-				stats: JSON.stringify({
-					totalRecords: total_records,
-					totalBatches: total_batches,
-					errors: [],
-				}),
-			},
-		});
+		try {
+			await prisma.watchlistIngestionRun.update({
+				where: { id: run_id },
+				data: {
+					status: "completed",
+					finishedAt: new Date(),
+					progressPhase: "completed",
+					progressPercentage: 100,
+					progressRecordsProcessed: total_records,
+					progressTotalEstimate: total_records,
+					progressUpdatedAt: new Date(),
+					stats: JSON.stringify({
+						totalRecords: total_records,
+						totalBatches: total_batches,
+						errors: errors?.slice(0, 100) ?? [],
+					}),
+				},
+			});
+			console.log(`[InternalUnsc] Run ${run_id} marked as completed`);
+		} catch (e) {
+			// Run might not exist in manual testing - that's ok
+			console.log(
+				`[InternalUnsc] Could not update run ${run_id} to completed (may not exist):`,
+				e,
+			);
+		}
 
-		// Trigger vectorization if not skipped
-		let vectorizeThreadId: string | undefined;
+		// Trigger automatic vectorization if not skipped and records were processed
+		let vectorizeThreadId: string | null = null;
+		if (!skip_vectorization && total_records > 0 && c.env.THREAD_SVC) {
+			console.log(
+				`[InternalUnsc] Triggering automatic vectorization for ${total_records} records`,
+			);
 
-		if (!skip_vectorization) {
 			try {
-				console.log(
-					`[InternalUnsc] Creating vectorization thread for run ${run_id}`,
-				);
-
 				const callbackUrl = getCallbackUrl(c.env.ENVIRONMENT);
-
-				if (!c.env.THREAD_SVC) {
-					throw new Error("THREAD_SVC not configured");
-				}
-
-				const vectorizeResponse = await c.env.THREAD_SVC.fetch(
-					new Request("http://thread-svc/thread", {
+				const response = await c.env.THREAD_SVC.fetch(
+					"http://thread-svc/threads",
+					{
 						method: "POST",
 						headers: { "Content-Type": "application/json" },
 						body: JSON.stringify({
 							task_type: "vectorize_index",
-							params: {
-								callback_url: callbackUrl,
-								run_id,
+							job_params: {
 								dataset: "unsc",
-								batch_size: 50,
+								reindex_all: true,
+								batch_size: 100,
+								callback_url: callbackUrl,
+								triggered_by: `unsc_ingestion_run_${run_id}`,
+							},
+							metadata: {
+								source: "auto_trigger",
+								unsc_run_id: run_id,
+								total_records: total_records,
 							},
 						}),
-					}),
+					},
 				);
 
-				if (!vectorizeResponse.ok) {
-					throw new Error(
-						`Vectorization thread creation failed: ${vectorizeResponse.status} ${await vectorizeResponse.text()}`,
+				if (response.ok) {
+					const thread = (await response.json()) as { id: string };
+					vectorizeThreadId = thread.id;
+					console.log(
+						`[InternalUnsc] Vectorization thread created: ${vectorizeThreadId}`,
+					);
+
+					// Update the run with the vectorize thread ID and phase
+					try {
+						await prisma.watchlistIngestionRun.update({
+							where: { id: run_id },
+							data: {
+								vectorizeThreadId: vectorizeThreadId,
+								progressPhase: "vectorizing",
+								progressUpdatedAt: new Date(),
+							},
+						});
+						console.log(
+							`[InternalUnsc] Run ${run_id} updated with vectorize thread ID`,
+						);
+					} catch (updateErr) {
+						console.error(
+							`[InternalUnsc] Failed to update run with vectorize thread ID:`,
+							updateErr,
+						);
+					}
+				} else {
+					console.error(
+						`[InternalUnsc] Failed to create vectorization thread: ${response.status}`,
 					);
 				}
-
-				const vectorizeData = (await vectorizeResponse.json()) as {
-					thread_id: string;
-				};
-				vectorizeThreadId = vectorizeData.thread_id;
-
-				// Update run with vectorize thread ID
-				await prisma.watchlistIngestionRun.update({
-					where: { id: run_id },
-					data: {
-						vectorizeThreadId,
-						progressPhase: "vectorizing",
-					},
-				});
-
-				console.log(
-					`[InternalUnsc] Created vectorization thread ${vectorizeThreadId}`,
-				);
 			} catch (e) {
-				console.error(
-					`[InternalUnsc] Failed to create vectorization thread:`,
-					e,
-				);
-				// Don't fail the completion - vectorization can be done manually
+				// Log but don't fail - vectorization can be triggered manually
+				console.error(`[InternalUnsc] Failed to trigger vectorization: ${e}`);
 			}
 		}
 
@@ -607,11 +669,15 @@ export class InternalUnscFailedEndpoint extends OpenAPIRoute {
 					finishedAt: new Date(),
 					progressPhase: "failed",
 					progressUpdatedAt: new Date(),
-					errorMessage: error_message,
+					errorMessage: error_message.substring(0, 1000),
 				},
 			});
 		} catch (e) {
-			console.error(`[InternalUnsc] Failed to update run ${run_id}:`, e);
+			// Run might not exist in manual testing - that's ok
+			console.log(
+				`[InternalUnsc] Could not update run ${run_id} to failed (may not exist):`,
+				e,
+			);
 		}
 
 		return Response.json({ success: true });

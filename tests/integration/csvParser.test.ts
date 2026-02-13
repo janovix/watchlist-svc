@@ -37,6 +37,15 @@ describe("CSV Parser", () => {
 			expect(result[0]).toEqual({ id: "1", name: "Test, Name" });
 			expect(result[1]).toEqual({ id: "2", name: "Another" });
 		});
+
+		it("should handle escaped quotes in fields", () => {
+			const csv = 'id,name\n1,"Test ""Quoted"" Name"\n2,"Normal"';
+			const result = parseCSV(csv);
+
+			expect(result).toHaveLength(2);
+			expect(result[0]).toEqual({ id: "1", name: 'Test "Quoted" Name' });
+			expect(result[1]).toEqual({ id: "2", name: "Normal" });
+		});
 	});
 
 	describe("parseCSVRow", () => {

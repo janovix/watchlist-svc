@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
 	getEnvironmentPrefix,
 	generateSdnXmlKey,
+	generateSat69bCsvKey,
+	generateUnscXmlKey,
 	getR2Endpoint,
 	validateR2Config,
 	generatePresignedDownloadUrl,
@@ -61,6 +63,42 @@ describe("R2 Presigned URL Utilities", () => {
 		it("should generate unique keys", () => {
 			const key1 = generateSdnXmlKey("dev");
 			const key2 = generateSdnXmlKey("dev");
+			expect(key1).not.toBe(key2);
+		});
+	});
+
+	describe("generateSat69bCsvKey", () => {
+		it("should generate key with correct format for production", () => {
+			const key = generateSat69bCsvKey("production");
+			expect(key).toMatch(/^prod\/sat-69b\/\d+-[a-z0-9]+\.csv$/);
+		});
+
+		it("should generate key with correct format for dev", () => {
+			const key = generateSat69bCsvKey("dev");
+			expect(key).toMatch(/^dev\/sat-69b\/\d+-[a-z0-9]+\.csv$/);
+		});
+
+		it("should generate unique keys", () => {
+			const key1 = generateSat69bCsvKey("dev");
+			const key2 = generateSat69bCsvKey("dev");
+			expect(key1).not.toBe(key2);
+		});
+	});
+
+	describe("generateUnscXmlKey", () => {
+		it("should generate key with correct format for production", () => {
+			const key = generateUnscXmlKey("production");
+			expect(key).toMatch(/^prod\/unsc-xml\/\d+-[a-z0-9]+\.xml$/);
+		});
+
+		it("should generate key with correct format for dev", () => {
+			const key = generateUnscXmlKey("dev");
+			expect(key).toMatch(/^dev\/unsc-xml\/\d+-[a-z0-9]+\.xml$/);
+		});
+
+		it("should generate unique keys", () => {
+			const key1 = generateUnscXmlKey("dev");
+			const key2 = generateUnscXmlKey("dev");
 			expect(key1).not.toBe(key2);
 		});
 	});

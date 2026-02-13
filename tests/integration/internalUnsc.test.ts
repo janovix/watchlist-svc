@@ -427,6 +427,7 @@ describe("Internal UNSC Endpoints", () => {
 						run_id: testRunId,
 						total_records: 1200,
 						total_batches: 12,
+						errors: [],
 					}),
 				},
 			);
@@ -440,8 +441,7 @@ describe("Internal UNSC Endpoints", () => {
 				where: { id: testRunId },
 			});
 			expect(run?.status).toBe("completed");
-			// progressPhase can be either "completed" or "vectorizing" depending on thread creation
-			expect(["completed", "vectorizing"]).toContain(run?.progressPhase);
+			expect(run?.progressPhase).toBe("completed");
 			expect(run?.progressPercentage).toBe(100);
 			expect(run?.progressRecordsProcessed).toBe(1200);
 			expect(run?.finishedAt).not.toBeNull();
@@ -452,7 +452,9 @@ describe("Internal UNSC Endpoints", () => {
 			expect(stats.totalBatches).toBe(12);
 		});
 
-		it("should skip vectorization when skip_vectorization is true", async () => {
+		it("should store errors in stats (truncated to 100)", async () => {
+			const errors = Array.from({ length: 150 }, (_, i) => `Error ${i}`);
+
 			const response = await SELF.fetch(
 				"http://local.test/internal/unsc/complete",
 				{
@@ -462,19 +464,18 @@ describe("Internal UNSC Endpoints", () => {
 						run_id: testRunId,
 						total_records: 100,
 						total_batches: 1,
-						skip_vectorization: true,
+						errors,
 					}),
 				},
 			);
 
 			expect(response.status).toBe(200);
-			const body = await response.json<{
-				success: boolean;
-				vectorize_thread_id?: string | null;
-			}>();
-			expect(body.success).toBe(true);
-			// vectorize_thread_id should be undefined or null when skipped
-			expect(body.vectorize_thread_id).toBeUndefined();
+
+			const run = await prisma.watchlistIngestionRun.findUnique({
+				where: { id: testRunId },
+			});
+			const stats = JSON.parse(run?.stats ?? "{}");
+			expect(stats.errors).toHaveLength(100);
 		});
 
 		it("should handle completion when run_id does not exist", async () => {
@@ -489,12 +490,64 @@ describe("Internal UNSC Endpoints", () => {
 						run_id: nonExistentRunId,
 						total_records: 100,
 						total_batches: 1,
+						errors: [],
 					}),
 				},
 			);
 
-			// Should not crash even with non-existent run_id
-			expect([200, 500]).toContain(response.status);
+			expect(response.status).toBe(200);
+			const body = await response.json<{ success: boolean }>();
+			expect(body.success).toBe(true);
+		});
+
+		it("should skip vectorization when skip_vectorization is true", async () => {
+			const response = await SELF.fetch(
+				"http://local.test/internal/unsc/complete",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						total_records: 100,
+						total_batches: 1,
+						errors: [],
+						skip_vectorization: true,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				vectorize_thread_id: string | null;
+			}>();
+			expect(body.success).toBe(true);
+			expect(body.vectorize_thread_id).toBeNull();
+		});
+
+		it("should skip vectorization when total_records is 0", async () => {
+			const response = await SELF.fetch(
+				"http://local.test/internal/unsc/complete",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						total_records: 0,
+						total_batches: 0,
+						errors: [],
+						skip_vectorization: false,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				vectorize_thread_id: string | null;
+			}>();
+			expect(body.success).toBe(true);
+			expect(body.vectorize_thread_id).toBeNull();
 		});
 	});
 
@@ -527,6 +580,29 @@ describe("Internal UNSC Endpoints", () => {
 			expect(run?.progressPhase).toBe("failed");
 			expect(run?.finishedAt).not.toBeNull();
 			expect(run?.errorMessage).toBe("Parse error: malformed XML at line 42");
+		});
+
+		it("should truncate long error messages to 1000 chars", async () => {
+			const longError = "x".repeat(2000);
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/unsc/failed",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						error_message: longError,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+
+			const run = await prisma.watchlistIngestionRun.findUnique({
+				where: { id: testRunId },
+			});
+			expect(run?.errorMessage?.length).toBe(1000);
 		});
 
 		it("should handle failure when run_id does not exist", async () => {
