@@ -11,6 +11,7 @@ import { transformIngestionRun } from "../../lib/transformers";
 import {
 	generateSdnXmlKey,
 	generateSat69bCsvKey,
+	generateUnscXmlKey,
 	generatePresignedUploadUrl,
 	generatePresignedDownloadUrl,
 	validateR2Config,
@@ -18,13 +19,14 @@ import {
 } from "../../lib/r2-presigned";
 
 // Allowed source types for ingestion
-const SOURCE_TYPES = ["sdn_xml", "sat_69b_csv"] as const;
+const SOURCE_TYPES = ["sdn_xml", "sat_69b_csv", "unsc_xml"] as const;
 type SourceType = (typeof SOURCE_TYPES)[number];
 
 // Content types by source type
 const CONTENT_TYPES: Record<SourceType, string[]> = {
 	sdn_xml: ["application/xml", "text/xml"],
 	sat_69b_csv: ["text/csv", "application/csv", "text/plain"],
+	unsc_xml: ["application/xml", "text/xml"],
 };
 
 // Presigned URL expiration time (10 minutes)
@@ -150,6 +152,10 @@ Initiates a new ingestion process and returns a presigned URL for direct file up
 			case "sat_69b_csv":
 				r2Key = generateSat69bCsvKey(c.env.ENVIRONMENT);
 				contentTypes = CONTENT_TYPES.sat_69b_csv;
+				break;
+			case "unsc_xml":
+				r2Key = generateUnscXmlKey(c.env.ENVIRONMENT);
+				contentTypes = CONTENT_TYPES.unsc_xml;
 				break;
 			default: {
 				const error = new ApiException(
@@ -374,6 +380,10 @@ This will verify the file exists in R2 and queue the ingestion job for processin
 			case "sat_69b_csv":
 				callbackUrl = new URL(c.req.url).origin + "/internal/sat69b";
 				taskType = "sat_69b_parse";
+				break;
+			case "unsc_xml":
+				callbackUrl = new URL(c.req.url).origin + "/internal/unsc";
+				taskType = "unsc_parse";
 				break;
 			default:
 				callbackUrl = new URL(c.req.url).origin + "/internal/ofac";

@@ -172,6 +172,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 							const ofacIds: string[] = [];
 							const csvIds: string[] = [];
 							const sat69bIds: string[] = [];
+							const unscIds: string[] = [];
 
 							for (const row of identifierMatches.results) {
 								const dataset = (row as { dataset: string }).dataset;
@@ -181,6 +182,8 @@ export class SearchEndpoint extends OpenAPIRoute {
 									ofacIds.push(recordId);
 								} else if (dataset === "sat_69b") {
 									sat69bIds.push(recordId);
+								} else if (dataset === "unsc") {
+									unscIds.push(recordId);
 								} else {
 									csvIds.push(recordId);
 								}
@@ -266,6 +269,52 @@ export class SearchEndpoint extends OpenAPIRoute {
 								}
 							}
 
+							// Fetch UNSC records
+							if (unscIds.length > 0) {
+								const unscRecords = await prisma.unscEntry.findMany({
+									where: { id: { in: unscIds } },
+								});
+
+								for (const record of unscRecords) {
+									// Transform UNSC record to watchlist target format
+									const target = {
+										id: record.id,
+										schema: null,
+										name: record.primaryName,
+										aliases: record.aliases ? JSON.parse(record.aliases) : null,
+										birthDate: record.birthDate,
+										countries: record.nationalities
+											? JSON.parse(record.nationalities)
+											: null,
+										addresses: record.addresses
+											? JSON.parse(record.addresses)
+											: null,
+										identifiers: record.identifiers
+											? JSON.parse(record.identifiers)
+											: null,
+										sanctions: record.designations
+											? JSON.parse(record.designations)
+											: null,
+										phones: null,
+										emails: null,
+										programIds: [record.unListType],
+										dataset: "unsc",
+										firstSeen: record.listedOn,
+										lastSeen: null,
+										lastChange: null,
+										createdAt: record.createdAt.toISOString(),
+										updatedAt: record.updatedAt.toISOString(),
+									};
+
+									candidateMap.set(record.id, {
+										target,
+										vectorScore: 0,
+										identifierMatch: true,
+										dataset: "unsc",
+									});
+								}
+							}
+
 							// Fetch CSV target records
 							if (csvIds.length > 0) {
 								const csvRecords = await prisma.watchlistTarget.findMany({
@@ -345,6 +394,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 			const ofacIdsToFetch: string[] = [];
 			const csvIdsToFetch: string[] = [];
 			const sat69bIdsToFetch: string[] = [];
+			const unscIdsToFetch: string[] = [];
 
 			for (const match of vectorizeResults.matches) {
 				const metadata = match.metadata as {
@@ -378,6 +428,8 @@ export class SearchEndpoint extends OpenAPIRoute {
 					ofacIdsToFetch.push(recordId);
 				} else if (dataset === "sat_69b") {
 					sat69bIdsToFetch.push(recordId);
+				} else if (dataset === "unsc") {
+					unscIdsToFetch.push(recordId);
 				} else {
 					csvIdsToFetch.push(recordId);
 				}
@@ -450,6 +502,45 @@ export class SearchEndpoint extends OpenAPIRoute {
 							programIds: null,
 							dataset: "sat_69b",
 							firstSeen: null,
+							lastSeen: null,
+							lastChange: null,
+							createdAt: record.createdAt.toISOString(),
+							updatedAt: record.updatedAt.toISOString(),
+						};
+					}
+				}
+			}
+
+			// Fetch UNSC records
+			if (unscIdsToFetch.length > 0) {
+				const unscRecords = await prisma.unscEntry.findMany({
+					where: { id: { in: unscIdsToFetch } },
+				});
+
+				for (const record of unscRecords) {
+					const candidate = candidateMap.get(record.id);
+					if (candidate) {
+						candidate.target = {
+							id: record.id,
+							schema: null,
+							name: record.primaryName,
+							aliases: record.aliases ? JSON.parse(record.aliases) : null,
+							birthDate: record.birthDate,
+							countries: record.nationalities
+								? JSON.parse(record.nationalities)
+								: null,
+							addresses: record.addresses ? JSON.parse(record.addresses) : null,
+							identifiers: record.identifiers
+								? JSON.parse(record.identifiers)
+								: null,
+							sanctions: record.designations
+								? JSON.parse(record.designations)
+								: null,
+							phones: null,
+							emails: null,
+							programIds: [record.unListType],
+							dataset: "unsc",
+							firstSeen: record.listedOn,
 							lastSeen: null,
 							lastChange: null,
 							createdAt: record.createdAt.toISOString(),

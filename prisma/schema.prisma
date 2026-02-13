@@ -161,3 +161,27 @@ model Sat69bEntry {
   @@index([rfc], name: "idx_sat_69b_entry_rfc")
   @@map("sat_69b_entry")
 }
+
+/// UN Security Council Entry - Contains individuals and entities from UN sanctions lists
+/// Note: Search is via Vectorize, so no secondary indexes needed (only PK)
+model UnscEntry {
+  id              String   @id // DATAID
+  partyType       String   @map("party_type") // Individual o Entity
+  primaryName     String   @map("primary_name") // Nombre completo construido
+  aliases         String? // JSON array de alias
+  birthDate       String?  @map("birth_date") // Fecha de nacimiento (ISO 8601)
+  birthPlace      String?  @map("birth_place") // Lugar de nacimiento
+  gender          String? // Male/Female
+  addresses       String? // JSON array de direcciones
+  nationalities   String? // JSON array de nacionalidades
+  identifiers     String? // JSON array de documentos
+  designations    String? // JSON array de cargos
+  remarks         String? // COMMENTS1
+  unListType      String   @map("un_list_type") // DRC, AFG, TAL, etc.
+  referenceNumber String?  @map("reference_number") // CDi.001, etc.
+  listedOn        String?  @map("listed_on") // Fecha de listado
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("unsc_entry")
+}
