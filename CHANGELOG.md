@@ -1,3 +1,10 @@
+# [1.4.0-rc.19](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.18...v1.4.0-rc.19) (2026-02-14)
+
+
+### Features
+
+* **migrations:** add migration to drop legacy watchlist tables and update search endpoints ([abd8666](https://github.com/janovix/watchlist-svc/commit/abd86666d193f1770b908495ce454c4239154724))
+
 # [1.4.0-rc.18](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.17...v1.4.0-rc.18) (2026-02-13)
 
 
