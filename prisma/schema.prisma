@@ -10,36 +10,6 @@ datasource db {
   provider = "sqlite"
 }
 
-/// Watchlist Target - Original watchlist entries (CSV-based)
-/// Used by existing search, PEP, and ingestion flows
-model WatchlistTarget {
-  id          String   @id
-  schema      String?
-  name        String?
-  aliases     String? // JSON array
-  birthDate   String?  @map("birth_date")
-  countries   String? // JSON array
-  addresses   String? // JSON array
-  identifiers String? // JSON array
-  sanctions   String? // JSON array
-  phones      String? // JSON array
-  emails      String? // JSON array
-  programIds  String?  @map("program_ids") // JSON array
-  dataset     String?
-  firstSeen   String?  @map("first_seen")
-  lastSeen    String?  @map("last_seen")
-  lastChange  String?  @map("last_change")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  vectorState WatchlistVectorState?
-
-  @@map("watchlist_target")
-  @@index([schema])
-  @@index([name])
-  @@index([dataset])
-}
-
 /// OFAC SDN Entry - Specially Designated Nationals and Blocked Persons
 /// Contains sanctions data from OFAC's SDN Advanced XML file
 /// Note: Search is via Vectorize, so no secondary indexes needed (only PK)
@@ -87,22 +57,6 @@ model WatchlistIngestionRun {
   @@index([status])
   @@index([startedAt(sort: Desc)])
   @@index([sourceType])
-}
-
-/// Watchlist Vector State - Tracks vector indexing for semantic search
-/// Associated with WatchlistTarget (existing flow)
-model WatchlistVectorState {
-  targetId          String   @id @map("target_id")
-  lastIndexedAt     DateTime @default(now()) @map("last_indexed_at")
-  lastIndexedChange String?  @map("last_indexed_change") // ISO 8601 datetime string
-  vectorId          String   @map("vector_id") // same as target_id
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
-
-  target WatchlistTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
-
-  @@map("watchlist_vector_state")
-  @@index([lastIndexedAt])
 }
 
 /// Watchlist Identifier - Stores normalized identifiers for exact matching

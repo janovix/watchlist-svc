@@ -8,23 +8,19 @@ import { authMiddleware, adminMiddleware } from "./lib/auth-middleware";
 import { corsMiddleware } from "./middleware/cors";
 import { HealthEndpoint } from "./endpoints/watchlist/health";
 import { SearchEndpoint } from "./endpoints/watchlist/search";
-import { TargetReadEndpoint } from "./endpoints/watchlist/targetRead";
+import { SearchOfacEndpoint } from "./endpoints/watchlist/searchOfac";
+import { SearchUnscEndpoint } from "./endpoints/watchlist/searchUnsc";
+import { SearchSat69bEndpoint } from "./endpoints/watchlist/searchSat69b";
 import {
 	IngestionRunsListEndpoint,
 	IngestionRunReadEndpoint,
 } from "./endpoints/watchlist/ingestionRuns";
 import { IngestionProgressEndpoint } from "./endpoints/watchlist/ingestionProgress";
 import {
-	AdminIngestEndpoint,
-	AdminIngestSdnXmlEndpoint,
-	AdminReindexEndpoint,
-} from "./endpoints/watchlist/adminIngest";
-import {
 	IngestionStartEndpoint,
 	IngestionCompleteEndpoint,
 	IngestionFailedEndpoint,
 } from "./endpoints/watchlist/ingestionUpload";
-import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
 import { uploadRoutes } from "./routes/upload";
 import {
 	InternalOfacTruncateEndpoint,
@@ -184,8 +180,9 @@ app.get("/docsz", (c) => {
 // Apply auth middleware to protected routes
 // Pattern: Apply middleware to specific paths before registering endpoints
 app.use("/search", authMiddleware());
-app.use("/pep/search", authMiddleware());
-app.use("/targets/*", authMiddleware());
+app.use("/search/ofac", authMiddleware());
+app.use("/search/unsc", authMiddleware());
+app.use("/search/sat69b", authMiddleware());
 
 // Admin routes require authentication + admin role
 // All admin-facing endpoints are served under /admin with admin JWT validation
@@ -197,8 +194,9 @@ app.use("/api/upload/*", adminMiddleware());
 // Register watchlist endpoints
 openapi.get("/healthz", HealthEndpoint);
 openapi.post("/search", SearchEndpoint);
-openapi.post("/pep/search", PepSearchEndpoint);
-openapi.get("/targets/:id", TargetReadEndpoint);
+openapi.post("/search/ofac", SearchOfacEndpoint);
+openapi.post("/search/unsc", SearchUnscEndpoint);
+openapi.post("/search/sat69b", SearchSat69bEndpoint);
 
 // Ingestion endpoints under /admin (require admin JWT)
 openapi.get("/admin/ingestion/runs", IngestionRunsListEndpoint);
@@ -209,9 +207,6 @@ openapi.post("/admin/ingestion/:runId/complete", IngestionCompleteEndpoint);
 openapi.post("/admin/ingestion/:runId/failed", IngestionFailedEndpoint);
 
 // Admin management endpoints
-openapi.post("/admin/ingest", AdminIngestEndpoint);
-openapi.post("/admin/ingest/sdn-xml", AdminIngestSdnXmlEndpoint);
-openapi.post("/admin/reindex", AdminReindexEndpoint);
 openapi.post("/admin/vectorize/reindex", AdminVectorizeReindexEndpoint);
 
 // Mount upload routes (for file uploads to R2)
