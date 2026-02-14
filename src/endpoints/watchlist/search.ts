@@ -3,8 +3,6 @@ import { AppContext } from "../../types";
 import { contentJson } from "chanfana";
 import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
-import { watchlistTarget } from "./base";
-import { transformWatchlistTarget } from "../../lib/transformers";
 import { parseVectorId } from "../../lib/ofac-vectorize-service";
 import {
 	normalizeIdentifier,
@@ -13,6 +11,84 @@ import {
 	computeHybridScore,
 } from "../../lib/matching-utils";
 import { createHash } from "crypto";
+import { ofacMatch } from "./searchOfac";
+import { unscMatch } from "./searchUnsc";
+import { sat69bMatch } from "./searchSat69b";
+
+// Tipos para los targets
+type OfacTargetType = {
+	id: string;
+	partyType: string;
+	primaryName: string;
+	aliases: string[] | null;
+	birthDate: string | null;
+	birthPlace: string | null;
+	addresses: string[] | null;
+	identifiers: Array<{
+		type?: string;
+		number?: string;
+		country?: string;
+		issueDate?: string;
+		expirationDate?: string;
+	}> | null;
+	remarks: string | null;
+	sourceList: string;
+	createdAt: string;
+	updatedAt: string;
+};
+
+type UnscTargetType = {
+	id: string;
+	partyType: string;
+	primaryName: string;
+	aliases: string[] | null;
+	birthDate: string | null;
+	birthPlace: string | null;
+	gender: string | null;
+	nationalities: string[] | null;
+	addresses: string[] | null;
+	identifiers: Array<{ type?: string; number?: string }> | null;
+	designations: string[] | null;
+	remarks: string | null;
+	unListType: string;
+	referenceNumber: string | null;
+	listedOn: string | null;
+	createdAt: string;
+	updatedAt: string;
+};
+
+type Sat69bTargetType = {
+	id: string;
+	rfc: string;
+	taxpayerName: string;
+	taxpayerStatus: string;
+	presumptionPhase: {
+		satNotice: string | null;
+		satDate: string | null;
+		dofNotice: string | null;
+		dofDate: string | null;
+	} | null;
+	rebuttalPhase: {
+		satNotice: string | null;
+		satDate: string | null;
+		dofNotice: string | null;
+		dofDate: string | null;
+	} | null;
+	definitivePhase: {
+		satNotice: string | null;
+		satDate: string | null;
+		dofNotice: string | null;
+		dofDate: string | null;
+	} | null;
+	favorablePhase: {
+		satNotice: string | null;
+		satDate: string | null;
+		dofNotice: string | null;
+		dofDate: string | null;
+	} | null;
+	createdAt: string;
+	updatedAt: string;
+};
 
 export class SearchEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -24,7 +100,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 			body: contentJson(
 				z.object({
 					q: z.string().min(1, "Query string is required"),
-					dataset: z.string().optional(),
+					dataset: z.enum(["ofac_sdn", "unsc", "sat_69b"]).optional(),
 					countries: z.array(z.string()).optional(),
 					birthDate: z.string().optional(),
 					identifiers: z.array(z.string()).optional(),
@@ -35,23 +111,22 @@ export class SearchEndpoint extends OpenAPIRoute {
 		},
 		responses: {
 			"200": {
-				description: "Search results with hybrid scoring",
+				description: "Search results with hybrid scoring, separated by dataset",
 				...contentJson({
 					success: Boolean,
 					result: z.object({
-						matches: z.array(
-							z.object({
-								target: watchlistTarget,
-								score: z.number(),
-								breakdown: z.object({
-									vectorScore: z.number(),
-									nameScore: z.number(),
-									metaScore: z.number(),
-									identifierMatch: z.boolean(),
-								}),
-							}),
-						),
-						count: z.number(),
+						ofac: z.object({
+							matches: z.array(ofacMatch),
+							count: z.number(),
+						}),
+						unsc: z.object({
+							matches: z.array(unscMatch),
+							count: z.number(),
+						}),
+						sat69b: z.object({
+							matches: z.array(sat69bMatch),
+							count: z.number(),
+						}),
 						pepSearch: z
 							.object({
 								searchId: z.string(),
@@ -170,7 +245,6 @@ export class SearchEndpoint extends OpenAPIRoute {
 						) {
 							// Group by dataset
 							const ofacIds: string[] = [];
-							const csvIds: string[] = [];
 							const sat69bIds: string[] = [];
 							const unscIds: string[] = [];
 
@@ -184,8 +258,6 @@ export class SearchEndpoint extends OpenAPIRoute {
 									sat69bIds.push(recordId);
 								} else if (dataset === "unsc") {
 									unscIds.push(recordId);
-								} else {
-									csvIds.push(recordId);
 								}
 							}
 
@@ -196,35 +268,28 @@ export class SearchEndpoint extends OpenAPIRoute {
 								});
 
 								for (const record of ofacRecords) {
-									// Transform OFAC record to watchlist target format
 									const target = {
 										id: record.id,
-										schema: null,
-										name: record.primaryName,
+										partyType: record.partyType,
+										primaryName: record.primaryName,
 										aliases: record.aliases ? JSON.parse(record.aliases) : null,
 										birthDate: record.birthDate,
-										countries: null, // OFAC doesn't have direct countries field
+										birthPlace: record.birthPlace,
 										addresses: record.addresses
 											? JSON.parse(record.addresses)
 											: null,
 										identifiers: record.identifiers
 											? JSON.parse(record.identifiers)
 											: null,
-										sanctions: null,
-										phones: null,
-										emails: null,
-										programIds: null,
-										dataset: "ofac_sdn",
-										firstSeen: null,
-										lastSeen: null,
-										lastChange: null,
+										remarks: record.remarks,
+										sourceList: record.sourceList,
 										createdAt: record.createdAt.toISOString(),
 										updatedAt: record.updatedAt.toISOString(),
 									};
 
 									candidateMap.set(record.id, {
 										target,
-										vectorScore: 0, // Will be updated if also found in vector search
+										vectorScore: 0,
 										identifierMatch: true,
 										dataset: "ofac_sdn",
 									});
@@ -238,24 +303,35 @@ export class SearchEndpoint extends OpenAPIRoute {
 								});
 
 								for (const record of sat69bRecords) {
-									// Transform SAT 69-B record to watchlist target format
 									const target = {
 										id: record.id,
-										schema: null,
-										name: record.taxpayerName,
-										aliases: null,
-										birthDate: null,
-										countries: ["MX"], // SAT 69-B is Mexico-specific
-										addresses: null,
-										identifiers: [{ type: "RFC", number: record.rfc }],
-										sanctions: [record.taxpayerStatus],
-										phones: null,
-										emails: null,
-										programIds: null,
-										dataset: "sat_69b",
-										firstSeen: null,
-										lastSeen: null,
-										lastChange: null,
+										rfc: record.rfc,
+										taxpayerName: record.taxpayerName,
+										taxpayerStatus: record.taxpayerStatus,
+										presumptionPhase: {
+											satNotice: record.presumptionSatNotice,
+											satDate: record.presumptionSatDate,
+											dofNotice: record.presumptionDofNotice,
+											dofDate: record.presumptionDofDate,
+										},
+										rebuttalPhase: {
+											satNotice: record.rebuttalSatNotice,
+											satDate: record.rebuttalSatDate,
+											dofNotice: record.rebuttalDofNotice,
+											dofDate: record.rebuttalDofDate,
+										},
+										definitivePhase: {
+											satNotice: record.definitiveSatNotice,
+											satDate: record.definitiveSatDate,
+											dofNotice: record.definitiveDofNotice,
+											dofDate: record.definitiveDofDate,
+										},
+										favorablePhase: {
+											satNotice: record.favorableSatNotice,
+											satDate: record.favorableSatDate,
+											dofNotice: record.favorableDofNotice,
+											dofDate: record.favorableDofDate,
+										},
 										createdAt: record.createdAt.toISOString(),
 										updatedAt: record.updatedAt.toISOString(),
 									};
@@ -276,14 +352,15 @@ export class SearchEndpoint extends OpenAPIRoute {
 								});
 
 								for (const record of unscRecords) {
-									// Transform UNSC record to watchlist target format
 									const target = {
 										id: record.id,
-										schema: null,
-										name: record.primaryName,
+										partyType: record.partyType,
+										primaryName: record.primaryName,
 										aliases: record.aliases ? JSON.parse(record.aliases) : null,
 										birthDate: record.birthDate,
-										countries: record.nationalities
+										birthPlace: record.birthPlace,
+										gender: record.gender,
+										nationalities: record.nationalities
 											? JSON.parse(record.nationalities)
 											: null,
 										addresses: record.addresses
@@ -292,16 +369,13 @@ export class SearchEndpoint extends OpenAPIRoute {
 										identifiers: record.identifiers
 											? JSON.parse(record.identifiers)
 											: null,
-										sanctions: record.designations
+										designations: record.designations
 											? JSON.parse(record.designations)
 											: null,
-										phones: null,
-										emails: null,
-										programIds: [record.unListType],
-										dataset: "unsc",
-										firstSeen: record.listedOn,
-										lastSeen: null,
-										lastChange: null,
+										remarks: record.remarks,
+										unListType: record.unListType,
+										referenceNumber: record.referenceNumber,
+										listedOn: record.listedOn,
 										createdAt: record.createdAt.toISOString(),
 										updatedAt: record.updatedAt.toISOString(),
 									};
@@ -311,22 +385,6 @@ export class SearchEndpoint extends OpenAPIRoute {
 										vectorScore: 0,
 										identifierMatch: true,
 										dataset: "unsc",
-									});
-								}
-							}
-
-							// Fetch CSV target records
-							if (csvIds.length > 0) {
-								const csvRecords = await prisma.watchlistTarget.findMany({
-									where: { id: { in: csvIds } },
-								});
-
-								for (const record of csvRecords) {
-									candidateMap.set(record.id, {
-										target: transformWatchlistTarget(record),
-										vectorScore: 0,
-										identifierMatch: true,
-										dataset: record.dataset || "csv",
 									});
 								}
 							}
@@ -392,7 +450,6 @@ export class SearchEndpoint extends OpenAPIRoute {
 			console.log("[Search] Step C: Rehydrating records from D1");
 
 			const ofacIdsToFetch: string[] = [];
-			const csvIdsToFetch: string[] = [];
 			const sat69bIdsToFetch: string[] = [];
 			const unscIdsToFetch: string[] = [];
 
@@ -430,8 +487,6 @@ export class SearchEndpoint extends OpenAPIRoute {
 					sat69bIdsToFetch.push(recordId);
 				} else if (dataset === "unsc") {
 					unscIdsToFetch.push(recordId);
-				} else {
-					csvIdsToFetch.push(recordId);
 				}
 
 				// Store preliminary entry with vector score
@@ -454,23 +509,17 @@ export class SearchEndpoint extends OpenAPIRoute {
 					if (candidate) {
 						candidate.target = {
 							id: record.id,
-							schema: null,
-							name: record.primaryName,
+							partyType: record.partyType,
+							primaryName: record.primaryName,
 							aliases: record.aliases ? JSON.parse(record.aliases) : null,
 							birthDate: record.birthDate,
-							countries: null,
+							birthPlace: record.birthPlace,
 							addresses: record.addresses ? JSON.parse(record.addresses) : null,
 							identifiers: record.identifiers
 								? JSON.parse(record.identifiers)
 								: null,
-							sanctions: null,
-							phones: null,
-							emails: null,
-							programIds: null,
-							dataset: "ofac_sdn",
-							firstSeen: null,
-							lastSeen: null,
-							lastChange: null,
+							remarks: record.remarks,
+							sourceList: record.sourceList,
 							createdAt: record.createdAt.toISOString(),
 							updatedAt: record.updatedAt.toISOString(),
 						};
@@ -489,21 +538,33 @@ export class SearchEndpoint extends OpenAPIRoute {
 					if (candidate) {
 						candidate.target = {
 							id: record.id,
-							schema: null,
-							name: record.taxpayerName,
-							aliases: null,
-							birthDate: null,
-							countries: ["MX"], // SAT 69-B is Mexico-specific
-							addresses: null,
-							identifiers: [{ type: "RFC", number: record.rfc }],
-							sanctions: [record.taxpayerStatus],
-							phones: null,
-							emails: null,
-							programIds: null,
-							dataset: "sat_69b",
-							firstSeen: null,
-							lastSeen: null,
-							lastChange: null,
+							rfc: record.rfc,
+							taxpayerName: record.taxpayerName,
+							taxpayerStatus: record.taxpayerStatus,
+							presumptionPhase: {
+								satNotice: record.presumptionSatNotice,
+								satDate: record.presumptionSatDate,
+								dofNotice: record.presumptionDofNotice,
+								dofDate: record.presumptionDofDate,
+							},
+							rebuttalPhase: {
+								satNotice: record.rebuttalSatNotice,
+								satDate: record.rebuttalSatDate,
+								dofNotice: record.rebuttalDofNotice,
+								dofDate: record.rebuttalDofDate,
+							},
+							definitivePhase: {
+								satNotice: record.definitiveSatNotice,
+								satDate: record.definitiveSatDate,
+								dofNotice: record.definitiveDofNotice,
+								dofDate: record.definitiveDofDate,
+							},
+							favorablePhase: {
+								satNotice: record.favorableSatNotice,
+								satDate: record.favorableSatDate,
+								dofNotice: record.favorableDofNotice,
+								dofDate: record.favorableDofDate,
+							},
 							createdAt: record.createdAt.toISOString(),
 							updatedAt: record.updatedAt.toISOString(),
 						};
@@ -522,27 +583,26 @@ export class SearchEndpoint extends OpenAPIRoute {
 					if (candidate) {
 						candidate.target = {
 							id: record.id,
-							schema: null,
-							name: record.primaryName,
+							partyType: record.partyType,
+							primaryName: record.primaryName,
 							aliases: record.aliases ? JSON.parse(record.aliases) : null,
 							birthDate: record.birthDate,
-							countries: record.nationalities
+							birthPlace: record.birthPlace,
+							gender: record.gender,
+							nationalities: record.nationalities
 								? JSON.parse(record.nationalities)
 								: null,
 							addresses: record.addresses ? JSON.parse(record.addresses) : null,
 							identifiers: record.identifiers
 								? JSON.parse(record.identifiers)
 								: null,
-							sanctions: record.designations
+							designations: record.designations
 								? JSON.parse(record.designations)
 								: null,
-							phones: null,
-							emails: null,
-							programIds: [record.unListType],
-							dataset: "unsc",
-							firstSeen: record.listedOn,
-							lastSeen: null,
-							lastChange: null,
+							remarks: record.remarks,
+							unListType: record.unListType,
+							referenceNumber: record.referenceNumber,
+							listedOn: record.listedOn,
 							createdAt: record.createdAt.toISOString(),
 							updatedAt: record.updatedAt.toISOString(),
 						};
@@ -550,25 +610,33 @@ export class SearchEndpoint extends OpenAPIRoute {
 				}
 			}
 
-			// Fetch CSV target records
-			if (csvIdsToFetch.length > 0) {
-				const csvRecords = await prisma.watchlistTarget.findMany({
-					where: { id: { in: csvIdsToFetch } },
-				});
-
-				for (const record of csvRecords) {
-					const candidate = candidateMap.get(record.id);
-					if (candidate) {
-						candidate.target = transformWatchlistTarget(record);
-					}
-				}
-			}
-
 			// Step D: Hybrid Scoring
 			console.log("[Search] Step D: Computing hybrid scores");
 
-			const matches: Array<{
-				target: unknown;
+			const ofacMatches: Array<{
+				target: OfacTargetType;
+				score: number;
+				breakdown: {
+					vectorScore: number;
+					nameScore: number;
+					metaScore: number;
+					identifierMatch: boolean;
+				};
+			}> = [];
+
+			const unscMatches: Array<{
+				target: UnscTargetType;
+				score: number;
+				breakdown: {
+					vectorScore: number;
+					nameScore: number;
+					metaScore: number;
+					identifierMatch: boolean;
+				};
+			}> = [];
+
+			const sat69bMatches: Array<{
+				target: Sat69bTargetType;
 				score: number;
 				breakdown: {
 					vectorScore: number;
@@ -579,83 +647,90 @@ export class SearchEndpoint extends OpenAPIRoute {
 			}> = [];
 
 			for (const [_recordId, candidate] of candidateMap.entries()) {
-				if (!candidate.target) continue; // Skip if target not found
+				if (!candidate.target) continue;
 
-				const target = candidate.target as {
-					name: string | null;
-					aliases: string[] | null;
-					birthDate: string | null;
-					countries: string[] | null;
-				};
+				let nameScore = 0;
+				let metaScore = 0;
+				let finalScore = 1.0;
 
-				// Identifier matches get score override of 1.0
-				if (candidate.identifierMatch) {
-					matches.push({
-						target: candidate.target,
-						score: 1.0,
-						breakdown: {
-							vectorScore: candidate.vectorScore,
-							nameScore: 0,
-							metaScore: 0,
-							identifierMatch: true,
-						},
-					});
-					continue;
+				// Identifier matches get score of 1.0
+				if (!candidate.identifierMatch) {
+					// Compute name score based on dataset
+					if (
+						candidate.dataset === "ofac_sdn" ||
+						candidate.dataset === "unsc"
+					) {
+						const target = candidate.target as {
+							primaryName: string;
+							aliases: string[] | null;
+							birthDate: string | null;
+						};
+						nameScore = bestNameScore(
+							data.body.q,
+							target.primaryName,
+							target.aliases,
+						);
+					} else if (candidate.dataset === "sat_69b") {
+						const target = candidate.target as { taxpayerName: string };
+						nameScore = bestNameScore(data.body.q, target.taxpayerName, null);
+					}
+
+					// Compute meta score (only for datasets with birthDate)
+					if (
+						candidate.dataset === "ofac_sdn" ||
+						candidate.dataset === "unsc"
+					) {
+						const target = candidate.target as { birthDate: string | null };
+						metaScore = computeMetaScore(
+							data.body.birthDate,
+							data.body.countries,
+							target.birthDate,
+							null,
+						);
+					}
+
+					// Compute hybrid score
+					finalScore = computeHybridScore(
+						candidate.vectorScore,
+						nameScore,
+						metaScore,
+					);
 				}
 
-				// Compute name score
-				const nameScore = target.name
-					? bestNameScore(data.body.q, target.name, target.aliases)
-					: 0;
+				// Filter by threshold
+				if (finalScore < data.body.threshold) continue;
 
-				// Compute meta score
-				const metaScore = computeMetaScore(
-					data.body.birthDate,
-					data.body.countries,
-					target.birthDate,
-					target.countries,
-				);
-
-				// Compute hybrid score
-				const finalScore = computeHybridScore(
-					candidate.vectorScore,
-					nameScore,
-					metaScore,
-				);
-
-				// Log candidate score for diagnostics
-				console.log("[Search] Candidate score", {
-					recordId: _recordId,
-					name: target.name,
-					vectorScore: candidate.vectorScore,
-					nameScore,
-					metaScore,
-					hybridScore: finalScore,
-					passesThreshold: finalScore >= data.body.threshold,
-				});
-
-				matches.push({
+				const match = {
 					target: candidate.target,
 					score: finalScore,
 					breakdown: {
 						vectorScore: candidate.vectorScore,
 						nameScore,
 						metaScore,
-						identifierMatch: false,
+						identifierMatch: candidate.identifierMatch,
 					},
-				});
+				};
+
+				// Add to appropriate array with type assertion
+				if (candidate.dataset === "ofac_sdn") {
+					ofacMatches.push(match as (typeof ofacMatches)[number]);
+				} else if (candidate.dataset === "unsc") {
+					unscMatches.push(match as (typeof unscMatches)[number]);
+				} else if (candidate.dataset === "sat_69b") {
+					sat69bMatches.push(match as (typeof sat69bMatches)[number]);
+				}
 			}
 
-			// Filter by threshold and sort by score descending
-			const filteredMatches = matches
-				.filter((m) => m.score >= data.body.threshold)
-				.sort((a, b) => b.score - a.score);
+			// Sort each dataset by score descending
+			ofacMatches.sort((a, b) => b.score - a.score);
+			unscMatches.sort((a, b) => b.score - a.score);
+			sat69bMatches.sort((a, b) => b.score - a.score);
 
 			console.log("[Search] Search completed successfully", {
 				totalCandidates: candidateMap.size,
-				matchesCount: filteredMatches.length,
-				identifierMatches: matches.filter((m) => m.breakdown.identifierMatch)
-					.length,
+				ofacCount: ofacMatches.length,
+				unscCount: unscMatches.length,
+				sat69bCount: sat69bMatches.length,
 			});
 
 			// ===================================================================
@@ -753,8 +828,18 @@ export class SearchEndpoint extends OpenAPIRoute {
 			return {
 				success: true,
 				result: {
-					matches: filteredMatches,
-					count: filteredMatches.length,
+					ofac: {
+						matches: ofacMatches,
+						count: ofacMatches.length,
+					},
+					unsc: {
+						matches: unscMatches,
+						count: unscMatches.length,
+					},
+					sat69b: {
+						matches: sat69bMatches,
+						count: sat69bMatches.length,
+					},
 					pepSearch: pepSearchInfo,
 				},
 			};

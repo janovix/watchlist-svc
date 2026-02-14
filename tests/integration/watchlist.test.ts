@@ -4,11 +4,7 @@ import { createPrismaClient } from "../../src/lib/prisma";
 
 describe("Watchlist API Integration Tests", () => {
 	beforeEach(async () => {
-		// Clear test data if needed
-		const prisma = createPrismaClient(env.DB);
-		await prisma.watchlistTarget.deleteMany({});
-		await prisma.watchlistIngestionRun.deleteMany({});
-		await prisma.watchlistVectorState.deleteMany({});
+		// No cleanup needed - legacy tables removed
 	});
 
 	describe("GET /healthz", () => {
@@ -24,59 +20,6 @@ describe("Watchlist API Integration Tests", () => {
 			expect(body.result.ok).toBe(true);
 			expect(body.result.timestamp).toBeDefined();
 			expect(new Date(body.result.timestamp).getTime()).toBeGreaterThan(0);
-		});
-	});
-
-	describe("GET /targets/:id", () => {
-		it("should return 404 for non-existent target", async () => {
-			const response = await SELF.fetch(
-				"http://local.test/targets/non-existent-id",
-			);
-			const body = await response.json<{
-				success: boolean;
-				errors: Array<{ code: number; message: string }>;
-			}>();
-
-			expect(response.status).toBe(404);
-			expect(body.success).toBe(false);
-			expect(body.errors[0].code).toBe(404);
-		});
-
-		it("should return target when it exists", async () => {
-			const prisma = createPrismaClient(env.DB);
-			const testTarget = await prisma.watchlistTarget.create({
-				data: {
-					id: "test-target-1",
-					schema: "Person",
-					name: "Test Person",
-					aliases: JSON.stringify(["Alias 1", "Alias 2"]),
-					countries: JSON.stringify(["US", "CA"]),
-					dataset: "test-dataset",
-					firstSeen: "2025-01-01T00:00:00Z",
-					lastSeen: "2025-01-01T00:00:00Z",
-					lastChange: "2025-01-01T00:00:00Z",
-				},
-			});
-
-			const response = await SELF.fetch(
-				`http://local.test/targets/${testTarget.id}`,
-			);
-			const body = await response.json<{
-				success: boolean;
-				result: {
-					id: string;
-					name: string | null;
-					schema: string | null;
-					aliases: string[] | null;
-				};
-			}>();
-
-			expect(response.status).toBe(200);
-			expect(body.success).toBe(true);
-			expect(body.result.id).toBe(testTarget.id);
-			expect(body.result.name).toBe("Test Person");
-			expect(body.result.schema).toBe("Person");
-			expect(body.result.aliases).toEqual(["Alias 1", "Alias 2"]);
 		});
 	});
 

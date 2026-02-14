@@ -6,14 +6,16 @@ describe("Prisma Client", () => {
 	it("should create Prisma client with D1 adapter", () => {
 		const prisma = createPrismaClient(env.DB);
 		expect(prisma).toBeDefined();
-		expect(prisma.watchlistTarget).toBeDefined();
+		expect(prisma.ofacSdnEntry).toBeDefined();
+		expect(prisma.unscEntry).toBeDefined();
+		expect(prisma.sat69bEntry).toBeDefined();
 		expect(prisma.watchlistIngestionRun).toBeDefined();
-		expect(prisma.watchlistVectorState).toBeDefined();
+		expect(prisma.watchlistIdentifier).toBeDefined();
 	});
 
 	it("should be able to query database", async () => {
 		const prisma = createPrismaClient(env.DB);
-		const count = await prisma.watchlistTarget.count();
+		const count = await prisma.watchlistIngestionRun.count();
 		expect(typeof count).toBe("number");
 		expect(count).toBeGreaterThanOrEqual(0);
 	});
