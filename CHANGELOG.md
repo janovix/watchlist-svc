@@ -1,3 +1,85 @@
+# [1.4.0-rc.18](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.17...v1.4.0-rc.18) (2026-02-13)
+
+
+### Bug Fixes
+
+* **internalUnsc:** enhance error handling for sub-batch inserts by implementing fallback to individual record upserts ([a0901cb](https://github.com/janovix/watchlist-svc/commit/a0901cb2e117f90052e8ebd012d4b94ff05f547a))
+
+# [1.4.0-rc.17](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.16...v1.4.0-rc.17) (2026-02-13)
+
+
+### Features
+
+* **unsc:** implement UNSC entry table, ingestion endpoints, and vectorization support ([462a1f5](https://github.com/janovix/watchlist-svc/commit/462a1f56ea581a1f8bb8bc2c36498e1677a9fcf0))
+
+# [1.4.0-rc.16](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.15...v1.4.0-rc.16) (2026-02-12)
+
+
+### Features
+
+* **usage-rights:** implement usage rights client and integrate into watchlist endpoints ([52fabcd](https://github.com/janovix/watchlist-svc/commit/52fabcd41e158a5a0b628236d3fb1d1f1bf13e6c))
+
+# [1.4.0-rc.15](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.14...v1.4.0-rc.15) (2026-02-12)
+
+
+### Features
+
+* **sat69b:** add SAT 69-B entry table and related ingestion, search, and vectorization functionality ([daf8966](https://github.com/janovix/watchlist-svc/commit/daf89667ac66a07f9ab66e1b47f7e52b1d87a76c))
+
+# [1.4.0-rc.14](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.13...v1.4.0-rc.14) (2026-02-12)
+
+
+### Bug Fixes
+
+* **search:** use waitUntil for thread creation to prevent cancellation ([94d9aaa](https://github.com/janovix/watchlist-svc/commit/94d9aaab240aa198d2889e5e86d578d11834a5b6))
+
+# [1.4.0-rc.13](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.12...v1.4.0-rc.13) (2026-02-12)
+
+
+### Features
+
+* **peps:** add PEP_CACHE binding and enable durable objects in wrangler configuration ([cd48340](https://github.com/janovix/watchlist-svc/commit/cd48340996a8915598cafc609f92527bdae99ed1))
+
+# [1.4.0-rc.12](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.11...v1.4.0-rc.12) (2026-02-12)
+
+
+### Features
+
+* **peps:** implement PEP search results handling with SSE support and caching ([f2884e5](https://github.com/janovix/watchlist-svc/commit/f2884e5ed25d5050ba3933ae364f82bdc39d478e))
+
+# [1.4.0-rc.11](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.10...v1.4.0-rc.11) (2026-02-10)
+
+
+### Features
+
+* **watchlist:** implement watchlist identifier table and hybrid search logic ([390274f](https://github.com/janovix/watchlist-svc/commit/390274f93dfad6bb6805c812152a3632960a2dad))
+
+# [1.4.0-rc.10](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.9...v1.4.0-rc.10) (2026-02-10)
+
+
+### Features
+
+* **ingestion:** add vectorization thread tracking to ingestion progress and update calculations ([7b93fca](https://github.com/janovix/watchlist-svc/commit/7b93fca55ada01bc03fd62ef0ad12b908930e018))
+
+# [1.4.0-rc.9](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.8...v1.4.0-rc.9) (2026-02-10)
+
+
+### Features
+
+* **r2-presigned:** add generatePresignedDownloadUrl function and integrate into ingestion endpoints ([94fb94a](https://github.com/janovix/watchlist-svc/commit/94fb94a9feff85c48cdd5d9f436638dd10f25dda))
+
+# [1.4.0-rc.8](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.7...v1.4.0-rc.8) (2026-02-09)
+
+
+### Bug Fixes
+
+* update thread service binding in wrangler configuration ([ca6844a](https://github.com/janovix/watchlist-svc/commit/ca6844aeb36db21ec670490aa068b28fcad7f789))
+
+
+### Features
+
+* add internal vectorization endpoints and update ingestion logic ([23b4acd](https://github.com/janovix/watchlist-svc/commit/23b4acdc901e62f2080fe5324aa77f250b407431))
+
 # [1.4.0-rc.7](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.6...v1.4.0-rc.7) (2026-02-04)
 
 

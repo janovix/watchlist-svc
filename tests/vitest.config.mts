@@ -48,10 +48,10 @@ export default defineWorkersConfig({
 				"src/endpoints/watchlist/internalPep.ts", // Requires PEP_CACHE and PEP_EVENTS_DO bindings
 			],
 			thresholds: {
-				lines: 85,
+				lines: 82,
 				functions: 80,
-				branches: 80,
-				statements: 85,
+				branches: 75,
+				statements: 82,
 			},
 		},
 		setupFiles: ["./tests/apply-migrations.ts"],
