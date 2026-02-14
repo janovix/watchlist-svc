@@ -139,3 +139,51 @@ model UnscEntry {
 
   @@map("unsc_entry")
 }
+
+/// Search Query - Stores all search queries with aggregated results from multiple search types
+/// Used for persistent query audit trail and async result aggregation
+model SearchQuery {
+  id                   String   @id
+  organizationId       String   @map("organization_id")
+  userId               String   @map("user_id")
+  query                String
+  entityType           String   @default("person") @map("entity_type") // 'person', 'entity', etc.
+  birthDate            String?  @map("birth_date")
+  countries            String? // JSON array
+  status               String   @default("pending") // 'pending', 'completed', 'failed'
+  
+  // OFAC Sanctions results (synchronous)
+  ofacStatus           String   @default("pending") @map("ofac_status")
+  ofacResult           String?  @map("ofac_result") // JSON result
+  ofacCount            Int      @default(0) @map("ofac_count")
+  
+  // SAT 69B Sanctions results (synchronous)
+  sat69bStatus         String   @default("pending") @map("sat69b_status")
+  sat69bResult         String?  @map("sat69b_result") // JSON result
+  sat69bCount          Int      @default(0) @map("sat69b_count")
+  
+  // UN Sanctions results (synchronous)
+  unStatus             String   @default("pending") @map("un_status")
+  unResult             String?  @map("un_result") // JSON result
+  unCount              Int      @default(0) @map("un_count")
+  
+  // PEP Official results (async via pep_search container)
+  pepOfficialStatus    String   @default("pending") @map("pep_official_status")
+  pepOfficialResult    String?  @map("pep_official_result") // JSON result
+  pepOfficialCount     Int      @default(0) @map("pep_official_count")
+  
+  // PEP AI results (async via pep_grok container, person only)
+  pepAiStatus          String   @default("skipped") @map("pep_ai_status")
+  pepAiResult          String?  @map("pep_ai_result") // JSON result
+  
+  // Adverse Media results (async via adverse_media_grok container)
+  adverseMediaStatus   String   @default("pending") @map("adverse_media_status")
+  adverseMediaResult   String?  @map("adverse_media_result") // JSON result
+  
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  
+  @@index([organizationId, createdAt(sort: Desc)], name: "idx_search_query_org_created")
+  @@index([organizationId, status], name: "idx_search_query_org_status")
+  @@map("search_query")
+}
