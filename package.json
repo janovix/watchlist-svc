@@ -79,7 +79,7 @@
 		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
 		"vitest": "vitest --config tests/vitest.config.mts",
 		"vitest:coverage": "vitest run --coverage --config tests/vitest.config.mts",
-		"test": "npm run vitest",
+		"test": "vitest --config tests/vitest.config.mts --run",
 		"sentry:sourcemaps": "_SENTRY_RELEASE=$(sentry-cli releases propose-version) && sentry-cli releases new $_SENTRY_RELEASE && sentry-cli sourcemaps upload --release=$_SENTRY_RELEASE --strip-prefix 'dist/..' dist",
 		"postdeploy:dev": "pnpm sentry:sourcemaps || true",
 		"postdeploy:prod": "pnpm sentry:sourcemaps || true"

@@ -46,12 +46,14 @@ export default defineWorkersConfig({
 				"src/endpoints/watchlist/pepEvents.ts", // Requires PEP_EVENTS_DO binding
 				"src/durable-objects/pep-events.ts", // Durable Object - hard to test in vitest environment
 				"src/endpoints/watchlist/internalPep.ts", // Requires PEP_CACHE and PEP_EVENTS_DO bindings
+				"src/endpoints/watchlist/internalAdverseMedia.ts", // Requires PEP_EVENTS_DO binding
+				"src/endpoints/watchlist/internalGrokPep.ts", // Requires PEP_EVENTS_DO binding
 			],
 			thresholds: {
-				lines: 82,
-				functions: 80,
-				branches: 75,
-				statements: 82,
+				lines: 85,
+				functions: 85,
+				branches: 84.85,
+				statements: 85,
 			},
 		},
 		setupFiles: ["./tests/apply-migrations.ts"],

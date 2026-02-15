@@ -44,6 +44,16 @@ import {
 	InternalPepResultsEndpoint,
 	InternalPepFailedEndpoint,
 } from "./endpoints/watchlist/internalPep";
+import {
+	InternalAdverseMediaResultsEndpoint,
+	InternalAdverseMediaFailedEndpoint,
+} from "./endpoints/watchlist/internalAdverseMedia";
+import {
+	InternalGrokPepResultsEndpoint,
+	InternalGrokPepFailedEndpoint,
+} from "./endpoints/watchlist/internalGrokPep";
+import { QueryListEndpoint } from "./endpoints/watchlist/queryList";
+import { QueryReadEndpoint } from "./endpoints/watchlist/queryRead";
 import pepEventsRouter from "./endpoints/watchlist/pepEvents";
 import {
 	InternalVectorizeCountEndpoint,
@@ -183,6 +193,8 @@ app.use("/search", authMiddleware());
 app.use("/search/ofac", authMiddleware());
 app.use("/search/unsc", authMiddleware());
 app.use("/search/sat69b", authMiddleware());
+app.use("/queries", authMiddleware());
+app.use("/queries/:queryId", authMiddleware());
 
 // Admin routes require authentication + admin role
 // All admin-facing endpoints are served under /admin with admin JWT validation
@@ -197,6 +209,10 @@ openapi.post("/search", SearchEndpoint);
 openapi.post("/search/ofac", SearchOfacEndpoint);
 openapi.post("/search/unsc", SearchUnscEndpoint);
 openapi.post("/search/sat69b", SearchSat69bEndpoint);
+
+// Query management endpoints (authenticated)
+openapi.get("/queries", QueryListEndpoint);
+openapi.get("/queries/:queryId", QueryReadEndpoint);
 
 // Ingestion endpoints under /admin (require admin JWT)
 openapi.get("/admin/ingestion/runs", IngestionRunsListEndpoint);
@@ -233,6 +249,20 @@ openapi.post("/internal/unsc/failed", InternalUnscFailedEndpoint);
 // Internal PEP endpoints for container callbacks
 openapi.post("/internal/pep/results", InternalPepResultsEndpoint);
 openapi.post("/internal/pep/failed", InternalPepFailedEndpoint);
+
+// Internal Grok PEP endpoints for AI-powered PEP search
+openapi.post("/internal/grok-pep/results", InternalGrokPepResultsEndpoint);
+openapi.post("/internal/grok-pep/failed", InternalGrokPepFailedEndpoint);
+
+// Internal Adverse Media endpoints for AI-powered adverse media search
+openapi.post(
+	"/internal/adverse-media/results",
+	InternalAdverseMediaResultsEndpoint,
+);
+openapi.post(
+	"/internal/adverse-media/failed",
+	InternalAdverseMediaFailedEndpoint,
+);
 
 // PEP Events SSE endpoint (public, authenticated via query param or JWT)
 app.route("/pep/events", pepEventsRouter);
