@@ -48,11 +48,3 @@ CREATE TABLE IF NOT EXISTS search_query (
 CREATE INDEX IF NOT EXISTS idx_search_query_org_created ON search_query(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_search_query_org_status ON search_query(organization_id, status);
 
--- Trigger to update updated_at timestamp
-CREATE TRIGGER IF NOT EXISTS update_search_query_updated_at
-AFTER UPDATE ON search_query
-FOR EACH ROW
-BEGIN
-  UPDATE search_query SET updated_at = datetime('now') WHERE id = NEW.id;
-END;
-
