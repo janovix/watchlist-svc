@@ -1,3 +1,10 @@
+# [1.4.0-rc.20](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.19...v1.4.0-rc.20) (2026-02-15)
+
+
+### Features
+
+* **search-query:** add search_query table and related endpoints for query audit trail ([ef2df9a](https://github.com/janovix/watchlist-svc/commit/ef2df9a00ee75c815085e6532408215ee13b391a))
+
 # [1.4.0-rc.19](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.18...v1.4.0-rc.19) (2026-02-14)
 
 
