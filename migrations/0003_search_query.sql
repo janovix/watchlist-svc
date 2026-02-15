@@ -1,5 +1,5 @@
--- Migration 0002: Add search_query table for persistent query audit trail
--- Created: 2026-02-12
+-- Migration 0003: Add search_query table for persistent query audit trail
+-- Created: 2026-02-13
 -- Purpose: Store all search queries with aggregated results from multiple search types
 
 CREATE TABLE IF NOT EXISTS search_query (
@@ -55,3 +55,4 @@ FOR EACH ROW
 BEGIN
   UPDATE search_query SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
+
