@@ -409,6 +409,32 @@ describe("Internal SAT 69-B Endpoints", () => {
 			expect(body.success).toBe(true);
 			expect(body.vectorization_thread_id).toBeNull();
 		});
+
+		it("should skip vectorization when THREAD_SVC is not configured", async () => {
+			const response = await SELF.fetch(
+				"http://local.test/internal/sat69b/complete",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						total_records: 100,
+						total_batches: 1,
+						errors: [],
+						skip_vectorization: false,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = (await response.json()) as {
+				success: boolean;
+				vectorization_thread_id: string | null;
+			};
+			expect(body.success).toBe(true);
+			// Should return null because THREAD_SVC binding is not configured in test env
+			expect(body.vectorization_thread_id).toBeNull();
+		});
 	});
 
 	// =========================================================================

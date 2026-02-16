@@ -470,7 +470,7 @@ describe("QueryListEndpoint.handle()", () => {
 		expect(response.queries[0].status).toBe("partial");
 	});
 
-	it("should return hasMore false when at exact boundary", async () => {
+	it("should handle return hasMore false when at exact boundary", async () => {
 		const orgId = "org-boundary-" + Date.now();
 
 		// Create exactly 5 queries

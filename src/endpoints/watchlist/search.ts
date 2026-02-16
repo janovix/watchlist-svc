@@ -102,6 +102,11 @@ export class SearchEndpoint extends OpenAPIRoute {
 				z.object({
 					q: z.string().min(1, "Query string is required"),
 					dataset: z.enum(["ofac_sdn", "unsc", "sat_69b"]).optional(),
+					entityType: z
+						.enum(["person", "organization"])
+						.optional()
+						.default("person")
+						.describe("Entity type for adverse media search"),
 					countries: z.array(z.string()).optional(),
 					birthDate: z.string().optional(),
 					identifiers: z.array(z.string()).optional(),
@@ -116,6 +121,9 @@ export class SearchEndpoint extends OpenAPIRoute {
 				...contentJson({
 					success: Boolean,
 					result: z.object({
+						queryId: z
+							.string()
+							.describe("Persistent query ID for result aggregation"),
 						ofac: z.object({
 							matches: z.array(ofacMatch),
 							count: z.number(),
@@ -133,6 +141,20 @@ export class SearchEndpoint extends OpenAPIRoute {
 								searchId: z.string(),
 								status: z.enum(["completed", "pending"]),
 								results: z.any().nullable(),
+							})
+							.optional(),
+						pepAiSearch: z
+							.object({
+								searchId: z.string(),
+								status: z.enum(["completed", "pending", "skipped"]),
+								result: z.any().nullable(),
+							})
+							.optional(),
+						adverseMediaSearch: z
+							.object({
+								searchId: z.string(),
+								status: z.enum(["completed", "pending"]),
+								result: z.any().nullable(),
 							})
 							.optional(),
 					}),
@@ -185,6 +207,51 @@ export class SearchEndpoint extends OpenAPIRoute {
 				throw error;
 			}
 
+			// Generate query ID for persistent tracking and SSE subscription
+			const queryId = crypto.randomUUID();
+			console.log("[Search] Generated query ID:", queryId);
+
+			// Create SearchQuery record for audit trail and async result aggregation
+			const prisma = createPrismaClient(c.env.DB);
+			const user = c.get("user");
+			const entityType =
+				(data.body as unknown as { entityType?: string }).entityType ??
+				"person";
+
+			try {
+				await prisma.searchQuery.create({
+					data: {
+						id: queryId,
+						organizationId: organization.id,
+						userId: user?.id ?? "unknown",
+						query: data.body.q,
+						entityType,
+						birthDate: data.body.birthDate ?? null,
+						countries: data.body.countries
+							? JSON.stringify(data.body.countries)
+							: null,
+						status: "pending",
+						// Set to pending so containers can update it; will transition to completed/failed when all async searches finish
+						ofacStatus: "running",
+						sat69bStatus: "running",
+						unStatus: "running",
+						pepOfficialStatus: "pending",
+						// Grok PEP is only for persons, not organizations
+						pepAiStatus: entityType === "person" ? "pending" : "skipped",
+						adverseMediaStatus: "pending",
+					},
+				});
+				console.log(
+					`[Search] Created SearchQuery record ${queryId} for org ${organization.id}`,
+				);
+			} catch (err) {
+				console.error(
+					`[Search] Failed to create SearchQuery (non-fatal, continuing):`,
+					err,
+				);
+				// Don't fail the whole search if query creation fails
+			}
+
 			const usageRights = createUsageRightsClient(c.env);
 			const gateResult = await usageRights.gate(
 				organization.id,
@@ -230,7 +297,6 @@ export class SearchEndpoint extends OpenAPIRoute {
 				throw error;
 			}
 
-			const prisma = createPrismaClient(c.env.DB);
 			const candidateMap = new Map<
 				string,
 				{
@@ -767,6 +833,35 @@ export class SearchEndpoint extends OpenAPIRoute {
 				sat69bCount: sat69bMatches.length,
 			});
 
+			// Persist sync results to SearchQuery for audit trail
+			try {
+				await prisma.searchQuery.update({
+					where: { id: queryId },
+					data: {
+						ofacStatus: "completed",
+						ofacResult:
+							ofacMatches.length > 0 ? JSON.stringify(ofacMatches) : null,
+						ofacCount: ofacMatches.length,
+						sat69bStatus: "completed",
+						sat69bResult:
+							sat69bMatches.length > 0 ? JSON.stringify(sat69bMatches) : null,
+						sat69bCount: sat69bMatches.length,
+						unStatus: "completed",
+						unResult:
+							unscMatches.length > 0 ? JSON.stringify(unscMatches) : null,
+						unCount: unscMatches.length,
+					},
+				});
+				console.log(
+					`[Search] Persisted sync results to SearchQuery ${queryId}`,
+				);
+			} catch (err) {
+				console.error(
+					`[Search] Failed to persist sync results to SearchQuery (non-fatal):`,
+					err,
+				);
+			}
+
 			// ===================================================================
 			// PEP Search (Parallel, Fire-and-Forget)
 			// ===================================================================
@@ -857,11 +952,163 @@ export class SearchEndpoint extends OpenAPIRoute {
 			}
 
 			// ===================================================================
+			// Grok PEP AI Search (Person-only, Fire-and-Forget)
+			// ===================================================================
+			let pepAiSearch:
+				| {
+						searchId: string;
+						status: "completed" | "pending" | "skipped";
+						result: unknown | null;
+				  }
+				| undefined = undefined;
+
+			if (entityType === "person" && c.env.THREAD_SVC) {
+				try {
+					const pepAiSearchId = queryId; // Use same search ID for unified SSE
+					const callbackUrl = new URL(c.req.url).origin + "/internal/grok-pep";
+
+					const threadPayload = {
+						task_type: "pep_grok",
+						job_params: {
+							query: data.body.q,
+							callback_url: callbackUrl,
+							search_id: pepAiSearchId,
+							birthdate: data.body.birthDate,
+							country: data.body.countries?.[0],
+						},
+						metadata: {
+							source: "watchlist-svc",
+							triggered_by: "search",
+							env: {
+								XAI_API_KEY: c.env.GROK_API_KEY,
+							},
+						},
+					};
+
+					c.executionCtx.waitUntil(
+						c.env.THREAD_SVC.fetch("http://thread-svc/threads", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify(threadPayload),
+						})
+							.then((response) => {
+								if (response.ok) {
+									console.log(
+										`[Search] Grok PEP AI search thread created for query "${data.body.q}"`,
+									);
+								} else {
+									console.error(
+										`[Search] Failed to create Grok PEP thread: ${response.status}`,
+									);
+								}
+							})
+							.catch((error) => {
+								console.error(
+									`[Search] Error creating Grok PEP thread:`,
+									error,
+								);
+							}),
+					);
+
+					pepAiSearch = {
+						searchId: pepAiSearchId,
+						status: "pending",
+						result: null,
+					};
+				} catch (error) {
+					console.error(`[Search] Failed to trigger Grok PEP search:`, error);
+					// Don't fail the whole search if Grok PEP fails
+				}
+			} else if (entityType !== "person") {
+				pepAiSearch = {
+					searchId: queryId,
+					status: "skipped",
+					result: null,
+				};
+			}
+
+			// ===================================================================
+			// Adverse Media Grok Search (Fire-and-Forget)
+			// ===================================================================
+			let adverseMediaSearch:
+				| {
+						searchId: string;
+						status: "completed" | "pending";
+						result: unknown | null;
+				  }
+				| undefined = undefined;
+
+			if (c.env.THREAD_SVC) {
+				try {
+					const adverseMediaSearchId = queryId; // Use same search ID for unified SSE
+					const callbackUrl =
+						new URL(c.req.url).origin + "/internal/adverse-media";
+
+					const threadPayload = {
+						task_type: "adverse_media_grok",
+						job_params: {
+							query: data.body.q,
+							callback_url: callbackUrl,
+							search_id: adverseMediaSearchId,
+							entity_type: entityType,
+							birthdate: data.body.birthDate,
+							country: data.body.countries?.[0],
+						},
+						metadata: {
+							source: "watchlist-svc",
+							triggered_by: "search",
+							env: {
+								XAI_API_KEY: c.env.GROK_API_KEY,
+							},
+						},
+					};
+
+					c.executionCtx.waitUntil(
+						c.env.THREAD_SVC.fetch("http://thread-svc/threads", {
+							method: "POST",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify(threadPayload),
+						})
+							.then((response) => {
+								if (response.ok) {
+									console.log(
+										`[Search] Adverse media Grok search thread created for query "${data.body.q}"`,
+									);
+								} else {
+									console.error(
+										`[Search] Failed to create adverse media thread: ${response.status}`,
+									);
+								}
+							})
+							.catch((error) => {
+								console.error(
+									`[Search] Error creating adverse media thread:`,
+									error,
+								);
+							}),
+					);
+
+					adverseMediaSearch = {
+						searchId: adverseMediaSearchId,
+						status: "pending",
+						result: null,
+					};
+				} catch (error) {
+					console.error(
+						`[Search] Failed to trigger adverse media search:`,
+						error,
+					);
+					// Don't fail the whole search if adverse media fails
+				}
+			}
+
+			// ===================================================================
 			// Return Results
 			// ===================================================================
 			return {
 				success: true,
 				result: {
+					queryId,
 					ofac: {
 						matches: ofacMatches,
 						count: ofacMatches.length,
@@ -875,6 +1122,8 @@ export class SearchEndpoint extends OpenAPIRoute {
 						count: sat69bMatches.length,
 					},
 					pepSearch: pepSearchInfo,
+					pepAiSearch,
+					adverseMediaSearch,
 				},
 			};
 		} catch (error) {

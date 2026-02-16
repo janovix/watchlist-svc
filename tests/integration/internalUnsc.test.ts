@@ -411,6 +411,109 @@ describe("Internal UNSC Endpoints", () => {
 			const count = await prisma.unscEntry.count();
 			expect(count).toBe(3);
 		});
+
+		it("should handle records with no identifiers (no watchlist_identifier entries)", async () => {
+			const records = [
+				{
+					id: "6001",
+					party_type: "Individual" as const,
+					primary_name: "NO IDENTIFIERS",
+					aliases: [],
+					birth_date: null,
+					birth_place: null,
+					gender: null,
+					addresses: [],
+					nationalities: [],
+					identifiers: [], // Empty identifiers array
+					designations: [],
+					remarks: null,
+					un_list_type: "DRC",
+					reference_number: "CDi.999",
+					listed_on: "2020-01-01",
+				},
+			];
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/unsc/batch",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						batch_number: 1,
+						total_batches: 1,
+						records,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				inserted: number;
+				errors: string[];
+			}>();
+			expect(body.success).toBe(true);
+			expect(body.inserted).toBe(1);
+			expect(body.errors).toHaveLength(0);
+
+			// Verify no watchlist_identifier entries were created
+			const identifiers = await env.DB.prepare(
+				"SELECT * FROM watchlist_identifier WHERE dataset = ? AND record_id = ?",
+			)
+				.bind("unsc", "6001")
+				.all();
+
+			expect(identifiers.results).toHaveLength(0);
+		});
+
+		it("should calculate progress percentage correctly without total_batches", async () => {
+			const record = {
+				id: "7001",
+				party_type: "Individual" as const,
+				primary_name: "TEST PERSON",
+				aliases: [],
+				birth_date: null,
+				birth_place: null,
+				gender: null,
+				addresses: [],
+				nationalities: [],
+				identifiers: [],
+				designations: [],
+				remarks: null,
+				un_list_type: "DRC",
+				reference_number: "CDi.999",
+				listed_on: "2020-01-01",
+			};
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/unsc/batch",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						batch_number: 1,
+						total_batches: undefined, // No total_batches provided
+						records: [record],
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				inserted: number;
+				errors: string[];
+			}>();
+			expect(body.success).toBe(true);
+
+			// When no total_batches, progress should be 0%
+			const run = await prisma.watchlistIngestionRun.findUnique({
+				where: { id: testRunId },
+			});
+			expect(run?.progressPercentage).toBe(0);
+		});
 	});
 
 	// =========================================================================
@@ -547,6 +650,32 @@ describe("Internal UNSC Endpoints", () => {
 				vectorize_thread_id: string | null;
 			}>();
 			expect(body.success).toBe(true);
+			expect(body.vectorize_thread_id).toBeNull();
+		});
+
+		it("should skip vectorization when THREAD_SVC is not configured", async () => {
+			const response = await SELF.fetch(
+				"http://local.test/internal/unsc/complete",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						total_records: 100,
+						total_batches: 1,
+						errors: [],
+						skip_vectorization: false,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				vectorize_thread_id: string | null;
+			}>();
+			expect(body.success).toBe(true);
+			// Should return null because THREAD_SVC binding is not configured in test env
 			expect(body.vectorize_thread_id).toBeNull();
 		});
 	});

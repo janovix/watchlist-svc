@@ -273,6 +273,172 @@ describe("Internal OFAC Endpoints", () => {
 			// With new calculation: (2/2) * 70% = 70% (ingestion phase max)
 			expect(run?.progressPercentage).toBe(70);
 		});
+
+		it("should handle records with identifiers and create watchlist_identifier entries", async () => {
+			const records = [
+				{
+					id: "4001",
+					party_type: "Individual" as const,
+					primary_name: "JOHN DOE",
+					aliases: ["J. Doe"],
+					birth_date: "1980-01-15",
+					birth_place: "New York, USA",
+					addresses: ["123 Main St, New York"],
+					identifiers: [
+						{
+							type: "Passport",
+							number: "P1234567",
+							country: "USA",
+							issue_date: "2015-01-01",
+							expiration_date: "2025-01-01",
+						},
+						{
+							type: "National ID",
+							number: "ID987654321",
+							country: "USA",
+							issue_date: null,
+							expiration_date: null,
+						},
+					],
+					remarks: "Active investigation",
+					source_list: "SDN List",
+				},
+			];
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/ofac/batch",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						batch_number: 1,
+						total_batches: 1,
+						records,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				inserted: number;
+				errors: string[];
+			}>();
+			expect(body.success).toBe(true);
+			expect(body.inserted).toBe(1);
+
+			// Verify record in DB
+			const record = await prisma.ofacSdnEntry.findUnique({
+				where: { id: "4001" },
+			});
+			expect(record).not.toBeNull();
+			expect(record?.primaryName).toBe("JOHN DOE");
+
+			// Verify identifiers were inserted into watchlist_identifier table
+			// Note: Uses "ofac_sdn" dataset name, not "ofac"
+			const identifiers = await env.DB.prepare(
+				"SELECT * FROM watchlist_identifier WHERE dataset = ? AND record_id = ?",
+			)
+				.bind("ofac_sdn", "4001")
+				.all();
+
+			expect(identifiers.results).toHaveLength(2);
+			expect(identifiers.results[0].identifier_raw).toBe("P1234567");
+			expect(identifiers.results[1].identifier_raw).toBe("ID987654321");
+		});
+
+		it("should handle records with no identifiers (no watchlist_identifier entries)", async () => {
+			const records = [
+				{
+					id: "5001",
+					party_type: "Entity" as const,
+					primary_name: "NO IDENTIFIERS",
+					aliases: [],
+					birth_date: null,
+					birth_place: null,
+					addresses: [],
+					identifiers: [], // Empty identifiers array
+					remarks: null,
+					source_list: "SDN List",
+				},
+			];
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/ofac/batch",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						batch_number: 1,
+						total_batches: 1,
+						records,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				inserted: number;
+				errors: string[];
+			}>();
+			expect(body.success).toBe(true);
+			expect(body.inserted).toBe(1);
+
+			// Verify no watchlist_identifier entries were created
+			const identifiers = await env.DB.prepare(
+				"SELECT * FROM watchlist_identifier WHERE dataset = ? AND record_id = ?",
+			)
+				.bind("ofac_sdn", "5001")
+				.all();
+
+			expect(identifiers.results).toHaveLength(0);
+		});
+
+		it("should calculate progress percentage correctly without total_batches", async () => {
+			const record = {
+				id: "6001",
+				party_type: "Individual" as const,
+				primary_name: "TEST PERSON",
+				aliases: [],
+				birth_date: null,
+				birth_place: null,
+				addresses: [],
+				identifiers: [],
+				remarks: null,
+				source_list: "SDN List",
+			};
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/ofac/batch",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						batch_number: 1,
+						total_batches: undefined, // No total_batches provided
+						records: [record],
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				inserted: number;
+				errors: string[];
+			}>();
+			expect(body.success).toBe(true);
+
+			// When no total_batches, progress should be 0%
+			const run = await prisma.watchlistIngestionRun.findUnique({
+				where: { id: testRunId },
+			});
+			expect(run?.progressPercentage).toBe(0);
+		});
 	});
 
 	// =========================================================================
@@ -409,6 +575,32 @@ describe("Internal OFAC Endpoints", () => {
 				vectorization_thread_id: string | null;
 			}>();
 			expect(body.success).toBe(true);
+			expect(body.vectorization_thread_id).toBeNull();
+		});
+
+		it("should skip vectorization when THREAD_SVC is not configured", async () => {
+			const response = await SELF.fetch(
+				"http://local.test/internal/ofac/complete",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						run_id: testRunId,
+						total_records: 100,
+						total_batches: 1,
+						errors: [],
+						skip_vectorization: false,
+					}),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = await response.json<{
+				success: boolean;
+				vectorization_thread_id: string | null;
+			}>();
+			expect(body.success).toBe(true);
+			// Should return null because THREAD_SVC binding is not configured in test env
 			expect(body.vectorization_thread_id).toBeNull();
 		});
 	});
