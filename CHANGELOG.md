@@ -1,3 +1,10 @@
+# [1.4.0-rc.22](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.21...v1.4.0-rc.22) (2026-02-16)
+
+
+### Bug Fixes
+
+* **queryRead:** update parameter name from 'id' to 'queryId' in QueryReadEndpoint for consistency ([ce47d8d](https://github.com/janovix/watchlist-svc/commit/ce47d8df8d110c4e50ba437b433a8e049a5fb50f))
+
 # [1.4.0-rc.21](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.20...v1.4.0-rc.21) (2026-02-16)
 
 
