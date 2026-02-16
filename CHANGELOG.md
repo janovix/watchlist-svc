@@ -1,3 +1,10 @@
+# [1.4.0-rc.21](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.20...v1.4.0-rc.21) (2026-02-16)
+
+
+### Features
+
+* **peps:** add Mexican PEP position dictionaries and enhance search endpoint with entity type and query ID tracking ([2a781c8](https://github.com/janovix/watchlist-svc/commit/2a781c8731782a951ccb55e2a7d555e9fdbc849b))
+
 # [1.4.0-rc.20](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.19...v1.4.0-rc.20) (2026-02-15)
 
 
