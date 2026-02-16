@@ -1,5 +1,5 @@
 /**
- * GET /queries/:id
+ * GET /queries/:queryId
  * Fetch a single search query by UUID with full results.
  * Requires JWT authentication and organization scoping.
  */
@@ -18,7 +18,7 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 		security: [{ bearerAuth: [] }],
 		request: {
 			params: z.object({
-				id: z.string().uuid().describe("Query UUID"),
+				queryId: z.string().uuid().describe("Query UUID"),
 			}),
 		},
 		responses: {
@@ -94,7 +94,7 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 
 	async handle(c: AppContext) {
 		const data = await this.getValidatedData<typeof this.schema>();
-		const queryId = data.params.id;
+		const queryId = data.params.queryId;
 
 		// Require authentication
 		const organization = c.get("organization");

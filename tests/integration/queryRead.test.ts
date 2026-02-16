@@ -85,7 +85,7 @@ describe("QueryReadEndpoint.handle()", () => {
 
 		// Mock getValidatedData
 		(endpoint.getValidatedData as any) = async () => ({
-			params: { id: "test-id" },
+			params: { queryId: "test-id" },
 			query: {},
 		});
 
@@ -112,7 +112,7 @@ describe("QueryReadEndpoint.handle()", () => {
 		} as unknown as AppContext;
 
 		(endpoint.getValidatedData as any) = async () => ({
-			params: { id: "nonexistent-query-id" },
+			params: { queryId: "nonexistent-query-id" },
 			query: {},
 		});
 
@@ -161,7 +161,7 @@ describe("QueryReadEndpoint.handle()", () => {
 		} as unknown as AppContext;
 
 		(endpoint.getValidatedData as any) = async () => ({
-			params: { id: queryId },
+			params: { queryId: queryId },
 			query: {},
 		});
 
@@ -221,7 +221,7 @@ describe("QueryReadEndpoint.handle()", () => {
 		} as unknown as AppContext;
 
 		(endpoint.getValidatedData as any) = async () => ({
-			params: { id: queryId },
+			params: { queryId: queryId },
 			query: {},
 		});
 
@@ -271,7 +271,7 @@ describe("QueryReadEndpoint.handle()", () => {
 		} as unknown as AppContext;
 
 		(endpoint.getValidatedData as any) = async () => ({
-			params: { id: queryId },
+			params: { queryId: queryId },
 			query: {},
 		});
 
@@ -311,7 +311,7 @@ describe("QueryReadEndpoint.handle()", () => {
 		} as unknown as AppContext;
 
 		(endpoint.getValidatedData as any) = async () => ({
-			params: { id: queryId },
+			params: { queryId: queryId },
 			query: {},
 		});
 
@@ -355,7 +355,7 @@ describe("QueryReadEndpoint.handle()", () => {
 		} as unknown as AppContext;
 
 		(endpoint.getValidatedData as any) = async () => ({
-			params: { id: queryId },
+			params: { queryId: queryId },
 			query: {},
 		});
 
