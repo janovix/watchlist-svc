@@ -1,3 +1,10 @@
+# [1.4.0-rc.23](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.22...v1.4.0-rc.23) (2026-02-17)
+
+
+### Features
+
+* **search:** implement internal search endpoint for automated AML screening and add source column to search_query table ([bd38c58](https://github.com/janovix/watchlist-svc/commit/bd38c583291d108ba90aee73fa280dc3d778cdb2))
+
 # [1.4.0-rc.22](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.21...v1.4.0-rc.22) (2026-02-16)
 
 
