@@ -91,22 +91,3 @@ export function parseVectorId(vectorId: string): {
 		id: idParts.join(":"),
 	};
 }
-
-/**
- * Get the callback URL for the current environment.
- */
-export function getCallbackUrl(environment: string | undefined): string {
-	switch (environment) {
-		case "local":
-			return "http://localhost:8787";
-		case "dev":
-			return "https://watchlist-svc.janovix.workers.dev";
-		case "preview":
-			return "https://watchlist-svc-preview.janovix.workers.dev";
-		case "production":
-			return "https://watchlist-prod.janovix.ai";
-		default:
-			// Default to dev for unknown environments
-			return "https://watchlist-svc.janovix.workers.dev";
-	}
-}

@@ -187,7 +187,6 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 				identifiers,
 				topK,
 				threshold,
-				requestOrigin: new URL(c.req.url).origin,
 			});
 
 			return Response.json({

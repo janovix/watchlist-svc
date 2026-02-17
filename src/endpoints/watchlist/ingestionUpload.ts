@@ -17,6 +17,7 @@ import {
 	validateR2Config,
 	checkFileExistsInR2,
 } from "../../lib/r2-presigned";
+import { getCallbackUrl } from "../../lib/callback-utils";
 
 // Allowed source types for ingestion
 const SOURCE_TYPES = ["sdn_xml", "sat_69b_csv", "unsc_xml"] as const;
@@ -368,25 +369,25 @@ This will verify the file exists in R2 and queue the ingestion job for processin
 		}
 
 		// Build callback URL for container to call back to watchlist-svc
-		// Determine callback URL based on source type
+		const baseCallbackUrl = getCallbackUrl(c.env.ENVIRONMENT);
 		let callbackUrl: string;
 		let taskType: string;
 
 		switch (run.sourceType) {
 			case "sdn_xml":
-				callbackUrl = new URL(c.req.url).origin + "/internal/ofac";
+				callbackUrl = baseCallbackUrl + "/internal/ofac";
 				taskType = "ofac_parse";
 				break;
 			case "sat_69b_csv":
-				callbackUrl = new URL(c.req.url).origin + "/internal/sat69b";
+				callbackUrl = baseCallbackUrl + "/internal/sat69b";
 				taskType = "sat_69b_parse";
 				break;
 			case "unsc_xml":
-				callbackUrl = new URL(c.req.url).origin + "/internal/unsc";
+				callbackUrl = baseCallbackUrl + "/internal/unsc";
 				taskType = "unsc_parse";
 				break;
 			default:
-				callbackUrl = new URL(c.req.url).origin + "/internal/ofac";
+				callbackUrl = baseCallbackUrl + "/internal/ofac";
 				taskType = "ofac_parse";
 				break;
 		}

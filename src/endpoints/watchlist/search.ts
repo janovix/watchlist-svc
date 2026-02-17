@@ -242,7 +242,6 @@ export class SearchEndpoint extends OpenAPIRoute {
 				identifiers: data.body.identifiers,
 				topK: data.body.topK,
 				threshold: data.body.threshold,
-				requestOrigin: new URL(c.req.url).origin,
 			});
 
 			return {

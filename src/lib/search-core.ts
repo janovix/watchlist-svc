@@ -5,6 +5,7 @@
 import { ApiException } from "chanfana";
 import { createPrismaClient } from "./prisma";
 import { parseVectorId } from "./ofac-vectorize-service";
+import { getCallbackUrl } from "./callback-utils";
 import {
 	normalizeIdentifier,
 	bestNameScore,
@@ -102,7 +103,6 @@ export interface SearchParams {
 	identifiers?: string[];
 	topK?: number;
 	threshold?: number;
-	requestOrigin: string;
 }
 
 export interface SearchResult {
@@ -182,7 +182,6 @@ export async function performSearch(
 		identifiers,
 		topK = 20,
 		threshold = 0.7,
-		requestOrigin,
 	} = params;
 
 	// Generate query ID for persistent tracking and SSE subscription
@@ -829,7 +828,7 @@ export async function performSearch(
 	// If not cached, trigger PEP search in background
 	if (!cachedPepResults && env.THREAD_SVC) {
 		try {
-			const callbackUrl = requestOrigin + "/internal/pep";
+			const callbackUrl = getCallbackUrl(env.ENVIRONMENT) + "/internal/pep";
 
 			const threadPayload = {
 				task_type: "pep_search",
@@ -893,7 +892,8 @@ export async function performSearch(
 	if (entityType === "person" && env.THREAD_SVC) {
 		try {
 			const pepAiSearchId = queryId; // Use queryId for unified SSE
-			const callbackUrl = requestOrigin + "/internal/grok-pep";
+			const callbackUrl =
+				getCallbackUrl(env.ENVIRONMENT) + "/internal/grok-pep";
 
 			const threadPayload = {
 				task_type: "pep_grok",
@@ -969,7 +969,8 @@ export async function performSearch(
 	if (env.THREAD_SVC) {
 		try {
 			const adverseMediaSearchId = queryId; // Use queryId for unified SSE
-			const callbackUrl = requestOrigin + "/internal/adverse-media";
+			const callbackUrl =
+				getCallbackUrl(env.ENVIRONMENT) + "/internal/adverse-media";
 
 			const threadPayload = {
 				task_type: "adverse_media_grok",

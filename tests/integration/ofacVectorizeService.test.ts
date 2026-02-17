@@ -4,8 +4,8 @@ import {
 	composeOfacVectorMetadata,
 	getOfacVectorId,
 	parseVectorId,
-	getCallbackUrl,
 } from "../../src/lib/ofac-vectorize-service";
+import { getCallbackUrl } from "../../src/lib/callback-utils";
 import type { OfacSdnEntry } from "@prisma/client";
 
 describe("OFAC Vectorize Service", () => {
@@ -190,15 +190,15 @@ describe("OFAC Vectorize Service", () => {
 			);
 		});
 
-		it("should return preview URL for preview environment", () => {
+		it("should return dev URL for preview environment", () => {
 			expect(getCallbackUrl("preview")).toBe(
-				"https://watchlist-svc-preview.janovix.workers.dev",
+				"https://watchlist-svc.janovix.workers.dev",
 			);
 		});
 
 		it("should return prod URL for production environment", () => {
 			expect(getCallbackUrl("production")).toBe(
-				"https://watchlist-prod.janovix.ai",
+				"https://watchlist.janovix.com",
 			);
 		});
 

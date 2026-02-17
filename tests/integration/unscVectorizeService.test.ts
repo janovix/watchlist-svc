@@ -4,8 +4,8 @@ import {
 	composeUnscVectorMetadata,
 	getUnscVectorId,
 	parseVectorId,
-	getCallbackUrl,
 } from "../../src/lib/unsc-vectorize-service";
+import { getCallbackUrl } from "../../src/lib/callback-utils";
 import type { UnscEntry } from "@prisma/client";
 
 /**
@@ -413,14 +413,14 @@ describe("UNSC Vectorize Service", () => {
 			expect(url).toBe("https://watchlist-svc.janovix.workers.dev");
 		});
 
-		it("should return preview URL for preview environment", () => {
+		it("should return dev URL for preview environment", () => {
 			const url = getCallbackUrl("preview");
-			expect(url).toBe("https://watchlist-svc-preview.janovix.workers.dev");
+			expect(url).toBe("https://watchlist-svc.janovix.workers.dev");
 		});
 
 		it("should return production URL for production environment", () => {
 			const url = getCallbackUrl("production");
-			expect(url).toBe("https://watchlist-prod.janovix.ai");
+			expect(url).toBe("https://watchlist.janovix.com");
 		});
 
 		it("should default to dev URL for unknown environment", () => {

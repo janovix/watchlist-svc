@@ -12,7 +12,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import { createPrismaClient } from "../../lib/prisma";
 import type { Bindings } from "../../index";
-import { getCallbackUrl } from "../../lib/unsc-vectorize-service";
+import { getCallbackUrl } from "../../lib/callback-utils";
 import {
 	normalizeIdentifier,
 	normalizeIdentifierType,

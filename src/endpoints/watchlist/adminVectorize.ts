@@ -8,7 +8,7 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
-import { getCallbackUrl } from "../../lib/ofac-vectorize-service";
+import { getCallbackUrl } from "../../lib/callback-utils";
 
 // =============================================================================
 // Reindex Endpoint
