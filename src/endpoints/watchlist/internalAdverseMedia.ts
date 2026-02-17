@@ -103,7 +103,7 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 		// Persist to D1 search_query table (org-scoped audit trail)
 		const prisma = createPrismaClient(c.env.DB);
 		try {
-			await prisma.searchQuery.update({
+			const searchQuery = await prisma.searchQuery.update({
 				where: { id: search_id },
 				data: {
 					adverseMediaStatus: "completed",
@@ -121,6 +121,42 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 
 			// Check if all search types completed
 			await checkAndUpdateQueryCompletion(prisma, search_id);
+
+			// If this is an AML-screening query, callback to aml-svc
+			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+				try {
+					const response = await c.env.AML_SERVICE.fetch(
+						"http://aml-svc/internal/screening-callback",
+						{
+							method: "PATCH",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({
+								queryId: search_id,
+								type: "adverse_media",
+								status: "completed",
+								matched: risk_level === "high" || risk_level === "medium",
+							}),
+						},
+					);
+
+					if (response.ok) {
+						console.log(
+							`[InternalAdverseMedia] AML callback sent for query ${search_id}`,
+						);
+					} else {
+						const errorText = await response.text();
+						console.error(
+							`[InternalAdverseMedia] AML callback failed: ${response.status} ${errorText}`,
+						);
+					}
+				} catch (callbackError) {
+					console.error(
+						`[InternalAdverseMedia] Failed to send AML callback:`,
+						callbackError,
+					);
+					// Don't fail the whole request if callback fails
+				}
+			}
 		} catch (persistError) {
 			console.error(
 				`[InternalAdverseMedia] Failed to persist to D1:`,
@@ -237,7 +273,7 @@ export class InternalAdverseMediaFailedEndpoint extends OpenAPIRoute {
 		// Persist failure to D1
 		const prisma = createPrismaClient(c.env.DB);
 		try {
-			await prisma.searchQuery.update({
+			const searchQuery = await prisma.searchQuery.update({
 				where: { id: search_id },
 				data: {
 					adverseMediaStatus: "failed",
@@ -251,6 +287,42 @@ export class InternalAdverseMediaFailedEndpoint extends OpenAPIRoute {
 
 			// Check if all search types completed
 			await checkAndUpdateQueryCompletion(prisma, search_id);
+
+			// If this is an AML-screening query, callback to aml-svc
+			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+				try {
+					const response = await c.env.AML_SERVICE.fetch(
+						"http://aml-svc/internal/screening-callback",
+						{
+							method: "PATCH",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({
+								queryId: search_id,
+								type: "adverse_media",
+								status: "failed",
+								matched: false,
+							}),
+						},
+					);
+
+					if (response.ok) {
+						console.log(
+							`[InternalAdverseMedia] AML callback sent for failed query ${search_id}`,
+						);
+					} else {
+						const errorText = await response.text();
+						console.error(
+							`[InternalAdverseMedia] AML callback failed: ${response.status} ${errorText}`,
+						);
+					}
+				} catch (callbackError) {
+					console.error(
+						`[InternalAdverseMedia] Failed to send AML callback:`,
+						callbackError,
+					);
+					// Don't fail the whole request if callback fails
+				}
+			}
 		} catch (persistError) {
 			console.error(
 				`[InternalAdverseMedia] Failed to persist failure to D1:`,

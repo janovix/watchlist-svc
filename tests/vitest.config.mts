@@ -29,15 +29,18 @@ export default defineWorkersConfig({
 				"**/tests/**",
 				"**/dist/**",
 				"**/coverage/**",
+				"src/dictionaries/**", // Generated dictionary data, no business logic to test
 				"src/lib/ingestion-service.ts", // Hard to test without external dependencies
 				"src/lib/auth-middleware.ts", // Requires AUTH_SERVICE binding (service binding to auth-svc)
 				"src/lib/auth-settings.ts", // Requires AUTH_SERVICE binding for getResolvedSettings
+				"src/lib/search-core.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/queue-consumer.ts", // Queue consumer requires queue infrastructure setup
 				"src/endpoints/watchlist/pepSearch.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/search.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/searchOfac.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/searchUnsc.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/searchSat69b.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/internalSearch.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/internalVectorize.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/addOnVectorize.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/adminIngest.ts", // Requires WATCHLIST_INGEST_QUEUE binding

@@ -52,9 +52,10 @@ import {
 	InternalGrokPepResultsEndpoint,
 	InternalGrokPepFailedEndpoint,
 } from "./endpoints/watchlist/internalGrokPep";
+import { InternalSearchEndpoint } from "./endpoints/watchlist/internalSearch";
 import { QueryListEndpoint } from "./endpoints/watchlist/queryList";
 import { QueryReadEndpoint } from "./endpoints/watchlist/queryRead";
-import pepEventsRouter from "./endpoints/watchlist/pepEvents";
+import eventsRouter from "./endpoints/watchlist/events";
 import {
 	InternalVectorizeCountEndpoint,
 	InternalVectorizeDeleteByDatasetEndpoint,
@@ -119,6 +120,10 @@ export type Bindings = Env & {
 	 * Thread service binding for creating and tracking threads.
 	 */
 	THREAD_SVC?: Fetcher;
+	/**
+	 * AML service binding for screening result callbacks.
+	 */
+	AML_SERVICE?: Fetcher;
 	/**
 	 * PEP cache KV namespace for temporary 24h result caching.
 	 */
@@ -246,6 +251,9 @@ openapi.post("/internal/unsc/batch", InternalUnscBatchEndpoint);
 openapi.post("/internal/unsc/complete", InternalUnscCompleteEndpoint);
 openapi.post("/internal/unsc/failed", InternalUnscFailedEndpoint);
 
+// Internal search endpoint for aml-svc (no auth, secured via service binding)
+openapi.post("/internal/search", InternalSearchEndpoint);
+
 // Internal PEP endpoints for container callbacks
 openapi.post("/internal/pep/results", InternalPepResultsEndpoint);
 openapi.post("/internal/pep/failed", InternalPepFailedEndpoint);
@@ -264,8 +272,8 @@ openapi.post(
 	InternalAdverseMediaFailedEndpoint,
 );
 
-// PEP Events SSE endpoint (public, authenticated via query param or JWT)
-app.route("/pep/events", pepEventsRouter);
+// Events SSE endpoint for all async search results (public, authenticated via query param or JWT)
+app.route("/events", eventsRouter);
 
 // Internal vectorize endpoints for indexing
 openapi.get("/internal/vectorize/count", InternalVectorizeCountEndpoint);

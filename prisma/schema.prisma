@@ -147,6 +147,7 @@ model SearchQuery {
   organizationId       String   @map("organization_id")
   userId               String   @map("user_id")
   query                String
+  source               String   @default("manual") // 'manual' | 'aml-screening'
   entityType           String   @default("person") @map("entity_type") // 'person', 'entity', etc.
   birthDate            String?  @map("birth_date")
   countries            String? // JSON array

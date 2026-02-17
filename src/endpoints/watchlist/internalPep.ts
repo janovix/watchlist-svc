@@ -11,6 +11,8 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
 import { createHash } from "crypto";
+import { createPrismaClient } from "../../lib/prisma";
+import { checkAndUpdateQueryCompletion } from "../../lib/search-query-utils";
 
 // =============================================================================
 // Schemas
@@ -170,6 +172,73 @@ export class InternalPepResultsEndpoint extends OpenAPIRoute {
 			}
 		}
 
+		// Persist to SearchQuery table
+		try {
+			const prisma = createPrismaClient(c.env.DB);
+			const searchQuery = await prisma.searchQuery.update({
+				where: { id: search_id },
+				data: {
+					pepOfficialStatus: "completed",
+					pepOfficialResult: JSON.stringify({
+						query,
+						total_results,
+						total_pages,
+						results,
+						results_sent,
+					}),
+					pepOfficialCount: results_sent,
+				},
+			});
+			console.log(
+				`[InternalPep] Persisted ${results_sent} results to SearchQuery ${search_id}`,
+			);
+
+			// Check if all searches are done and update overall status
+			await checkAndUpdateQueryCompletion(prisma, search_id);
+
+			// If this is an AML-screening query, callback to aml-svc
+			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+				try {
+					const response = await c.env.AML_SERVICE.fetch(
+						"http://aml-svc/internal/screening-callback",
+						{
+							method: "PATCH",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({
+								queryId: search_id,
+								type: "pep_official",
+								status: "completed",
+								matched: results_sent > 0,
+							}),
+						},
+					);
+
+					if (response.ok) {
+						console.log(
+							`[InternalPep] AML callback sent for query ${search_id}`,
+						);
+					} else {
+						const errorText = await response.text();
+						console.error(
+							`[InternalPep] AML callback failed: ${response.status} ${errorText}`,
+						);
+					}
+				} catch (callbackError) {
+					console.error(
+						`[InternalPep] Failed to send AML callback:`,
+						callbackError,
+					);
+					// Don't fail the whole request if callback fails
+				}
+			}
+		} catch (error) {
+			console.error(
+				`[InternalPep] Failed to persist results to SearchQuery:`,
+				error,
+			);
+			// Don't fail the whole request if persistence fails
+		}
+
 		// Broadcast results via SSE to connected clients
 		let broadcastSent = 0;
 		if (c.env.PEP_EVENTS_DO) {
@@ -280,6 +349,66 @@ export class InternalPepFailedEndpoint extends OpenAPIRoute {
 		const { search_id, error } = body as { search_id: string; error: string };
 
 		console.log(`[InternalPep] Search ${search_id} failed: ${error}`);
+
+		// Persist failure to SearchQuery table
+		try {
+			const prisma = createPrismaClient(c.env.DB);
+			const searchQuery = await prisma.searchQuery.update({
+				where: { id: search_id },
+				data: {
+					pepOfficialStatus: "failed",
+					pepOfficialResult: JSON.stringify({ error }),
+				},
+			});
+			console.log(
+				`[InternalPep] Persisted failure to SearchQuery ${search_id}`,
+			);
+
+			// Check if all searches are done and update overall status
+			await checkAndUpdateQueryCompletion(prisma, search_id);
+
+			// If this is an AML-screening query, callback to aml-svc
+			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+				try {
+					const response = await c.env.AML_SERVICE.fetch(
+						"http://aml-svc/internal/screening-callback",
+						{
+							method: "PATCH",
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({
+								queryId: search_id,
+								type: "pep_official",
+								status: "failed",
+								matched: false,
+							}),
+						},
+					);
+
+					if (response.ok) {
+						console.log(
+							`[InternalPep] AML callback sent for failed query ${search_id}`,
+						);
+					} else {
+						const errorText = await response.text();
+						console.error(
+							`[InternalPep] AML callback failed: ${response.status} ${errorText}`,
+						);
+					}
+				} catch (callbackError) {
+					console.error(
+						`[InternalPep] Failed to send AML callback:`,
+						callbackError,
+					);
+					// Don't fail the whole request if callback fails
+				}
+			}
+		} catch (persistError) {
+			console.error(
+				`[InternalPep] Failed to persist failure to SearchQuery:`,
+				persistError,
+			);
+			// Don't fail the whole request if persistence fails
+		}
 
 		// Broadcast failure via SSE
 		if (c.env.PEP_EVENTS_DO) {

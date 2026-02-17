@@ -189,13 +189,18 @@ describe("QueryReadEndpoint.handle()", () => {
 				countries: JSON.stringify(["US", "MX"]),
 				status: "completed",
 				ofacStatus: "completed",
-				ofacResult: JSON.stringify({ matches: 0 }),
-				ofacCount: 0,
+				ofacResult: JSON.stringify([
+					{
+						target: { id: "ofac-1", partyType: "Individual" },
+						score: 0.95,
+					},
+				]),
+				ofacCount: 1,
 				sat69bStatus: "completed",
-				sat69bResult: JSON.stringify({ matches: 0 }),
+				sat69bResult: JSON.stringify([]),
 				sat69bCount: 0,
 				unStatus: "completed",
-				unResult: JSON.stringify({ matches: 0 }),
+				unResult: JSON.stringify([]),
 				unCount: 0,
 				pepOfficialStatus: "completed",
 				pepOfficialResult: JSON.stringify({ matches: 1 }),
@@ -227,18 +232,38 @@ describe("QueryReadEndpoint.handle()", () => {
 
 		const response = await endpoint.handle(mockContext);
 		expect(response.success).toBe(true);
-		expect(response.query).toBeDefined();
-		expect(response.query.id).toBe(queryId);
-		expect(response.query.query).toBe("test person");
-		expect(response.query.entityType).toBe("person");
-		expect(response.query.countries).toEqual(["US", "MX"]);
-		expect(response.query.ofacCount).toBe(0);
-		expect(response.query.pepOfficialCount).toBe(1);
+		expect(response.result).toBeDefined();
+		expect(response.result.id).toBe(queryId);
+		expect(response.result.query).toBe("test person");
+		expect(response.result.entityType).toBe("person");
+		expect(response.result.countries).toEqual(["US", "MX"]);
+		expect(response.result.ofacCount).toBe(1);
+		expect(response.result.ofacResult).toBeDefined();
+		expect(response.result.ofacResult?.matches).toHaveLength(1);
+		expect(response.result.ofacResult?.count).toBe(1);
+		expect(response.result.pepOfficialCount).toBe(1);
 	});
 
 	it("should parse JSON fields correctly", async () => {
 		const queryId = "test-query-json-" + Date.now();
 		const orgId = "org-json-" + Date.now();
+
+		const ofacMatchData = [
+			{
+				target: { id: "target-1", partyType: "Individual" },
+				score: 0.92,
+			},
+		];
+		const unscMatchData = [
+			{
+				target: { id: "target-2", partyType: "Entity" },
+				score: 0.88,
+			},
+			{
+				target: { id: "target-3", partyType: "Individual" },
+				score: 0.85,
+			},
+		];
 
 		await prisma.searchQuery.create({
 			data: {
@@ -250,11 +275,14 @@ describe("QueryReadEndpoint.handle()", () => {
 				countries: JSON.stringify(["AR"]),
 				status: "completed",
 				ofacStatus: "completed",
-				ofacResult: JSON.stringify({ risk: "high", details: [] }),
+				ofacResult: JSON.stringify(ofacMatchData),
+				ofacCount: 1,
 				sat69bStatus: "completed",
-				sat69bResult: JSON.stringify({ found: true }),
+				sat69bResult: JSON.stringify([]),
+				sat69bCount: 0,
 				unStatus: "completed",
-				unResult: JSON.stringify({ records: 2 }),
+				unResult: JSON.stringify(unscMatchData),
+				unCount: 2,
 				pepOfficialStatus: "completed",
 				pepOfficialResult: JSON.stringify({ officials: [{ name: "John" }] }),
 				pepAiStatus: "completed",
@@ -276,10 +304,12 @@ describe("QueryReadEndpoint.handle()", () => {
 		});
 
 		const response = await endpoint.handle(mockContext);
-		expect(response.query.countries).toEqual(["AR"]);
-		expect(response.query.ofacResult).toEqual({ risk: "high", details: [] });
-		expect(response.query.unResult).toEqual({ records: 2 });
-		expect(response.query.adverseMediaResult).toEqual({ articles: 5 });
+		expect(response.result.countries).toEqual(["AR"]);
+		expect(response.result.ofacResult?.matches).toEqual(ofacMatchData);
+		expect(response.result.ofacResult?.count).toBe(1);
+		expect(response.result.unResult?.matches).toEqual(unscMatchData);
+		expect(response.result.unResult?.count).toBe(2);
+		expect(response.result.adverseMediaResult).toEqual({ articles: 5 });
 	});
 
 	it("should return null for JSON fields that are null in database", async () => {
@@ -316,19 +346,18 @@ describe("QueryReadEndpoint.handle()", () => {
 		});
 
 		const response = await endpoint.handle(mockContext);
-		expect(response.query.countries).toBeNull();
-		expect(response.query.ofacResult).toBeNull();
+		expect(response.result.countries).toBeNull();
+		expect(response.result.ofacResult).toBeNull();
+		expect(response.result.sat69bResult).toBeNull();
+		expect(response.result.unResult).toBeNull();
 	});
 
 	it("should handle invalid JSON in result fields", async () => {
 		const queryId = "test-query-invalid-json-" + Date.now();
 		const orgId = "org-invalid-" + Date.now();
 
-		// Create a query with invalid JSON that should be handled gracefully
-		const prisma = createPrismaClient((env as any).DB);
-
-		// We can't create invalid JSON via Prisma directly, so we test the success path instead
-		// which confirms JSON parsing works
+		// Create a query with JSON data to test successful parsing
+		const ofacMatchData = [{ target: { id: "ofac-1" }, score: 0.9 }];
 		await prisma.searchQuery.create({
 			data: {
 				id: queryId,
@@ -337,7 +366,8 @@ describe("QueryReadEndpoint.handle()", () => {
 				query: "test",
 				entityType: "person",
 				countries: JSON.stringify(["US"]),
-				ofacResult: JSON.stringify({ matches: 2, items: [] }),
+				ofacResult: JSON.stringify(ofacMatchData),
+				ofacCount: 1,
 				status: "completed",
 				ofacStatus: "completed",
 				sat69bStatus: "completed",
@@ -360,7 +390,8 @@ describe("QueryReadEndpoint.handle()", () => {
 		});
 
 		const response = await endpoint.handle(mockContext);
-		expect(response.query.countries).toEqual(["US"]);
-		expect(response.query.ofacResult).toEqual({ matches: 2, items: [] });
+		expect(response.result.countries).toEqual(["US"]);
+		expect(response.result.ofacResult?.matches).toEqual(ofacMatchData);
+		expect(response.result.ofacResult?.count).toBe(1);
 	});
 });

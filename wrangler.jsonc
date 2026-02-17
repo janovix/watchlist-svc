@@ -67,6 +67,10 @@
 			"binding": "THREAD_SVC",
 			"service": "thread-svc",
 		},
+		{
+			"binding": "AML_SERVICE",
+			"service": "aml-svc",
+		},
 	],
 	"vars": {
 		"ENVIRONMENT": "dev",

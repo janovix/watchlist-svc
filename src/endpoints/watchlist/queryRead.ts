@@ -28,7 +28,7 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 					"application/json": {
 						schema: z.object({
 							success: z.boolean(),
-							query: z.object({
+							result: z.object({
 								id: z.string(),
 								organizationId: z.string(),
 								userId: z.string(),
@@ -39,15 +39,30 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 								status: z.string(),
 								// OFAC Sanctions
 								ofacStatus: z.string(),
-								ofacResult: z.any().nullable(),
+								ofacResult: z
+									.object({
+										matches: z.array(z.any()),
+										count: z.number(),
+									})
+									.nullable(),
 								ofacCount: z.number(),
 								// SAT 69B Sanctions
 								sat69bStatus: z.string(),
-								sat69bResult: z.any().nullable(),
+								sat69bResult: z
+									.object({
+										matches: z.array(z.any()),
+										count: z.number(),
+									})
+									.nullable(),
 								sat69bCount: z.number(),
 								// UN Sanctions
 								unStatus: z.string(),
-								unResult: z.any().nullable(),
+								unResult: z
+									.object({
+										matches: z.array(z.any()),
+										count: z.number(),
+									})
+									.nullable(),
 								unCount: z.number(),
 								// PEP Official
 								pepOfficialStatus: z.string(),
@@ -155,7 +170,7 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 
 			return {
 				success: true,
-				query: {
+				result: {
 					id: searchQuery.id,
 					organizationId: searchQuery.organizationId,
 					userId: searchQuery.userId,
@@ -166,15 +181,21 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 					status: searchQuery.status,
 					// OFAC Sanctions
 					ofacStatus: searchQuery.ofacStatus,
-					ofacResult,
+					ofacResult: ofacResult
+						? { matches: ofacResult, count: searchQuery.ofacCount }
+						: null,
 					ofacCount: searchQuery.ofacCount,
 					// SAT 69B Sanctions
 					sat69bStatus: searchQuery.sat69bStatus,
-					sat69bResult,
+					sat69bResult: sat69bResult
+						? { matches: sat69bResult, count: searchQuery.sat69bCount }
+						: null,
 					sat69bCount: searchQuery.sat69bCount,
 					// UN Sanctions
 					unStatus: searchQuery.unStatus,
-					unResult,
+					unResult: unResult
+						? { matches: unResult, count: searchQuery.unCount }
+						: null,
 					unCount: searchQuery.unCount,
 					// PEP Official
 					pepOfficialStatus: searchQuery.pepOfficialStatus,
