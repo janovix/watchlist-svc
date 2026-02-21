@@ -1,3 +1,10 @@
+# [1.4.0-rc.24](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.23...v1.4.0-rc.24) (2026-02-21)
+
+
+### Bug Fixes
+
+* **search:** update default threshold value to 0.85 across multiple search endpoints ([7bdcd62](https://github.com/janovix/watchlist-svc/commit/7bdcd6206d0acea4630c8c3ba52c70e7dc348480))
+
 # [1.4.0-rc.23](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.22...v1.4.0-rc.23) (2026-02-17)
 
 
