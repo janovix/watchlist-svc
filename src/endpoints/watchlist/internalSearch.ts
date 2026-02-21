@@ -43,7 +43,7 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 					countries: z.array(z.string()).optional(),
 					identifiers: z.array(z.string()).optional(),
 					topK: z.number().int().min(1).max(100).optional().default(20),
-					threshold: z.number().min(0).max(1).optional().default(0.7),
+					threshold: z.number().min(0).max(1).optional().default(0.85),
 				}),
 			),
 		},
@@ -149,7 +149,7 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 			countries,
 			identifiers,
 			topK = 20,
-			threshold = 0.7,
+			threshold = 0.85,
 		} = data.body as {
 			q: string;
 			entityType?: string;

@@ -103,7 +103,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 					birthDate: z.string().optional(),
 					identifiers: z.array(z.string()).optional(),
 					topK: z.number().int().min(1).max(100).optional().default(20),
-					threshold: z.number().min(0).max(1).optional().default(0.7),
+					threshold: z.number().min(0).max(1).optional().default(0.85),
 				}),
 			),
 		},
