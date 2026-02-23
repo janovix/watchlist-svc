@@ -1,3 +1,10 @@
+# [1.4.0-rc.25](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.24...v1.4.0-rc.25) (2026-02-23)
+
+
+### Features
+
+* **config:** add feature flags for PEP search, Grok search, and Adverse Media in environment configuration ([f822ad9](https://github.com/janovix/watchlist-svc/commit/f822ad982e3a3390278f8bbc3a0324350dde86c9))
+
 # [1.4.0-rc.24](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.23...v1.4.0-rc.24) (2026-02-21)
 
 
