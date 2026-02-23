@@ -49,6 +49,8 @@ export class QueryListEndpoint extends OpenAPIRoute {
 									id: z.string(),
 									query: z.string(),
 									entityType: z.string(),
+									userId: z.string(),
+									source: z.string(),
 									status: z.string(),
 									// Status summary (without full result blobs)
 									ofacStatus: z.string(),
@@ -128,6 +130,8 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					id: true,
 					query: true,
 					entityType: true,
+					userId: true,
+					source: true,
 					status: true,
 					// Status summaries only (no result blobs)
 					ofacStatus: true,
@@ -157,6 +161,8 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					id: q.id,
 					query: q.query,
 					entityType: q.entityType,
+					userId: q.userId,
+					source: q.source,
 					status: q.status,
 					ofacStatus: q.ofacStatus,
 					ofacCount: q.ofacCount,
