@@ -77,6 +77,9 @@
 		"TRUSTED_ORIGINS": "*.janovix.workers.dev,http://localhost:*",
 		"AUTH_JWKS_CACHE_TTL": "3600",
 		"PEP_CACHE_ENABLED": "false",
+		"PEP_SEARCH_ENABLED": "false",
+		"PEP_GROK_ENABLED": "true",
+		"ADVERSE_MEDIA_ENABLED": "true",
 		// R2 presigned URL configuration (set via wrangler secret)
 		// "R2_ACCESS_KEY_ID": "set-via-secret",
 		// "R2_SECRET_ACCESS_KEY": "set-via-secret",

@@ -7,6 +7,7 @@ import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
 import { authMiddleware, adminMiddleware } from "./lib/auth-middleware";
 import { corsMiddleware } from "./middleware/cors";
 import { HealthEndpoint } from "./endpoints/watchlist/health";
+import { ConfigEndpoint } from "./endpoints/watchlist/config";
 import { SearchEndpoint } from "./endpoints/watchlist/search";
 import { SearchOfacEndpoint } from "./endpoints/watchlist/searchOfac";
 import { SearchUnscEndpoint } from "./endpoints/watchlist/searchUnsc";
@@ -136,6 +137,21 @@ export type Bindings = Env & {
 	 * PEP Events Durable Object for SSE streaming.
 	 */
 	PEP_EVENTS_DO?: DurableObjectNamespace;
+	/**
+	 * Enable/disable PEP official search (default: "true").
+	 * Set to "false" to skip the pepsearch container lookup.
+	 */
+	PEP_SEARCH_ENABLED?: string;
+	/**
+	 * Enable/disable PEP AI (Grok) search (default: "true").
+	 * Set to "false" to skip the pep_grok container lookup.
+	 */
+	PEP_GROK_ENABLED?: string;
+	/**
+	 * Enable/disable Adverse Media search (default: "true").
+	 * Set to "false" to skip the adverse_media_grok container lookup.
+	 */
+	ADVERSE_MEDIA_ENABLED?: string;
 };
 
 // Start a Hono app
@@ -210,6 +226,7 @@ app.use("/api/upload/*", adminMiddleware());
 
 // Register watchlist endpoints
 openapi.get("/healthz", HealthEndpoint);
+openapi.get("/config", ConfigEndpoint);
 openapi.post("/search", SearchEndpoint);
 openapi.post("/search/ofac", SearchOfacEndpoint);
 openapi.post("/search/unsc", SearchUnscEndpoint);

@@ -148,17 +148,17 @@ export interface SearchResult {
 	};
 	pepSearch?: {
 		searchId: string;
-		status: "completed" | "pending";
+		status: "completed" | "pending" | "disabled";
 		results: unknown | null;
 	};
 	pepAiSearch?: {
 		searchId: string;
-		status: "completed" | "pending" | "skipped";
+		status: "completed" | "pending" | "skipped" | "disabled";
 		result: unknown | null;
 	};
 	adverseMediaSearch?: {
 		searchId: string;
-		status: "completed" | "pending";
+		status: "completed" | "pending" | "disabled";
 		result: unknown | null;
 	};
 }
@@ -795,86 +795,96 @@ export async function performSearch(
 	let pepSearchInfo:
 		| {
 				searchId: string;
-				status: "completed" | "pending";
+				status: "completed" | "pending" | "disabled";
 				results: unknown | null;
 		  }
 		| undefined = undefined;
 
-	// Use queryId directly instead of hash-based search ID
-	const pepSearchId = queryId;
+	const pepSearchEnabled = env.PEP_SEARCH_ENABLED !== "false";
 
-	// Check KV cache if enabled (still using query hash for cache key)
-	const cacheEnabled = env.PEP_CACHE_ENABLED === "true";
-	let cachedPepResults: unknown = null;
+	if (!pepSearchEnabled) {
+		console.log(`[SearchCore] PEP search disabled via PEP_SEARCH_ENABLED`);
+		pepSearchInfo = {
+			searchId: queryId,
+			status: "disabled",
+			results: null,
+		};
+	} else {
+		// Use queryId directly instead of hash-based search ID
+		const pepSearchId = queryId;
 
-	if (cacheEnabled && env.PEP_CACHE) {
-		try {
-			const cacheKey = generatePepCacheKey(query);
-			const cached = await env.PEP_CACHE.get(cacheKey, "json");
-			if (cached) {
-				cachedPepResults = cached;
-				console.log(`[SearchCore] PEP cache hit for query "${query}"`);
+		// Check KV cache if enabled (still using query hash for cache key)
+		const cacheEnabled = env.PEP_CACHE_ENABLED === "true";
+		let cachedPepResults: unknown = null;
+
+		if (cacheEnabled && env.PEP_CACHE) {
+			try {
+				const cacheKey = generatePepCacheKey(query);
+				const cached = await env.PEP_CACHE.get(cacheKey, "json");
+				if (cached) {
+					cachedPepResults = cached;
+					console.log(`[SearchCore] PEP cache hit for query "${query}"`);
+					pepSearchInfo = {
+						searchId: pepSearchId,
+						status: "completed",
+						results: cachedPepResults,
+					};
+				}
+			} catch (error) {
+				console.warn(`[SearchCore] Failed to check PEP cache:`, error);
+			}
+		}
+
+		// If not cached, trigger PEP search in background
+		if (!cachedPepResults && env.THREAD_SVC) {
+			try {
+				const callbackUrl = getCallbackUrl(env.ENVIRONMENT) + "/internal/pep";
+
+				const threadPayload = {
+					task_type: "pep_search",
+					job_params: {
+						query: query,
+						callback_url: callbackUrl,
+						search_id: pepSearchId,
+						max_results: 1000,
+					},
+					metadata: {
+						source: "watchlist-svc",
+						triggered_by: "search",
+					},
+				};
+
+				// Fire-and-forget: use waitUntil to prevent cancellation
+				executionCtx.waitUntil(
+					env.THREAD_SVC.fetch("http://thread-svc/threads", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(threadPayload),
+					})
+						.then((response) => {
+							if (response.ok) {
+								console.log(
+									`[SearchCore] PEP search thread created for query "${query}"`,
+								);
+							} else {
+								console.error(
+									`[SearchCore] Failed to create PEP thread: ${response.status}`,
+								);
+							}
+						})
+						.catch((error) => {
+							console.error(`[SearchCore] Error creating PEP thread:`, error);
+						}),
+				);
+
 				pepSearchInfo = {
 					searchId: pepSearchId,
-					status: "completed",
-					results: cachedPepResults,
+					status: "pending",
+					results: null,
 				};
+			} catch (error) {
+				console.error(`[SearchCore] Failed to trigger PEP search:`, error);
 			}
-		} catch (error) {
-			console.warn(`[SearchCore] Failed to check PEP cache:`, error);
-		}
-	}
-
-	// If not cached, trigger PEP search in background
-	if (!cachedPepResults && env.THREAD_SVC) {
-		try {
-			const callbackUrl = getCallbackUrl(env.ENVIRONMENT) + "/internal/pep";
-
-			const threadPayload = {
-				task_type: "pep_search",
-				job_params: {
-					query: query,
-					callback_url: callbackUrl,
-					search_id: pepSearchId, // CHANGED: use queryId instead of pep_${hash}
-					max_results: 1000,
-				},
-				metadata: {
-					source: "watchlist-svc",
-					triggered_by: "search",
-				},
-			};
-
-			// Fire-and-forget: use waitUntil to prevent cancellation
-			executionCtx.waitUntil(
-				env.THREAD_SVC.fetch("http://thread-svc/threads", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(threadPayload),
-				})
-					.then((response) => {
-						if (response.ok) {
-							console.log(
-								`[SearchCore] PEP search thread created for query "${query}"`,
-							);
-						} else {
-							console.error(
-								`[SearchCore] Failed to create PEP thread: ${response.status}`,
-							);
-						}
-					})
-					.catch((error) => {
-						console.error(`[SearchCore] Error creating PEP thread:`, error);
-					}),
-			);
-
-			pepSearchInfo = {
-				searchId: pepSearchId,
-				status: "pending",
-				results: null,
-			};
-		} catch (error) {
-			console.error(`[SearchCore] Failed to trigger PEP search:`, error);
-			// Don't fail the whole search if PEP fails
 		}
 	}
 
@@ -884,12 +894,21 @@ export async function performSearch(
 	let pepAiSearch:
 		| {
 				searchId: string;
-				status: "completed" | "pending" | "skipped";
+				status: "completed" | "pending" | "skipped" | "disabled";
 				result: unknown | null;
 		  }
 		| undefined = undefined;
 
-	if (entityType === "person" && env.THREAD_SVC) {
+	const pepGrokEnabled = env.PEP_GROK_ENABLED !== "false";
+
+	if (!pepGrokEnabled) {
+		console.log(`[SearchCore] PEP Grok search disabled via PEP_GROK_ENABLED`);
+		pepAiSearch = {
+			searchId: queryId,
+			status: "disabled",
+			result: null,
+		};
+	} else if (entityType === "person" && env.THREAD_SVC) {
 		try {
 			const pepAiSearchId = queryId; // Use queryId for unified SSE
 			const callbackUrl =
@@ -961,12 +980,23 @@ export async function performSearch(
 	let adverseMediaSearch:
 		| {
 				searchId: string;
-				status: "completed" | "pending";
+				status: "completed" | "pending" | "disabled";
 				result: unknown | null;
 		  }
 		| undefined = undefined;
 
-	if (env.THREAD_SVC) {
+	const adverseMediaEnabled = env.ADVERSE_MEDIA_ENABLED !== "false";
+
+	if (!adverseMediaEnabled) {
+		console.log(
+			`[SearchCore] Adverse media search disabled via ADVERSE_MEDIA_ENABLED`,
+		);
+		adverseMediaSearch = {
+			searchId: queryId,
+			status: "disabled",
+			result: null,
+		};
+	} else if (env.THREAD_SVC) {
 		try {
 			const adverseMediaSearchId = queryId; // Use queryId for unified SSE
 			const callbackUrl =

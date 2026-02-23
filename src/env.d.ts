@@ -63,5 +63,20 @@ declare namespace Cloudflare {
 		 * Defaults to bucket configured in wrangler.jsonc
 		 */
 		R2_BUCKET_NAME?: string;
+		/**
+		 * Enable/disable PEP official search (default: "true").
+		 * Set to "false" to skip the pepsearch container lookup.
+		 */
+		PEP_SEARCH_ENABLED?: string;
+		/**
+		 * Enable/disable PEP AI (Grok) search (default: "true").
+		 * Set to "false" to skip the pep_grok container lookup.
+		 */
+		PEP_GROK_ENABLED?: string;
+		/**
+		 * Enable/disable Adverse Media search (default: "true").
+		 * Set to "false" to skip the adverse_media_grok container lookup.
+		 */
+		ADVERSE_MEDIA_ENABLED?: string;
 	}
 }
