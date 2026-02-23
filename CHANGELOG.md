@@ -1,3 +1,10 @@
+# [1.4.0-rc.26](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.25...v1.4.0-rc.26) (2026-02-23)
+
+
+### Features
+
+* **query:** add userId and source fields to query results in QueryListEndpoint ([9a9adb9](https://github.com/janovix/watchlist-svc/commit/9a9adb9a7ee1944389d7bff9603bc94ffd55cf85))
+
 # [1.4.0-rc.25](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.24...v1.4.0-rc.25) (2026-02-23)
 
 
