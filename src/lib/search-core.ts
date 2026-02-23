@@ -4,6 +4,7 @@
 
 import { ApiException } from "chanfana";
 import { createPrismaClient } from "./prisma";
+import { checkAndUpdateQueryCompletion } from "./search-query-utils";
 import { parseVectorId } from "./ofac-vectorize-service";
 import { getCallbackUrl } from "./callback-utils";
 import {
@@ -203,14 +204,17 @@ export async function performSearch(
 				birthDate: birthDate ?? null,
 				countries: countries ? JSON.stringify(countries) : null,
 				status: "pending",
-				// Set to pending so containers can update it; will transition to completed/failed when all async searches finish
 				ofacStatus: "running",
 				sat69bStatus: "running",
 				unStatus: "running",
-				pepOfficialStatus: "pending",
-				// Grok PEP is only for persons, not organizations
-				pepAiStatus: entityType === "person" ? "pending" : "skipped",
-				adverseMediaStatus: "pending",
+				pepOfficialStatus:
+					env.PEP_SEARCH_ENABLED !== "false" ? "pending" : "skipped",
+				pepAiStatus:
+					entityType === "person" && env.PEP_GROK_ENABLED !== "false"
+						? "pending"
+						: "skipped",
+				adverseMediaStatus:
+					env.ADVERSE_MEDIA_ENABLED !== "false" ? "pending" : "skipped",
 			},
 		});
 		console.log(
@@ -782,6 +786,12 @@ export async function performSearch(
 		console.log(
 			`[SearchCore] Persisted sync results to SearchQuery ${queryId}`,
 		);
+
+		// Eagerly check completion — when all async features are disabled their
+		// statuses are already "skipped" at creation time, so this single call
+		// transitions the query straight to "completed" without waiting for
+		// callbacks that will never fire.
+		await checkAndUpdateQueryCompletion(prisma, queryId);
 	} catch (err) {
 		console.error(
 			`[SearchCore] Failed to persist sync results to SearchQuery (non-fatal):`,
