@@ -1,3 +1,10 @@
+# [1.4.0-rc.27](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.26...v1.4.0-rc.27) (2026-02-23)
+
+
+### Features
+
+* **search:** integrate feature flags for PEP search and Adverse Media in performSearch function ([fe70e62](https://github.com/janovix/watchlist-svc/commit/fe70e627a3c4e7708d0ca9ab7a62c68b9d0acab6))
+
 # [1.4.0-rc.26](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.25...v1.4.0-rc.26) (2026-02-23)
 
 
