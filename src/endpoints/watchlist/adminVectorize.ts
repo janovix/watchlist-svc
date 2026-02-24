@@ -31,8 +31,10 @@ export class AdminVectorizeReindexEndpoint extends OpenAPIRoute {
 					"application/json": {
 						schema: z.object({
 							dataset: z
-								.enum(["ofac_sdn"])
-								.describe("The dataset to index (e.g., ofac_sdn)"),
+								.enum(["ofac_sdn", "unsc", "sat_69b"])
+								.describe(
+									"The dataset to index (e.g., ofac_sdn, unsc, sat_69b)",
+								),
 							reindex_all: z
 								.boolean()
 								.optional()

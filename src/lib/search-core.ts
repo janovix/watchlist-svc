@@ -181,8 +181,8 @@ export async function performSearch(
 		birthDate,
 		countries,
 		identifiers,
-		topK = 20,
-		threshold = 0.85,
+		topK = 50,
+		threshold = 0.7,
 	} = params;
 
 	// Generate query ID for persistent tracking and SSE subscription

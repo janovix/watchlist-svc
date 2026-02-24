@@ -122,14 +122,48 @@ export function jaroWinkler(s1: string, s2: string, prefixScale = 0.1): number {
 }
 
 /**
- * Find the best name score by comparing query against name and all aliases
- * Uses Jaro-Winkler similarity with normalized strings
- * Includes token-sorted comparison to handle name reordering (e.g., "Joaquin GUZMAN" vs "GUZMAN Joaquin")
+ * Compute token-set similarity: measures how well query tokens are covered
+ * by the target name. Resilient to extra tokens in the target (e.g., middle names)
+ * and token reordering.
+ *
+ * For each query token, finds the best Jaro-Winkler match among target tokens.
+ * Returns the weighted average, so "JOAQUIN GUZMAN LOERA" vs
+ * "GUZMAN LOERA JOAQUIN ARCHIVALDO" scores high because all 3 query tokens
+ * have near-perfect matches in the target.
+ */
+function tokenSetScore(queryTokens: string[], targetTokens: string[]): number {
+	if (queryTokens.length === 0 || targetTokens.length === 0) return 0;
+
+	let totalScore = 0;
+	for (const qt of queryTokens) {
+		let bestMatch = 0;
+		for (const tt of targetTokens) {
+			bestMatch = Math.max(bestMatch, jaroWinkler(qt, tt));
+		}
+		totalScore += bestMatch;
+	}
+
+	const queryCoverage = totalScore / queryTokens.length;
+
+	// Penalize slightly when query has fewer tokens than target (partial name search)
+	// but don't penalize too much — searching "JOAQUIN GUZMAN" should still match well
+	const lengthRatio = Math.min(queryTokens.length / targetTokens.length, 1.0);
+	const lengthPenalty = 0.8 + 0.2 * lengthRatio;
+
+	return queryCoverage * lengthPenalty;
+}
+
+/**
+ * Find the best name score by comparing query against name and all aliases.
+ * Uses three strategies and picks the maximum:
+ *   1. Full-string Jaro-Winkler (good for exact/near-exact matches)
+ *   2. Token-sorted Jaro-Winkler (handles name reordering)
+ *   3. Token-set coverage (handles missing middle names and extra tokens)
  *
  * @param query - Search query name
  * @param name - Primary name
  * @param aliases - Array of alias names
- * @returns Maximum Jaro-Winkler score found (0-1)
+ * @returns Maximum score found (0-1)
  */
 export function bestNameScore(
 	query: string,
@@ -139,22 +173,33 @@ export function bestNameScore(
 	const normalizedQuery = normalizeName(query);
 	const normalizedName = normalizeName(name);
 
-	// Full-string Jaro-Winkler
+	const queryTokens = normalizedQuery.split(" ").filter((t) => t.length > 0);
+	const nameTokens = normalizedName.split(" ").filter((t) => t.length > 0);
+
+	// Strategy 1: Full-string Jaro-Winkler
 	let maxScore = jaroWinkler(normalizedQuery, normalizedName);
 
-	// Token-sorted Jaro-Winkler (handles name reordering)
-	const sortedQuery = normalizedQuery.split(" ").sort().join(" ");
-	const sortedName = normalizedName.split(" ").sort().join(" ");
-	const tokenSortedScore = jaroWinkler(sortedQuery, sortedName);
-	maxScore = Math.max(maxScore, tokenSortedScore);
+	// Strategy 2: Token-sorted Jaro-Winkler (handles reordering)
+	const sortedQuery = [...queryTokens].sort().join(" ");
+	const sortedName = [...nameTokens].sort().join(" ");
+	maxScore = Math.max(maxScore, jaroWinkler(sortedQuery, sortedName));
+
+	// Strategy 3: Token-set coverage (handles extra/missing tokens like middle names)
+	maxScore = Math.max(maxScore, tokenSetScore(queryTokens, nameTokens));
 
 	if (aliases && aliases.length > 0) {
 		for (const alias of aliases) {
 			const normalizedAlias = normalizeName(alias);
-			const fullScore = jaroWinkler(normalizedQuery, normalizedAlias);
-			const sortedAlias = normalizedAlias.split(" ").sort().join(" ");
-			const tokenScore = jaroWinkler(sortedQuery, sortedAlias);
-			maxScore = Math.max(maxScore, fullScore, tokenScore);
+			const aliasTokens = normalizedAlias
+				.split(" ")
+				.filter((t) => t.length > 0);
+
+			maxScore = Math.max(
+				maxScore,
+				jaroWinkler(normalizedQuery, normalizedAlias),
+				jaroWinkler(sortedQuery, [...aliasTokens].sort().join(" ")),
+				tokenSetScore(queryTokens, aliasTokens),
+			);
 		}
 	}
 
