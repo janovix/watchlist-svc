@@ -1,3 +1,10 @@
+# [1.4.0-rc.28](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.27...v1.4.0-rc.28) (2026-02-24)
+
+
+### Features
+
+* **search:** update dataset options and enhance name scoring algorithm in matching utilities ([970713b](https://github.com/janovix/watchlist-svc/commit/970713bbe0c65d8aad55ced0a057c5588c4c634d))
+
 # [1.4.0-rc.27](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.26...v1.4.0-rc.27) (2026-02-23)
 
 
