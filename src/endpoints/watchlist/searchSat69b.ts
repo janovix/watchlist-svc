@@ -57,8 +57,8 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 				z.object({
 					q: z.string().min(1, "Query string is required"),
 					rfc: z.string().optional(),
-					topK: z.number().int().min(1).max(100).optional().default(20),
-					threshold: z.number().min(0).max(1).optional().default(0.85),
+					topK: z.number().int().min(1).max(100).optional().default(50),
+					threshold: z.number().min(0).max(1).optional().default(0.7),
 				}),
 			),
 		},
