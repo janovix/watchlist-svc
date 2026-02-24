@@ -1,3 +1,10 @@
+# [1.4.0-rc.29](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.28...v1.4.0-rc.29) (2026-02-24)
+
+
+### Bug Fixes
+
+* **search:** update default values for topK and threshold across multiple search endpoints ([098de2c](https://github.com/janovix/watchlist-svc/commit/098de2cf27cf9124a59d25d64564015f30f3f5ce))
+
 # [1.4.0-rc.28](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.27...v1.4.0-rc.28) (2026-02-24)
 
 
