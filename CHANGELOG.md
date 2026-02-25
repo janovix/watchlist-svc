@@ -1,3 +1,10 @@
+# [1.4.0-rc.30](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.29...v1.4.0-rc.30) (2026-02-25)
+
+
+### Features
+
+* **config:** add AML_SERVICE binding for production environment ([7e5bc8c](https://github.com/janovix/watchlist-svc/commit/7e5bc8c2ad090c110dd006db54f6fe9d6ee8ba12))
+
 # [1.4.0-rc.29](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.28...v1.4.0-rc.29) (2026-02-24)
 
 
