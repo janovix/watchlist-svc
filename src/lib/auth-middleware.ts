@@ -24,6 +24,10 @@ export interface AuthTokenPayload {
 	email?: string;
 	/** User name (if included in token) */
 	name?: string;
+	/** User role from Better Auth ("admin", "user", "visitor") */
+	role?: string;
+	/** Active organization ID for multi-tenant context */
+	organizationId?: string | null;
 }
 
 /**
@@ -41,8 +45,6 @@ export interface AuthUser {
 export interface AuthEnv {
 	/** Service binding to auth-svc for direct worker-to-worker communication */
 	AUTH_SERVICE: Fetcher;
-	/** Base URL for auth-svc (used to construct JWKS endpoint URL, optional) */
-	AUTH_SERVICE_URL?: string;
 	AUTH_JWKS_CACHE_TTL?: string;
 }
 
@@ -62,7 +64,6 @@ let cachedJWKSExpiry: number = 0;
 async function getJWKS(
 	cacheTtl: number,
 	authServiceBinding: Fetcher,
-	authServiceUrl?: string,
 ): Promise<jose.JSONWebKeySet> {
 	const now = Date.now();
 
@@ -71,11 +72,9 @@ async function getJWKS(
 		return cachedJWKS;
 	}
 
-	// Construct JWKS URL - use provided URL or default format
+	// Construct JWKS URL with internal hostname
 	// When using service binding, the hostname doesn't affect routing but is used for Host header
-	const jwksUrl = authServiceUrl
-		? `${authServiceUrl}/api/auth/jwks`
-		: "https://auth-svc.janovix.workers.dev/api/auth/jwks";
+	const jwksUrl = "http://internal/api/auth/jwks";
 
 	// Use service binding for direct worker-to-worker communication
 	// The hostname in the URL is used for the Host header but routing is handled by the binding
@@ -112,9 +111,8 @@ async function verifyToken(
 	token: string,
 	cacheTtl: number,
 	authServiceBinding: Fetcher,
-	authServiceUrl?: string,
 ): Promise<AuthTokenPayload> {
-	const jwks = await getJWKS(cacheTtl, authServiceBinding, authServiceUrl);
+	const jwks = await getJWKS(cacheTtl, authServiceBinding);
 
 	// Create a local JWKS for verification
 	const jwksInstance = jose.createLocalJWKSet(jwks);
@@ -169,6 +167,7 @@ export function authMiddleware(options?: {
 		user?: AuthUser;
 		token?: string;
 		tokenPayload?: AuthTokenPayload;
+		organization?: { id: string } | null;
 	};
 }> {
 	const { optional = false } = options ?? {};
@@ -176,8 +175,21 @@ export function authMiddleware(options?: {
 	return async (c, next) => {
 		// Skip authentication in test environment
 		if (c.env.ENVIRONMENT === "test") {
-			// Set a mock user for tests
-			c.set("user", { id: "test-user-id", email: "test@example.com" });
+			// Set a mock user for tests with admin role
+			const mockPayload: AuthTokenPayload = {
+				sub: "test-user-id",
+				email: "test@example.com",
+				name: "Test User",
+				role: "admin",
+				organizationId: "test-org-id",
+			};
+			c.set("user", {
+				id: mockPayload.sub,
+				email: mockPayload.email,
+				name: mockPayload.name,
+			});
+			c.set("tokenPayload", mockPayload);
+			c.set("organization", { id: "test-org-id" });
 			return next();
 		}
 
@@ -197,8 +209,6 @@ export function authMiddleware(options?: {
 
 		// Get the service binding for direct worker-to-worker communication
 		const authServiceBinding = c.env.AUTH_SERVICE;
-		// AUTH_SERVICE_URL is optional - used to construct the JWKS endpoint URL
-		const authServiceUrl = c.env.AUTH_SERVICE_URL;
 
 		// Validate that service binding is configured
 		if (!authServiceBinding) {
@@ -214,12 +224,7 @@ export function authMiddleware(options?: {
 			: DEFAULT_JWKS_CACHE_TTL;
 
 		try {
-			const payload = await verifyToken(
-				token,
-				cacheTtl,
-				authServiceBinding,
-				authServiceUrl,
-			);
+			const payload = await verifyToken(token, cacheTtl, authServiceBinding);
 
 			// Attach user info to context
 			const user: AuthUser = {
@@ -231,6 +236,12 @@ export function authMiddleware(options?: {
 			c.set("user", user);
 			c.set("token", token);
 			c.set("tokenPayload", payload);
+
+			// Set organization context from JWT for subscription/license checks
+			const organization = payload.organizationId
+				? { id: payload.organizationId }
+				: null;
+			c.set("organization", organization);
 
 			return next();
 		} catch (error) {
@@ -312,6 +323,48 @@ export function getAuthUserOrNull(
 	c: AppContext & { get: (key: "user") => AuthUser | undefined },
 ): AuthUser | null {
 	return c.get("user") ?? null;
+}
+
+/**
+ * Creates an authorization middleware that requires admin role
+ * Must be used after authMiddleware() to ensure tokenPayload is available
+ * Throws ApiException on authorization failure (compatible with chanfana)
+ *
+ * @returns Hono middleware handler
+ *
+ * @example
+ * // Require admin role for admin routes
+ * app.use("/admin/*", authMiddleware());
+ * app.use("/admin/*", adminMiddleware());
+ */
+export function adminMiddleware(): MiddlewareHandler<{
+	Bindings: AuthEnv & { ENVIRONMENT?: string };
+	Variables: {
+		user?: AuthUser;
+		token?: string;
+		tokenPayload?: AuthTokenPayload;
+		organization?: { id: string } | null;
+	};
+}> {
+	return async (c, next) => {
+		const tokenPayload = c.get("tokenPayload");
+
+		if (!tokenPayload) {
+			const error = new ApiException("Unauthorized");
+			error.status = 401;
+			error.code = 401;
+			throw error;
+		}
+
+		if (tokenPayload.role !== "admin") {
+			const error = new ApiException("Admin access required");
+			error.status = 403;
+			error.code = 403;
+			throw error;
+		}
+
+		return next();
+	};
 }
 
 /**

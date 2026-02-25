@@ -1,66 +1,190 @@
 // Prisma schema for Cloudflare D1
+// NOTE: All column names use snake_case via @map directives for consistency
+
 generator client {
-	provider = "prisma-client-js"
-	previewFeatures = ["driverAdapters"]
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
-	provider = "sqlite"
+  provider = "sqlite"
 }
 
-model WatchlistTarget {
-	id          String   @id
-	schema      String?
-	name        String?
-	aliases     String?  // JSON array of strings
-	birthDate   String?  @map("birth_date")
-	countries   String?  // JSON array of strings
-	addresses   String?  // JSON array of strings
-	identifiers String?  // JSON array of strings
-	sanctions   String?  // JSON array of strings
-	phones      String?  // JSON array of strings
-	emails      String?  // JSON array of strings
-	programIds  String?  @map("program_ids") // JSON array of strings
-	dataset     String?
-	firstSeen   String?  @map("first_seen") // ISO 8601 datetime string
-	lastSeen    String?  @map("last_seen") // ISO 8601 datetime string
-	lastChange  String?  @map("last_change") // ISO 8601 datetime string
-	createdAt   DateTime @default(now()) @map("created_at")
-	updatedAt   DateTime @updatedAt @map("updated_at")
+/// OFAC SDN Entry - Specially Designated Nationals and Blocked Persons
+/// Contains sanctions data from OFAC's SDN Advanced XML file
+/// Note: Search is via Vectorize, so no secondary indexes needed (only PK)
+model OfacSdnEntry {
+  id          String   @id // FixedRef from DistinctParty
+  partyType   String   @map("party_type") // Individual, Entity, Vessel, Aircraft
+  primaryName String   @map("primary_name") // Primary name from Identity
+  aliases     String? // JSON array of alias names
+  birthDate   String?  @map("birth_date") // ISO 8601 date string
+  birthPlace  String?  @map("birth_place") // Place of birth text
+  addresses   String? // JSON array of address strings
+  identifiers String? // JSON array of {type, number, country, issueDate, expirationDate}
+  remarks     String? // Additional comments/remarks
+  sourceList  String   @map("source_list") // SDN, Non-SDN, SSI, etc.
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-	vectorState WatchlistVectorState?
-
-	@@map("watchlist_target")
-	@@index([schema])
-	@@index([dataset])
-	@@index([lastChange])
+  @@map("ofac_sdn_entry")
 }
 
+/// Watchlist Ingestion Run - Tracks ingestion job status and statistics
 model WatchlistIngestionRun {
-	id           Int       @id @default(autoincrement())
-	sourceUrl    String    @map("source_url")
-	status       String    // 'running', 'completed', 'failed'
-	startedAt    DateTime  @default(now()) @map("started_at")
-	finishedAt   DateTime? @map("finished_at")
-	stats        String?   // JSON object with counts, errors, etc.
-	errorMessage String?   @map("error_message")
-	createdAt    DateTime  @default(now()) @map("created_at")
+  id           Int       @id @default(autoincrement())
+  sourceUrl    String    @map("source_url")
+  sourceType   String    @default("csv_url") @map("source_type") // 'sdn_xml', 'csv_url', etc.
+  status       String // 'pending', 'running', 'completed', 'failed'
+  startedAt    DateTime  @default(now()) @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  stats        String? // JSON object with counts, errors, etc.
+  errorMessage String?   @map("error_message")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
-	@@map("watchlist_ingestion_run")
-	@@index([status])
-	@@index([startedAt(sort: Desc)])
+  // Progress tracking fields (updated during ingestion)
+  progressPhase            String?   @map("progress_phase") // 'idle', 'initializing', 'downloading', 'parsing', 'inserting', 'completed', 'failed'
+  progressRecordsProcessed Int?      @map("progress_records_processed")
+  progressTotalEstimate    Int?      @map("progress_total_estimate")
+  progressPercentage       Int?      @map("progress_percentage")
+  progressCurrentBatch     Int?      @map("progress_current_batch")
+  progressUpdatedAt        DateTime? @map("progress_updated_at")
+
+  // Vectorization thread tracking
+  vectorizeThreadId String? @map("vectorize_thread_id") // ID del thread de vectorización (si aplica)
+
+  @@map("watchlist_ingestion_run")
+  @@index([status])
+  @@index([startedAt(sort: Desc)])
+  @@index([sourceType])
 }
 
-model WatchlistVectorState {
-	targetId          String   @id @map("target_id")
-	lastIndexedAt     DateTime @default(now()) @map("last_indexed_at")
-	lastIndexedChange String?  @map("last_indexed_change") // ISO 8601 datetime string from last_change
-	vectorId          String   @map("vector_id") // same as target_id
-	createdAt         DateTime @default(now()) @map("created_at")
-	updatedAt         DateTime @updatedAt @map("updated_at")
+/// Watchlist Identifier - Stores normalized identifiers for exact matching
+/// Used for hybrid search to match documents like passports, RFCs, NITs, etc.
+model WatchlistIdentifier {
+  id             Int      @id @default(autoincrement())
+  dataset        String   // e.g., "ofac_sdn", "csv_target", "sat_69b"
+  recordId       String   @map("record_id") // FK to ofac_sdn_entry.id, watchlist_target.id, or sat_69b_entry.id
+  identifierType String?  @map("identifier_type") // e.g., "PASSPORT", "RFC", "NIT"
+  identifierRaw  String   @map("identifier_raw") // Original identifier value
+  identifierNorm String   @map("identifier_norm") // Normalized (uppercase, stripped) for exact lookup
+  createdAt      DateTime @default(now()) @map("created_at")
 
-	target WatchlistTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  @@index([identifierNorm], name: "idx_watchlist_identifier_norm")
+  @@index([dataset, recordId], name: "idx_watchlist_identifier_dataset_record")
+  @@map("watchlist_identifier")
+}
 
-	@@map("watchlist_vector_state")
-	@@index([lastIndexedAt])
+/// SAT 69-B Entry - Listado completo de contribuyentes Art. 69-B del CFF
+/// Contains data from Mexican tax authority (SAT) about taxpayers with presumably non-existent operations
+/// Note: Search is via Vectorize, so no secondary indexes needed (only PK and RFC)
+model Sat69bEntry {
+  id          String   @id // RFC (used as unique identifier)
+  rowNumber   Int?     @map("row_number") // Original row number from CSV
+  rfc         String   // RFC del contribuyente (tax ID)
+  taxpayerName String  @map("taxpayer_name") // Nombre del Contribuyente
+  taxpayerStatus String @map("taxpayer_status") // Situacion: Presunto, Desvirtuado, Definitivo, Sentencia Favorable
+  
+  // Presumption phase (Phase 1)
+  presumptionSatNotice String? @map("presumption_sat_notice") // Numero y fecha de oficio global de presuncion SAT
+  presumptionSatDate   String? @map("presumption_sat_date") // Publicacion pagina SAT presuntos
+  presumptionDofNotice String? @map("presumption_dof_notice") // Numero y fecha de oficio global de presuncion DOF
+  presumptionDofDate   String? @map("presumption_dof_date") // Publicacion DOF presuntos
+  
+  // Rebuttal phase (Phase 2)
+  rebuttalSatNotice String? @map("rebuttal_sat_notice") // Numero y fecha de oficio global de contribuyentes que desvirtuaron SAT
+  rebuttalSatDate   String? @map("rebuttal_sat_date") // Publicacion pagina SAT desvirtuados
+  rebuttalDofNotice String? @map("rebuttal_dof_notice") // Numero y fecha de oficio global de contribuyentes que desvirtuaron DOF
+  rebuttalDofDate   String? @map("rebuttal_dof_date") // Publicacion DOF desvirtuados
+  
+  // Definitive phase (Phase 3)
+  definitiveSatNotice String? @map("definitive_sat_notice") // Numero y fecha de oficio global de definitivos SAT
+  definitiveSatDate   String? @map("definitive_sat_date") // Publicacion pagina SAT definitivos
+  definitiveDofNotice String? @map("definitive_dof_notice") // Numero y fecha de oficio global de definitivos DOF
+  definitiveDofDate   String? @map("definitive_dof_date") // Publicacion DOF definitivos
+  
+  // Favorable sentence phase (Phase 4)
+  favorableSatNotice String? @map("favorable_sat_notice") // Numero y fecha de oficio global de sentencia favorable SAT
+  favorableSatDate   String? @map("favorable_sat_date") // Publicacion pagina SAT sentencia favorable
+  favorableDofNotice String? @map("favorable_dof_notice") // Numero y fecha de oficio global de sentencia favorable DOF
+  favorableDofDate   String? @map("favorable_dof_date") // Publicacion DOF sentencia favorable
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([rfc], name: "idx_sat_69b_entry_rfc")
+  @@map("sat_69b_entry")
+}
+
+/// UN Security Council Entry - Contains individuals and entities from UN sanctions lists
+/// Note: Search is via Vectorize, so no secondary indexes needed (only PK)
+model UnscEntry {
+  id              String   @id // DATAID
+  partyType       String   @map("party_type") // Individual o Entity
+  primaryName     String   @map("primary_name") // Nombre completo construido
+  aliases         String? // JSON array de alias
+  birthDate       String?  @map("birth_date") // Fecha de nacimiento (ISO 8601)
+  birthPlace      String?  @map("birth_place") // Lugar de nacimiento
+  gender          String? // Male/Female
+  addresses       String? // JSON array de direcciones
+  nationalities   String? // JSON array de nacionalidades
+  identifiers     String? // JSON array de documentos
+  designations    String? // JSON array de cargos
+  remarks         String? // COMMENTS1
+  unListType      String   @map("un_list_type") // DRC, AFG, TAL, etc.
+  referenceNumber String?  @map("reference_number") // CDi.001, etc.
+  listedOn        String?  @map("listed_on") // Fecha de listado
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("unsc_entry")
+}
+
+/// Search Query - Stores all search queries with aggregated results from multiple search types
+/// Used for persistent query audit trail and async result aggregation
+model SearchQuery {
+  id                   String   @id
+  organizationId       String   @map("organization_id")
+  userId               String   @map("user_id")
+  query                String
+  source               String   @default("manual") // 'manual' | 'aml-screening'
+  entityType           String   @default("person") @map("entity_type") // 'person', 'entity', etc.
+  birthDate            String?  @map("birth_date")
+  countries            String? // JSON array
+  status               String   @default("pending") // 'pending', 'completed', 'failed'
+  
+  // OFAC Sanctions results (synchronous)
+  ofacStatus           String   @default("pending") @map("ofac_status")
+  ofacResult           String?  @map("ofac_result") // JSON result
+  ofacCount            Int      @default(0) @map("ofac_count")
+  
+  // SAT 69B Sanctions results (synchronous)
+  sat69bStatus         String   @default("pending") @map("sat69b_status")
+  sat69bResult         String?  @map("sat69b_result") // JSON result
+  sat69bCount          Int      @default(0) @map("sat69b_count")
+  
+  // UN Sanctions results (synchronous)
+  unStatus             String   @default("pending") @map("un_status")
+  unResult             String?  @map("un_result") // JSON result
+  unCount              Int      @default(0) @map("un_count")
+  
+  // PEP Official results (async via pep_search container)
+  pepOfficialStatus    String   @default("pending") @map("pep_official_status")
+  pepOfficialResult    String?  @map("pep_official_result") // JSON result
+  pepOfficialCount     Int      @default(0) @map("pep_official_count")
+  
+  // PEP AI results (async via pep_grok container, person only)
+  pepAiStatus          String   @default("skipped") @map("pep_ai_status")
+  pepAiResult          String?  @map("pep_ai_result") // JSON result
+  
+  // Adverse Media results (async via adverse_media_grok container)
+  adverseMediaStatus   String   @default("pending") @map("adverse_media_status")
+  adverseMediaResult   String?  @map("adverse_media_result") // JSON result
+  
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  
+  @@index([organizationId, createdAt(sort: Desc)], name: "idx_search_query_org_created")
+  @@index([organizationId, status], name: "idx_search_query_org_status")
+  @@map("search_query")
 }

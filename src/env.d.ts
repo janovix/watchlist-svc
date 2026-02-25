@@ -13,7 +13,6 @@ declare namespace Cloudflare {
 				input: { text: string[] },
 			) => Promise<{ data: number[][] }>;
 		};
-		ADMIN_API_KEY?: string;
 		GROK_API_KEY?: string;
 		/**
 		 * Sentry DSN for error tracking.
@@ -21,8 +20,63 @@ declare namespace Cloudflare {
 		 */
 		SENTRY_DSN?: string;
 		/**
-		 * Environment identifier (e.g., "dev", "production").
+		 * Environment identifier (e.g., "dev", "production", "preview", "local").
 		 */
 		ENVIRONMENT?: string;
+		/**
+		 * Auth service binding for subscription checks
+		 */
+		AUTH_SERVICE?: Service;
+		/**
+		 * Thread service binding for creating and tracking threads
+		 */
+		THREAD_SVC?: Service;
+		/**
+		 * PEP cache KV namespace for temporary 24h result caching.
+		 */
+		PEP_CACHE?: KVNamespace;
+		/**
+		 * Enable/disable PEP cache (default: "false").
+		 */
+		PEP_CACHE_ENABLED?: string;
+		/**
+		 * PEP Events Durable Object for SSE streaming.
+		 */
+		PEP_EVENTS_DO?: DurableObjectNamespace;
+		/**
+		 * R2 Access Key ID for generating presigned URLs.
+		 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
+		 */
+		R2_ACCESS_KEY_ID?: string;
+		/**
+		 * R2 Secret Access Key for generating presigned URLs.
+		 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
+		 */
+		R2_SECRET_ACCESS_KEY?: string;
+		/**
+		 * Cloudflare Account ID for R2 endpoint URL.
+		 * Find in Cloudflare Dashboard URL or Overview page.
+		 */
+		CLOUDFLARE_ACCOUNT_ID?: string;
+		/**
+		 * R2 bucket name (optional override).
+		 * Defaults to bucket configured in wrangler.jsonc
+		 */
+		R2_BUCKET_NAME?: string;
+		/**
+		 * Enable/disable PEP official search (default: "true").
+		 * Set to "false" to skip the pepsearch container lookup.
+		 */
+		PEP_SEARCH_ENABLED?: string;
+		/**
+		 * Enable/disable PEP AI (Grok) search (default: "true").
+		 * Set to "false" to skip the pep_grok container lookup.
+		 */
+		PEP_GROK_ENABLED?: string;
+		/**
+		 * Enable/disable Adverse Media search (default: "true").
+		 * Set to "false" to skip the adverse_media_grok container lookup.
+		 */
+		ADVERSE_MEDIA_ENABLED?: string;
 	}
 }

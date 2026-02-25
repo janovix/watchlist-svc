@@ -2,38 +2,153 @@ import { OpenAPIRoute, ApiException } from "chanfana";
 import { AppContext } from "../../types";
 import { contentJson } from "chanfana";
 import { z } from "zod";
-import { createPrismaClient } from "../../lib/prisma";
-import { watchlistTarget } from "./base";
-import { GrokService } from "../../lib/grok-service";
-import { transformWatchlistTarget } from "../../lib/transformers";
+import { ofacMatch } from "./searchOfac";
+import { unscMatch } from "./searchUnsc";
+import { sat69bMatch } from "./searchSat69b";
+import { createUsageRightsClient } from "../../lib/usage-rights-client";
+import { performSearch } from "../../lib/search-core";
+
+// Tipos para los targets
+type _OfacTargetType = {
+	id: string;
+	partyType: string;
+	primaryName: string;
+	aliases: string[] | null;
+	birthDate: string | null;
+	birthPlace: string | null;
+	addresses: string[] | null;
+	identifiers: Array<{
+		type?: string;
+		number?: string;
+		country?: string;
+		issueDate?: string;
+		expirationDate?: string;
+	}> | null;
+	remarks: string | null;
+	sourceList: string;
+	createdAt: string;
+	updatedAt: string;
+};
+
+type _UnscTargetType = {
+	id: string;
+	partyType: string;
+	primaryName: string;
+	aliases: string[] | null;
+	birthDate: string | null;
+	birthPlace: string | null;
+	gender: string | null;
+	nationalities: string[] | null;
+	addresses: string[] | null;
+	identifiers: Array<{ type?: string; number?: string }> | null;
+	designations: string[] | null;
+	remarks: string | null;
+	unListType: string;
+	referenceNumber: string | null;
+	listedOn: string | null;
+	createdAt: string;
+	updatedAt: string;
+};
+
+type _Sat69bTargetType = {
+	id: string;
+	rfc: string;
+	taxpayerName: string;
+	taxpayerStatus: string;
+	presumptionPhase: {
+		satNotice: string | null;
+		satDate: string | null;
+		dofNotice: string | null;
+		dofDate: string | null;
+	} | null;
+	rebuttalPhase: {
+		satNotice: string | null;
+		satDate: string | null;
+		dofNotice: string | null;
+		dofDate: string | null;
+	} | null;
+	definitivePhase: {
+		satNotice: string | null;
+		satDate: string | null;
+		dofNotice: string | null;
+		dofDate: string | null;
+	} | null;
+	favorablePhase: {
+		satNotice: string | null;
+		satDate: string | null;
+		dofNotice: string | null;
+		dofDate: string | null;
+	} | null;
+	createdAt: string;
+	updatedAt: string;
+};
 
 export class SearchEndpoint extends OpenAPIRoute {
 	public schema = {
 		tags: ["Search"],
 		summary:
-			"Semantic search for watchlist targets using Vectorize first, then Grok API as fallback",
+			"Hybrid semantic search for watchlist targets using identifier lookup, vector search, and Jaro-Winkler name similarity",
 		operationId: "searchTargets",
 		request: {
 			body: contentJson(
 				z.object({
-					query: z.string().min(1, "Query string is required"),
-					topK: z.number().int().min(1).max(100).optional().default(10),
+					q: z.string().min(1, "Query string is required"),
+					dataset: z.enum(["ofac_sdn", "unsc", "sat_69b"]).optional(),
+					entityType: z
+						.enum(["person", "organization"])
+						.optional()
+						.default("person")
+						.describe("Entity type for adverse media search"),
+					countries: z.array(z.string()).optional(),
+					birthDate: z.string().optional(),
+					identifiers: z.array(z.string()).optional(),
+					topK: z.number().int().min(1).max(100).optional().default(50),
+					threshold: z.number().min(0).max(1).optional().default(0.7),
 				}),
 			),
 		},
 		responses: {
 			"200": {
-				description: "Search results",
+				description: "Search results with hybrid scoring, separated by dataset",
 				...contentJson({
 					success: Boolean,
 					result: z.object({
-						matches: z.array(
-							z.object({
-								target: watchlistTarget,
-								score: z.number(),
-							}),
-						),
-						count: z.number(),
+						queryId: z
+							.string()
+							.describe("Persistent query ID for result aggregation"),
+						ofac: z.object({
+							matches: z.array(ofacMatch),
+							count: z.number(),
+						}),
+						unsc: z.object({
+							matches: z.array(unscMatch),
+							count: z.number(),
+						}),
+						sat69b: z.object({
+							matches: z.array(sat69bMatch),
+							count: z.number(),
+						}),
+						pepSearch: z
+							.object({
+								searchId: z.string(),
+								status: z.enum(["completed", "pending"]),
+								results: z.any().nullable(),
+							})
+							.optional(),
+						pepAiSearch: z
+							.object({
+								searchId: z.string(),
+								status: z.enum(["completed", "pending", "skipped"]),
+								result: z.any().nullable(),
+							})
+							.optional(),
+						adverseMediaSearch: z
+							.object({
+								searchId: z.string(),
+								status: z.enum(["completed", "pending"]),
+								result: z.any().nullable(),
+							})
+							.optional(),
 					}),
 				}),
 			},
@@ -67,173 +182,71 @@ export class SearchEndpoint extends OpenAPIRoute {
 	public async handle(c: AppContext) {
 		const data = await this.getValidatedData<typeof this.schema>();
 
-		console.log("[Search] Starting search", {
-			query: data.body.query,
+		console.log("[Search] Starting hybrid search", {
+			q: data.body.q,
 			topK: data.body.topK,
+			threshold: data.body.threshold,
+			hasIdentifiers: !!data.body.identifiers,
 		});
 
 		try {
-			// First, try Vectorize search
-			if (!c.env.AI) {
-				console.error("[Search] AI binding not available");
-				const error = new ApiException(
-					"AI binding not available. Please ensure Workers AI is enabled for your account.",
-				);
-				error.status = 503;
-				error.code = 503;
+			// Check usage rights: gate-and-meter for watchlist queries
+			const organization = c.get("organization");
+			if (!organization) {
+				const error = new ApiException("Organization context required");
+				error.status = 403;
+				error.code = 403;
 				throw error;
 			}
 
-			if (!c.env.WATCHLIST_VECTORIZE) {
-				console.error("[Search] WATCHLIST_VECTORIZE not available");
-				const error = new ApiException(
-					"Vectorize index not available. Please ensure WATCHLIST_VECTORIZE is configured.",
-				);
-				error.status = 503;
-				error.code = 503;
-				throw error;
-			}
-
-			console.log("[Search] Generating embedding for query");
-			const queryResponse = (await c.env.AI.run("@cf/baai/bge-base-en-v1.5", {
-				text: [data.body.query],
-			})) as { data: number[][] };
-
-			if (
-				!queryResponse ||
-				!Array.isArray(queryResponse.data) ||
-				queryResponse.data.length === 0
-			) {
-				console.error("[Search] Failed to generate query embedding");
-				const error = new ApiException("Failed to generate query embedding");
-				error.status = 500;
-				error.code = 500;
-				throw error;
-			}
-
-			const embedding = queryResponse.data[0] as number[];
-			console.log("[Search] Embedding generated", {
-				embeddingLength: embedding.length,
-			});
-
-			console.log("[Search] Querying Vectorize");
-			const vectorizeResults = await c.env.WATCHLIST_VECTORIZE.query(
-				embedding,
-				{
-					topK: data.body.topK,
-					returnMetadata: true,
-				},
+			const usageRights = createUsageRightsClient(c.env);
+			const gateResult = await usageRights.gate(
+				organization.id,
+				"watchlistQueries",
 			);
 
-			console.log("[Search] Vectorize query completed", {
-				vectorizeMatchesCount: vectorizeResults.matches.length,
-			});
-
-			// If we found matches in Vectorize, return them
-			if (vectorizeResults.matches.length > 0) {
-				const prisma = createPrismaClient(c.env.DB);
-				const targetIds = vectorizeResults.matches.map((m) => m.id);
-				const targets = await prisma.watchlistTarget.findMany({
-					where: {
-						id: { in: targetIds },
+			if (!gateResult.allowed) {
+				return c.json(
+					{
+						success: false,
+						error: gateResult.error ?? "usage_limit_exceeded",
+						code: "USAGE_LIMIT_EXCEEDED",
+						upgradeRequired: true,
+						metric: "watchlistQueries",
+						used: gateResult.used,
+						limit: gateResult.limit,
+						entitlementType: gateResult.entitlementType,
+						message:
+							"Daily watchlist query limit reached. Please upgrade or try again tomorrow.",
 					},
-				});
-
-				const targetMap = new Map(
-					targets.map((t: (typeof targets)[number]) => [t.id, t]),
+					403,
 				);
-
-				const matches = vectorizeResults.matches
-					.map((match: { id: string; score?: number }) => {
-						const target = targetMap.get(match.id);
-						if (!target) return null;
-
-						return {
-							target: transformWatchlistTarget(target),
-							score: match.score || 0,
-						};
-					})
-					.filter(
-						(
-							m: { target: unknown; score: number } | null,
-						): m is { target: unknown; score: number } => m !== null,
-					);
-
-				console.log("[Search] Search completed successfully from Vectorize", {
-					matchesCount: matches.length,
-				});
-
-				return {
-					success: true,
-					result: {
-						matches,
-						count: matches.length,
-					},
-				};
 			}
 
-			// No matches in Vectorize, fallback to Grok API
-			console.log(
-				"[Search] No Vectorize matches found, falling back to Grok API",
-			);
+			// Call shared search core with source='manual' for UI-initiated searches
+			const user = c.get("user");
+			const entityType =
+				(data.body as unknown as { entityType?: string }).entityType ??
+				"person";
 
-			if (!c.env.GROK_API_KEY) {
-				console.log(
-					"[Search] GROK_API_KEY not configured, returning empty results",
-				);
-				return {
-					success: true,
-					result: {
-						matches: [],
-						count: 0,
-					},
-				};
-			}
-
-			const grokService = new GrokService({
-				apiKey: c.env.GROK_API_KEY,
-			});
-
-			console.log("[Search] Calling Grok API");
-			const grokResponse = await grokService.queryPEPStatus(data.body.query);
-
-			console.log("[Search] Grok API response received", {
-				hasResponse: !!grokResponse,
-				hasName: !!grokResponse?.name,
-			});
-
-			if (!grokResponse || !grokResponse.name) {
-				console.log("[Search] Grok API returned no usable response");
-				return {
-					success: true,
-					result: {
-						matches: [],
-						count: 0,
-					},
-				};
-			}
-
-			// Convert Grok response to WatchlistTarget format
-			const grokTarget = grokService.convertToWatchlistTarget(
-				grokResponse,
-				data.body.query,
-			);
-
-			console.log("[Search] Search completed successfully from Grok", {
-				targetId: grokTarget.id,
+			const result = await performSearch({
+				env: c.env,
+				executionCtx: c.executionCtx,
+				organizationId: organization.id,
+				userId: user?.id ?? "unknown",
+				source: "manual",
+				query: data.body.q,
+				entityType,
+				birthDate: data.body.birthDate,
+				countries: data.body.countries,
+				identifiers: data.body.identifiers,
+				topK: data.body.topK,
+				threshold: data.body.threshold,
 			});
 
 			return {
 				success: true,
-				result: {
-					matches: [
-						{
-							target: grokTarget,
-							score: 0.8, // High confidence score for Grok API results (external match)
-						},
-					],
-					count: 1,
-				},
+				result,
 			};
 		} catch (error) {
 			console.error("[Search] Error during search", {

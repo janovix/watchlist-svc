@@ -11,6 +11,12 @@ export default defineWorkersConfig({
 	esbuild: {
 		target: "esnext",
 	},
+	// Required for @prisma/adapter-d1@7.x which depends on 'ky'
+	// See: https://developers.cloudflare.com/workers/testing/vitest-integration/known-issues/#module-resolution
+	ssr: {
+		// Force Vite to bundle these modules instead of externalizing them
+		noExternal: ["ky", "@prisma/adapter-d1"],
+	},
 	test: {
 		coverage: {
 			provider: "istanbul",
@@ -23,17 +29,34 @@ export default defineWorkersConfig({
 				"**/tests/**",
 				"**/dist/**",
 				"**/coverage/**",
+				"src/dictionaries/**", // Generated dictionary data, no business logic to test
 				"src/lib/ingestion-service.ts", // Hard to test without external dependencies
 				"src/lib/auth-middleware.ts", // Requires AUTH_SERVICE binding (service binding to auth-svc)
+				"src/lib/auth-settings.ts", // Requires AUTH_SERVICE binding for getResolvedSettings
+				"src/lib/search-core.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/queue-consumer.ts", // Queue consumer requires queue infrastructure setup
 				"src/endpoints/watchlist/pepSearch.ts", // Requires AI/Vectorize bindings difficult to mock
 				"src/endpoints/watchlist/search.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/searchOfac.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/searchUnsc.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/searchSat69b.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/internalSearch.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/internalVectorize.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/addOnVectorize.ts", // Requires AI/Vectorize bindings difficult to mock
+				"src/endpoints/watchlist/adminIngest.ts", // Requires WATCHLIST_INGEST_QUEUE binding
+				"src/endpoints/watchlist/ingestionUpload.ts", // Requires WATCHLIST_INGEST_QUEUE binding
+				"src/routes/upload.ts", // Requires R2 bucket binding for file uploads
+				"src/endpoints/watchlist/pepEvents.ts", // Requires PEP_EVENTS_DO binding
+				"src/durable-objects/pep-events.ts", // Durable Object - hard to test in vitest environment
+				"src/endpoints/watchlist/internalPep.ts", // Requires PEP_CACHE and PEP_EVENTS_DO bindings
+				"src/endpoints/watchlist/internalAdverseMedia.ts", // Requires PEP_EVENTS_DO binding
+				"src/endpoints/watchlist/internalGrokPep.ts", // Requires PEP_EVENTS_DO binding
 			],
 			thresholds: {
-				lines: 70,
-				functions: 70,
-				branches: 60,
-				statements: 70,
+				lines: 85,
+				functions: 85,
+				branches: 80,
+				statements: 85,
 			},
 		},
 		setupFiles: ["./tests/apply-migrations.ts"],

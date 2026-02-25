@@ -1,23 +1,74 @@
 import { ApiException, fromHono } from "chanfana";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { ContentfulStatusCode } from "hono/utils/http-status";
 import * as Sentry from "@sentry/cloudflare";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
-import { authMiddleware } from "./lib/auth-middleware";
+import { authMiddleware, adminMiddleware } from "./lib/auth-middleware";
+import { corsMiddleware } from "./middleware/cors";
 import { HealthEndpoint } from "./endpoints/watchlist/health";
+import { ConfigEndpoint } from "./endpoints/watchlist/config";
 import { SearchEndpoint } from "./endpoints/watchlist/search";
-import { TargetReadEndpoint } from "./endpoints/watchlist/targetRead";
+import { SearchOfacEndpoint } from "./endpoints/watchlist/searchOfac";
+import { SearchUnscEndpoint } from "./endpoints/watchlist/searchUnsc";
+import { SearchSat69bEndpoint } from "./endpoints/watchlist/searchSat69b";
 import {
 	IngestionRunsListEndpoint,
 	IngestionRunReadEndpoint,
 } from "./endpoints/watchlist/ingestionRuns";
+import { IngestionProgressEndpoint } from "./endpoints/watchlist/ingestionProgress";
 import {
-	AdminIngestEndpoint,
-	AdminReindexEndpoint,
-} from "./endpoints/watchlist/adminIngest";
-import { PepSearchEndpoint } from "./endpoints/watchlist/pepSearch";
+	IngestionStartEndpoint,
+	IngestionCompleteEndpoint,
+	IngestionFailedEndpoint,
+} from "./endpoints/watchlist/ingestionUpload";
+import { uploadRoutes } from "./routes/upload";
+import {
+	InternalOfacTruncateEndpoint,
+	InternalOfacBatchEndpoint,
+	InternalOfacCompleteEndpoint,
+	InternalOfacFailedEndpoint,
+} from "./endpoints/watchlist/internalOfac";
+import {
+	InternalSat69bTruncateEndpoint,
+	InternalSat69bBatchEndpoint,
+	InternalSat69bCompleteEndpoint,
+	InternalSat69bFailedEndpoint,
+} from "./endpoints/watchlist/internalSat69b";
+import {
+	InternalUnscTruncateEndpoint,
+	InternalUnscBatchEndpoint,
+	InternalUnscCompleteEndpoint,
+	InternalUnscFailedEndpoint,
+} from "./endpoints/watchlist/internalUnsc";
+import {
+	InternalPepResultsEndpoint,
+	InternalPepFailedEndpoint,
+} from "./endpoints/watchlist/internalPep";
+import {
+	InternalAdverseMediaResultsEndpoint,
+	InternalAdverseMediaFailedEndpoint,
+} from "./endpoints/watchlist/internalAdverseMedia";
+import {
+	InternalGrokPepResultsEndpoint,
+	InternalGrokPepFailedEndpoint,
+} from "./endpoints/watchlist/internalGrokPep";
+import { InternalSearchEndpoint } from "./endpoints/watchlist/internalSearch";
+import { QueryListEndpoint } from "./endpoints/watchlist/queryList";
+import { QueryReadEndpoint } from "./endpoints/watchlist/queryRead";
+import eventsRouter from "./endpoints/watchlist/events";
+import {
+	InternalVectorizeCountEndpoint,
+	InternalVectorizeDeleteByDatasetEndpoint,
+	InternalVectorizeIndexBatchEndpoint,
+	InternalVectorizeCompleteEndpoint,
+	InternalVectorizeSearchEndpoint,
+	InternalVectorizeSearchHydratedEndpoint,
+} from "./endpoints/watchlist/internalVectorize";
+import { AdminVectorizeReindexEndpoint } from "./endpoints/watchlist/adminVectorize";
+
+// Export Durable Objects
+export { PepEventsDO } from "./durable-objects/pep-events";
 
 /**
  * Extended environment bindings with Sentry support.
@@ -39,59 +90,75 @@ export type Bindings = Env & {
 	 */
 	ENVIRONMENT?: string;
 	/**
-	 * Admin API key for protected endpoints.
-	 */
-	ADMIN_API_KEY?: string;
-	/**
 	 * Grok API key for AI-powered features.
 	 */
 	GROK_API_KEY?: string;
+	/**
+	 * R2 bucket for storing uploaded watchlist files (XML, etc.)
+	 */
+	WATCHLIST_UPLOADS_BUCKET?: R2Bucket;
+	/**
+	 * R2 Access Key ID for generating presigned URLs.
+	 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
+	 */
+	R2_ACCESS_KEY_ID?: string;
+	/**
+	 * R2 Secret Access Key for generating presigned URLs.
+	 * Create via Cloudflare Dashboard > R2 > Manage R2 API Tokens
+	 */
+	R2_SECRET_ACCESS_KEY?: string;
+	/**
+	 * Cloudflare Account ID for R2 endpoint URL.
+	 * Find in Cloudflare Dashboard URL or Overview page.
+	 */
+	CLOUDFLARE_ACCOUNT_ID?: string;
+	/**
+	 * R2 bucket name (optional, defaults to 'watchlist-uploads').
+	 * Override if using different bucket names per environment.
+	 */
+	R2_BUCKET_NAME?: string;
+	/**
+	 * Thread service binding for creating and tracking threads.
+	 */
+	THREAD_SVC?: Fetcher;
+	/**
+	 * AML service binding for screening result callbacks.
+	 */
+	AML_SERVICE?: Fetcher;
+	/**
+	 * PEP cache KV namespace for temporary 24h result caching.
+	 */
+	PEP_CACHE?: KVNamespace;
+	/**
+	 * Enable/disable PEP cache (default: "false").
+	 */
+	PEP_CACHE_ENABLED?: string;
+	/**
+	 * PEP Events Durable Object for SSE streaming.
+	 */
+	PEP_EVENTS_DO?: DurableObjectNamespace;
+	/**
+	 * Enable/disable PEP official search (default: "true").
+	 * Set to "false" to skip the pepsearch container lookup.
+	 */
+	PEP_SEARCH_ENABLED?: string;
+	/**
+	 * Enable/disable PEP AI (Grok) search (default: "true").
+	 * Set to "false" to skip the pep_grok container lookup.
+	 */
+	PEP_GROK_ENABLED?: string;
+	/**
+	 * Enable/disable Adverse Media search (default: "true").
+	 * Set to "false" to skip the adverse_media_grok container lookup.
+	 */
+	ADVERSE_MEDIA_ENABLED?: string;
 };
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Bindings }>();
 
-// Configure CORS to allow requests from configured domain subdomains
-app.use(
-	"*",
-	cors({
-		origin: (origin, c) => {
-			// Get allowed domain from environment variable
-			const allowedDomain = c.env.CORS_ALLOWED_DOMAIN;
-			if (!allowedDomain) {
-				// If no domain configured, allow all origins (for development)
-				return "*";
-			}
-
-			if (!origin) return "*";
-
-			try {
-				const url = new URL(origin);
-				const hostname = url.hostname;
-				// Allow exact match
-				if (hostname === allowedDomain) {
-					return origin;
-				}
-				// Allow any subdomain (e.g., watchlist.janovix.workers.dev)
-				if (hostname.endsWith(`.${allowedDomain}`)) {
-					return origin;
-				}
-			} catch {
-				// Invalid origin, deny
-			}
-			return null;
-		},
-		allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-		allowHeaders: [
-			"Content-Type",
-			"Authorization",
-			"X-Requested-With",
-			"Accept",
-		],
-		exposeHeaders: ["Content-Length", "Content-Type"],
-		credentials: true,
-	}),
-);
+// CORS middleware using TRUSTED_ORIGINS environment variable
+app.use("*", corsMiddleware());
 
 const appMeta: AppMeta = {
 	name: pkg.name,
@@ -144,19 +211,105 @@ app.get("/docsz", (c) => {
 // Apply auth middleware to protected routes
 // Pattern: Apply middleware to specific paths before registering endpoints
 app.use("/search", authMiddleware());
-app.use("/pep/search", authMiddleware());
-app.use("/targets/*", authMiddleware());
-app.use("/ingestion/*", authMiddleware());
+app.use("/search/ofac", authMiddleware());
+app.use("/search/unsc", authMiddleware());
+app.use("/search/sat69b", authMiddleware());
+app.use("/queries", authMiddleware());
+app.use("/queries/:queryId", authMiddleware());
+
+// Admin routes require authentication + admin role
+// All admin-facing endpoints are served under /admin with admin JWT validation
+app.use("/admin/*", authMiddleware());
+app.use("/admin/*", adminMiddleware());
+app.use("/api/upload/*", authMiddleware());
+app.use("/api/upload/*", adminMiddleware());
 
 // Register watchlist endpoints
 openapi.get("/healthz", HealthEndpoint);
+openapi.get("/config", ConfigEndpoint);
 openapi.post("/search", SearchEndpoint);
-openapi.post("/pep/search", PepSearchEndpoint);
-openapi.get("/targets/:id", TargetReadEndpoint);
-openapi.get("/ingestion/runs", IngestionRunsListEndpoint);
-openapi.get("/ingestion/runs/:runId", IngestionRunReadEndpoint);
-openapi.post("/admin/ingest", AdminIngestEndpoint);
-openapi.post("/admin/reindex", AdminReindexEndpoint);
+openapi.post("/search/ofac", SearchOfacEndpoint);
+openapi.post("/search/unsc", SearchUnscEndpoint);
+openapi.post("/search/sat69b", SearchSat69bEndpoint);
+
+// Query management endpoints (authenticated)
+openapi.get("/queries", QueryListEndpoint);
+openapi.get("/queries/:queryId", QueryReadEndpoint);
+
+// Ingestion endpoints under /admin (require admin JWT)
+openapi.get("/admin/ingestion/runs", IngestionRunsListEndpoint);
+openapi.get("/admin/ingestion/runs/:runId", IngestionRunReadEndpoint);
+openapi.get("/admin/ingestion/runs/:runId/progress", IngestionProgressEndpoint);
+openapi.post("/admin/ingestion/start", IngestionStartEndpoint);
+openapi.post("/admin/ingestion/:runId/complete", IngestionCompleteEndpoint);
+openapi.post("/admin/ingestion/:runId/failed", IngestionFailedEndpoint);
+
+// Admin management endpoints
+openapi.post("/admin/vectorize/reindex", AdminVectorizeReindexEndpoint);
+
+// Mount upload routes (for file uploads to R2)
+app.route("/api/upload", uploadRoutes);
+
+// Internal endpoints for container callbacks (no auth - secured via service binding)
+openapi.post("/internal/ofac/truncate", InternalOfacTruncateEndpoint);
+openapi.post("/internal/ofac/batch", InternalOfacBatchEndpoint);
+openapi.post("/internal/ofac/complete", InternalOfacCompleteEndpoint);
+openapi.post("/internal/ofac/failed", InternalOfacFailedEndpoint);
+
+// Internal SAT 69-B endpoints for container callbacks
+openapi.post("/internal/sat69b/truncate", InternalSat69bTruncateEndpoint);
+openapi.post("/internal/sat69b/batch", InternalSat69bBatchEndpoint);
+openapi.post("/internal/sat69b/complete", InternalSat69bCompleteEndpoint);
+openapi.post("/internal/sat69b/failed", InternalSat69bFailedEndpoint);
+
+// Internal UNSC endpoints for container callbacks
+openapi.post("/internal/unsc/truncate", InternalUnscTruncateEndpoint);
+openapi.post("/internal/unsc/batch", InternalUnscBatchEndpoint);
+openapi.post("/internal/unsc/complete", InternalUnscCompleteEndpoint);
+openapi.post("/internal/unsc/failed", InternalUnscFailedEndpoint);
+
+// Internal search endpoint for aml-svc (no auth, secured via service binding)
+openapi.post("/internal/search", InternalSearchEndpoint);
+
+// Internal PEP endpoints for container callbacks
+openapi.post("/internal/pep/results", InternalPepResultsEndpoint);
+openapi.post("/internal/pep/failed", InternalPepFailedEndpoint);
+
+// Internal Grok PEP endpoints for AI-powered PEP search
+openapi.post("/internal/grok-pep/results", InternalGrokPepResultsEndpoint);
+openapi.post("/internal/grok-pep/failed", InternalGrokPepFailedEndpoint);
+
+// Internal Adverse Media endpoints for AI-powered adverse media search
+openapi.post(
+	"/internal/adverse-media/results",
+	InternalAdverseMediaResultsEndpoint,
+);
+openapi.post(
+	"/internal/adverse-media/failed",
+	InternalAdverseMediaFailedEndpoint,
+);
+
+// Events SSE endpoint for all async search results (public, authenticated via query param or JWT)
+app.route("/events", eventsRouter);
+
+// Internal vectorize endpoints for indexing
+openapi.get("/internal/vectorize/count", InternalVectorizeCountEndpoint);
+openapi.post(
+	"/internal/vectorize/delete-by-dataset",
+	InternalVectorizeDeleteByDatasetEndpoint,
+);
+openapi.post(
+	"/internal/vectorize/index-batch",
+	InternalVectorizeIndexBatchEndpoint,
+);
+openapi.post("/internal/vectorize/complete", InternalVectorizeCompleteEndpoint);
+
+// Internal vectorize debug endpoints
+openapi.post("/internal/vectorize/search", InternalVectorizeSearchEndpoint);
+openapi.post(
+	"/internal/vectorize/search-hydrated",
+	InternalVectorizeSearchHydratedEndpoint,
+);
 
 // Sentry is enabled only when SENTRY_DSN environment variable is set.
 // Configure it via wrangler secrets: `wrangler secret put SENTRY_DSN`
