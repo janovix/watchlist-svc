@@ -66,6 +66,10 @@
 			"binding": "THREAD_SVC",
 			"service": "thread-svc-prod",
 		},
+		{
+			"binding": "AML_SERVICE",
+			"service": "aml-svc-prod",
+		},
 	],
 	"vars": {
 		"ENVIRONMENT": "production",
