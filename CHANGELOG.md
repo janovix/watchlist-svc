@@ -1,3 +1,10 @@
+# [1.4.0-rc.31](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.30...v1.4.0-rc.31) (2026-02-27)
+
+
+### Bug Fixes
+
+* **callback-utils:** update production callback URL to use the correct service endpoint ([9ce0c15](https://github.com/janovix/watchlist-svc/commit/9ce0c15ebe0013ab95c9e9900edb22ef33ef066a))
+
 # [1.4.0-rc.30](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.29...v1.4.0-rc.30) (2026-02-25)
 
 
