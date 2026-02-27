@@ -5,7 +5,29 @@
 
 * **config:** add AML_SERVICE binding for production environment ([7e5bc8c](https://github.com/janovix/watchlist-svc/commit/7e5bc8c2ad090c110dd006db54f6fe9d6ee8ba12))
 
+
 # [1.4.0](https://github.com/janovix/watchlist-svc/compare/v1.3.0...v1.4.0) (2026-02-25)
+
+
+### Bug Fixes
+
+* **internalUnsc:** enhance error handling for sub-batch inserts by implementing fallback to individual record upserts ([a0901cb](https://github.com/janovix/watchlist-svc/commit/a0901cb2e117f90052e8ebd012d4b94ff05f547a))
+* **queryRead:** update parameter name from 'id' to 'queryId' in QueryReadEndpoint for consistency ([ce47d8d](https://github.com/janovix/watchlist-svc/commit/ce47d8df8d110c4e50ba437b433a8e049a5fb50f))
+* **search:** update default threshold value to 0.85 across multiple search endpoints ([7bdcd62](https://github.com/janovix/watchlist-svc/commit/7bdcd6206d0acea4630c8c3ba52c70e7dc348480))
+* **search:** update default values for topK and threshold across multiple search endpoints ([098de2c](https://github.com/janovix/watchlist-svc/commit/098de2cf27cf9124a59d25d64564015f30f3f5ce))
+* **search:** use waitUntil for thread creation to prevent cancellation ([94d9aaa](https://github.com/janovix/watchlist-svc/commit/94d9aaab240aa198d2889e5e86d578d11834a5b6))
+* update thread service binding in wrangler configuration ([ca6844a](https://github.com/janovix/watchlist-svc/commit/ca6844aeb36db21ec670490aa068b28fcad7f789))
+
+
+# [1.4.0-rc.31](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.30...v1.4.0-rc.31) (2026-02-27)
+
+
+### Bug Fixes
+
+* **callback-utils:** update production callback URL to use the correct service endpoint ([9ce0c15](https://github.com/janovix/watchlist-svc/commit/9ce0c15ebe0013ab95c9e9900edb22ef33ef066a))
+
+
+# [1.4.0-rc.30](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.29...v1.4.0-rc.30) (2026-02-25)
 
 
 ### Bug Fixes
@@ -20,6 +42,8 @@
 
 ### Features
 
+
+* **config:** add AML_SERVICE binding for production environment ([7e5bc8c](https://github.com/janovix/watchlist-svc/commit/7e5bc8c2ad090c110dd006db54f6fe9d6ee8ba12))
 * add internal vectorization endpoints and update ingestion logic ([23b4acd](https://github.com/janovix/watchlist-svc/commit/23b4acdc901e62f2080fe5324aa77f250b407431))
 * **auth:** add auth-settings module for user settings integration ([4b1b167](https://github.com/janovix/watchlist-svc/commit/4b1b1672eff8408ea8d7218e93c6cc696a64f1c7))
 * **auth:** replace ADMIN_API_KEY with JWT-based authentication for admin endpoints ([2c290a1](https://github.com/janovix/watchlist-svc/commit/2c290a19a4c35eb1e4945775a358fa09f2bb40c3))
@@ -46,6 +70,7 @@
 * **usage-rights:** implement usage rights client and integrate into watchlist endpoints ([52fabcd](https://github.com/janovix/watchlist-svc/commit/52fabcd41e158a5a0b628236d3fb1d1f1bf13e6c))
 * **watchlist:** implement watchlist identifier table and hybrid search logic ([390274f](https://github.com/janovix/watchlist-svc/commit/390274f93dfad6bb6805c812152a3632960a2dad))
 * **watchlist:** update API summaries for search endpoints and add error response schemas ([af00806](https://github.com/janovix/watchlist-svc/commit/af00806cc75b0fbaec4430f51749e838aa4dc958))
+
 
 # [1.4.0-rc.29](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.28...v1.4.0-rc.29) (2026-02-24)
 
