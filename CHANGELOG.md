@@ -1,3 +1,24 @@
+# [1.5.0](https://github.com/janovix/watchlist-svc/compare/v1.4.0...v1.5.0) (2026-02-25)
+
+
+### Features
+
+* **config:** add AML_SERVICE binding for production environment ([7e5bc8c](https://github.com/janovix/watchlist-svc/commit/7e5bc8c2ad090c110dd006db54f6fe9d6ee8ba12))
+
+
+# [1.4.0](https://github.com/janovix/watchlist-svc/compare/v1.3.0...v1.4.0) (2026-02-25)
+
+
+### Bug Fixes
+
+* **internalUnsc:** enhance error handling for sub-batch inserts by implementing fallback to individual record upserts ([a0901cb](https://github.com/janovix/watchlist-svc/commit/a0901cb2e117f90052e8ebd012d4b94ff05f547a))
+* **queryRead:** update parameter name from 'id' to 'queryId' in QueryReadEndpoint for consistency ([ce47d8d](https://github.com/janovix/watchlist-svc/commit/ce47d8df8d110c4e50ba437b433a8e049a5fb50f))
+* **search:** update default threshold value to 0.85 across multiple search endpoints ([7bdcd62](https://github.com/janovix/watchlist-svc/commit/7bdcd6206d0acea4630c8c3ba52c70e7dc348480))
+* **search:** update default values for topK and threshold across multiple search endpoints ([098de2c](https://github.com/janovix/watchlist-svc/commit/098de2cf27cf9124a59d25d64564015f30f3f5ce))
+* **search:** use waitUntil for thread creation to prevent cancellation ([94d9aaa](https://github.com/janovix/watchlist-svc/commit/94d9aaab240aa198d2889e5e86d578d11834a5b6))
+* update thread service binding in wrangler configuration ([ca6844a](https://github.com/janovix/watchlist-svc/commit/ca6844aeb36db21ec670490aa068b28fcad7f789))
+
+
 # [1.4.0-rc.31](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.30...v1.4.0-rc.31) (2026-02-27)
 
 
@@ -5,12 +26,51 @@
 
 * **callback-utils:** update production callback URL to use the correct service endpoint ([9ce0c15](https://github.com/janovix/watchlist-svc/commit/9ce0c15ebe0013ab95c9e9900edb22ef33ef066a))
 
+
 # [1.4.0-rc.30](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.29...v1.4.0-rc.30) (2026-02-25)
+
+
+### Bug Fixes
+
+* **internalUnsc:** enhance error handling for sub-batch inserts by implementing fallback to individual record upserts ([a0901cb](https://github.com/janovix/watchlist-svc/commit/a0901cb2e117f90052e8ebd012d4b94ff05f547a))
+* **queryRead:** update parameter name from 'id' to 'queryId' in QueryReadEndpoint for consistency ([ce47d8d](https://github.com/janovix/watchlist-svc/commit/ce47d8df8d110c4e50ba437b433a8e049a5fb50f))
+* **search:** update default threshold value to 0.85 across multiple search endpoints ([7bdcd62](https://github.com/janovix/watchlist-svc/commit/7bdcd6206d0acea4630c8c3ba52c70e7dc348480))
+* **search:** update default values for topK and threshold across multiple search endpoints ([098de2c](https://github.com/janovix/watchlist-svc/commit/098de2cf27cf9124a59d25d64564015f30f3f5ce))
+* **search:** use waitUntil for thread creation to prevent cancellation ([94d9aaa](https://github.com/janovix/watchlist-svc/commit/94d9aaab240aa198d2889e5e86d578d11834a5b6))
+* update thread service binding in wrangler configuration ([ca6844a](https://github.com/janovix/watchlist-svc/commit/ca6844aeb36db21ec670490aa068b28fcad7f789))
 
 
 ### Features
 
+
 * **config:** add AML_SERVICE binding for production environment ([7e5bc8c](https://github.com/janovix/watchlist-svc/commit/7e5bc8c2ad090c110dd006db54f6fe9d6ee8ba12))
+* add internal vectorization endpoints and update ingestion logic ([23b4acd](https://github.com/janovix/watchlist-svc/commit/23b4acdc901e62f2080fe5324aa77f250b407431))
+* **auth:** add auth-settings module for user settings integration ([4b1b167](https://github.com/janovix/watchlist-svc/commit/4b1b1672eff8408ea8d7218e93c6cc696a64f1c7))
+* **auth:** replace ADMIN_API_KEY with JWT-based authentication for admin endpoints ([2c290a1](https://github.com/janovix/watchlist-svc/commit/2c290a19a4c35eb1e4945775a358fa09f2bb40c3))
+* **caddy:** add Caddyfile for local development and update package.json scripts ([a8208e6](https://github.com/janovix/watchlist-svc/commit/a8208e62e44ac7cacc414c2ad674013cb51c6031))
+* **config:** add feature flags for PEP search, Grok search, and Adverse Media in environment configuration ([f822ad9](https://github.com/janovix/watchlist-svc/commit/f822ad982e3a3390278f8bbc3a0324350dde86c9))
+* **cors:** implement TRUSTED_ORIGINS for CORS configuration and update related environment variables ([bf55001](https://github.com/janovix/watchlist-svc/commit/bf55001d0af7ca0a0bbf605b4cae8fc0789057b3))
+* **ingestion:** add progress tracking fields and endpoint for real-time ingestion status ([d95b2f0](https://github.com/janovix/watchlist-svc/commit/d95b2f087b11a2c18911007b41d2207924e89484))
+* **ingestion:** add vectorization thread tracking to ingestion progress and update calculations ([7b93fca](https://github.com/janovix/watchlist-svc/commit/7b93fca55ada01bc03fd62ef0ad12b908930e018))
+* **ingestion:** implement SDN XML ingestion endpoints and R2 presigned URL handling ([7be9a9f](https://github.com/janovix/watchlist-svc/commit/7be9a9f9bc6d314bb7656acf37f17ffaa6de5c95))
+* **migrations:** add migration to drop legacy watchlist tables and update search endpoints ([abd8666](https://github.com/janovix/watchlist-svc/commit/abd86666d193f1770b908495ce454c4239154724))
+* **peps:** add Mexican PEP position dictionaries and enhance search endpoint with entity type and query ID tracking ([2a781c8](https://github.com/janovix/watchlist-svc/commit/2a781c8731782a951ccb55e2a7d555e9fdbc849b))
+* **peps:** add PEP_CACHE binding and enable durable objects in wrangler configuration ([cd48340](https://github.com/janovix/watchlist-svc/commit/cd48340996a8915598cafc609f92527bdae99ed1))
+* **peps:** implement PEP search results handling with SSE support and caching ([f2884e5](https://github.com/janovix/watchlist-svc/commit/f2884e5ed25d5050ba3933ae364f82bdc39d478e))
+* **query:** add userId and source fields to query results in QueryListEndpoint ([9a9adb9](https://github.com/janovix/watchlist-svc/commit/9a9adb9a7ee1944389d7bff9603bc94ffd55cf85))
+* **r2-presigned:** add generatePresignedDownloadUrl function and integrate into ingestion endpoints ([94fb94a](https://github.com/janovix/watchlist-svc/commit/94fb94a9feff85c48cdd5d9f436638dd10f25dda))
+* **sat69b:** add SAT 69-B entry table and related ingestion, search, and vectorization functionality ([daf8966](https://github.com/janovix/watchlist-svc/commit/daf89667ac66a07f9ab66e1b47f7e52b1d87a76c))
+* **search-query:** add search_query table and related endpoints for query audit trail ([ef2df9a](https://github.com/janovix/watchlist-svc/commit/ef2df9a00ee75c815085e6532408215ee13b391a))
+* **search:** implement internal search endpoint for automated AML screening and add source column to search_query table ([bd38c58](https://github.com/janovix/watchlist-svc/commit/bd38c583291d108ba90aee73fa280dc3d778cdb2))
+* **search:** integrate feature flags for PEP search and Adverse Media in performSearch function ([fe70e62](https://github.com/janovix/watchlist-svc/commit/fe70e627a3c4e7708d0ca9ab7a62c68b9d0acab6))
+* **search:** update dataset options and enhance name scoring algorithm in matching utilities ([970713b](https://github.com/janovix/watchlist-svc/commit/970713bbe0c65d8aad55ced0a057c5588c4c634d))
+* **subscription:** add subscription client and middleware for usage and feature checks ([d51a611](https://github.com/janovix/watchlist-svc/commit/d51a6113a2643748819031661af48bb12f986293))
+* test add ingestion progress API tests and allow requests without origin header ([1e62138](https://github.com/janovix/watchlist-svc/commit/1e62138dc0ef6ab7530cd7ee316fce50f3d53707))
+* **unsc:** implement UNSC entry table, ingestion endpoints, and vectorization support ([462a1f5](https://github.com/janovix/watchlist-svc/commit/462a1f56ea581a1f8bb8bc2c36498e1677a9fcf0))
+* **usage-rights:** implement usage rights client and integrate into watchlist endpoints ([52fabcd](https://github.com/janovix/watchlist-svc/commit/52fabcd41e158a5a0b628236d3fb1d1f1bf13e6c))
+* **watchlist:** implement watchlist identifier table and hybrid search logic ([390274f](https://github.com/janovix/watchlist-svc/commit/390274f93dfad6bb6805c812152a3632960a2dad))
+* **watchlist:** update API summaries for search endpoints and add error response schemas ([af00806](https://github.com/janovix/watchlist-svc/commit/af00806cc75b0fbaec4430f51749e838aa4dc958))
+
 
 # [1.4.0-rc.29](https://github.com/janovix/watchlist-svc/compare/v1.4.0-rc.28...v1.4.0-rc.29) (2026-02-24)
 
