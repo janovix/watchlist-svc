@@ -1,6 +1,6 @@
 {
 	"name": "watchlist-svc",
-	"version": "1.5.0",
+	"version": "1.5.1-rc.1",
 	"description": "Watchlist ingestion + search service using Hono + Chanfana + D1 + Vectorize.",
 	"packageManager": "pnpm@10.0.0",
 	"cloudflare": {
