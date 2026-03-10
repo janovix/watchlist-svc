@@ -196,33 +196,16 @@ export class InternalPepResultsEndpoint extends OpenAPIRoute {
 			// Check if all searches are done and update overall status
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
-			// If this is an AML-screening query, callback to aml-svc
+			// If this is an AML-screening query, callback to aml-svc via RPC
 			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
 				try {
-					const response = await c.env.AML_SERVICE.fetch(
-						"http://aml-svc/internal/screening-callback",
-						{
-							method: "PATCH",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify({
-								queryId: search_id,
-								type: "pep_official",
-								status: "completed",
-								matched: results_sent > 0,
-							}),
-						},
-					);
-
-					if (response.ok) {
-						console.log(
-							`[InternalPep] AML callback sent for query ${search_id}`,
-						);
-					} else {
-						const errorText = await response.text();
-						console.error(
-							`[InternalPep] AML callback failed: ${response.status} ${errorText}`,
-						);
-					}
+					await c.env.AML_SERVICE.processScreeningCallback({
+						queryId: search_id,
+						type: "pep_official",
+						status: "completed",
+						matched: results_sent > 0,
+					});
+					console.log(`[InternalPep] AML callback sent for query ${search_id}`);
 				} catch (callbackError) {
 					console.error(
 						`[InternalPep] Failed to send AML callback:`,

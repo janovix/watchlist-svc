@@ -113,33 +113,18 @@ export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 			// Check if all search types completed
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
-			// If this is an AML-screening query, callback to aml-svc
+			// If this is an AML-screening query, callback to aml-svc via RPC
 			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
 				try {
-					const response = await c.env.AML_SERVICE.fetch(
-						"http://aml-svc/internal/screening-callback",
-						{
-							method: "PATCH",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify({
-								queryId: search_id,
-								type: "pep_ai",
-								status: "completed",
-								matched: probability >= 0.7,
-							}),
-						},
+					await c.env.AML_SERVICE.processScreeningCallback({
+						queryId: search_id,
+						type: "pep_ai",
+						status: "completed",
+						matched: probability >= 0.7,
+					});
+					console.log(
+						`[InternalGrokPep] AML callback sent for query ${search_id}`,
 					);
-
-					if (response.ok) {
-						console.log(
-							`[InternalGrokPep] AML callback sent for query ${search_id}`,
-						);
-					} else {
-						const errorText = await response.text();
-						console.error(
-							`[InternalGrokPep] AML callback failed: ${response.status} ${errorText}`,
-						);
-					}
 				} catch (callbackError) {
 					console.error(
 						`[InternalGrokPep] Failed to send AML callback:`,
@@ -271,33 +256,18 @@ export class InternalGrokPepFailedEndpoint extends OpenAPIRoute {
 			// Check if all search types completed
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
-			// If this is an AML-screening query, callback to aml-svc
+			// If this is an AML-screening query, callback to aml-svc via RPC
 			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
 				try {
-					const response = await c.env.AML_SERVICE.fetch(
-						"http://aml-svc/internal/screening-callback",
-						{
-							method: "PATCH",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify({
-								queryId: search_id,
-								type: "pep_ai",
-								status: "failed",
-								matched: false,
-							}),
-						},
+					await c.env.AML_SERVICE.processScreeningCallback({
+						queryId: search_id,
+						type: "pep_ai",
+						status: "failed",
+						matched: false,
+					});
+					console.log(
+						`[InternalGrokPep] AML callback sent for failed query ${search_id}`,
 					);
-
-					if (response.ok) {
-						console.log(
-							`[InternalGrokPep] AML callback sent for failed query ${search_id}`,
-						);
-					} else {
-						const errorText = await response.text();
-						console.error(
-							`[InternalGrokPep] AML callback failed: ${response.status} ${errorText}`,
-						);
-					}
 				} catch (callbackError) {
 					console.error(
 						`[InternalGrokPep] Failed to send AML callback:`,

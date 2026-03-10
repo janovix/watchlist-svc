@@ -71,6 +71,9 @@ import { AdminVectorizeReindexEndpoint } from "./endpoints/watchlist/adminVector
 // Export Durable Objects
 export { PepEventsDO } from "./durable-objects/pep-events";
 
+// Export RPC entrypoint for service binding callers
+export { WatchlistEntrypoint } from "./entrypoint";
+
 /**
  * Extended environment bindings with Sentry support.
  */
@@ -119,13 +122,46 @@ export type Bindings = Env & {
 	 */
 	R2_BUCKET_NAME?: string;
 	/**
-	 * Thread service binding for creating and tracking threads.
+	 * Thread service binding via `ThreadSvcEntrypoint`.
+	 * Caller wrangler config must include `"entrypoint": "ThreadSvcEntrypoint"`.
 	 */
-	THREAD_SVC?: Fetcher;
+	THREAD_SVC?: {
+		fetch(request: Request | string, init?: RequestInit): Promise<Response>;
+		createThread(data: {
+			task_type: string;
+			job_params?: unknown;
+			metadata?: unknown;
+		}): Promise<{ id: string; status: string; [key: string]: unknown }>;
+		getThread(
+			id: string,
+		): Promise<{ id: string; status: string; [key: string]: unknown } | null>;
+		cancelThread(
+			id: string,
+		): Promise<{ id: string; status: string; [key: string]: unknown } | null>;
+		updateThreadStatus(
+			id: string,
+			status: string,
+			data?: unknown,
+		): Promise<{ id: string; status: string; [key: string]: unknown } | null>;
+		updateThreadProgress(
+			id: string,
+			progress: number,
+			phase?: string,
+		): Promise<{ id: string; status: string; [key: string]: unknown } | null>;
+	};
 	/**
-	 * AML service binding for screening result callbacks.
+	 * AML service binding via `AmlSvcEntrypoint`.
+	 * Caller wrangler config must include `"entrypoint": "AmlSvcEntrypoint"`.
 	 */
-	AML_SERVICE?: Fetcher;
+	AML_SERVICE?: {
+		fetch(request: Request | string, init?: RequestInit): Promise<Response>;
+		processScreeningCallback(data: {
+			queryId: string;
+			type: string;
+			status: string;
+			matched: boolean;
+		}): Promise<void>;
+	};
 	/**
 	 * PEP cache KV namespace for temporary 24h result caching.
 	 */

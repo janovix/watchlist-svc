@@ -866,21 +866,11 @@ export async function performSearch(
 
 				// Fire-and-forget: use waitUntil to prevent cancellation
 				executionCtx.waitUntil(
-					env.THREAD_SVC.fetch("http://thread-svc/threads", {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify(threadPayload),
-					})
-						.then((response) => {
-							if (response.ok) {
-								console.log(
-									`[SearchCore] PEP search thread created for query "${query}"`,
-								);
-							} else {
-								console.error(
-									`[SearchCore] Failed to create PEP thread: ${response.status}`,
-								);
-							}
+					env.THREAD_SVC.createThread(threadPayload)
+						.then((thread) => {
+							console.log(
+								`[SearchCore] PEP search thread created for query "${query}": ${thread.id}`,
+							);
 						})
 						.catch((error) => {
 							console.error(`[SearchCore] Error creating PEP thread:`, error);
@@ -943,21 +933,11 @@ export async function performSearch(
 			};
 
 			executionCtx.waitUntil(
-				env.THREAD_SVC.fetch("http://thread-svc/threads", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(threadPayload),
-				})
-					.then((response) => {
-						if (response.ok) {
-							console.log(
-								`[SearchCore] Grok PEP AI search thread created for query "${query}"`,
-							);
-						} else {
-							console.error(
-								`[SearchCore] Failed to create Grok PEP thread: ${response.status}`,
-							);
-						}
+				env.THREAD_SVC.createThread(threadPayload)
+					.then((thread) => {
+						console.log(
+							`[SearchCore] Grok PEP AI search thread created for query "${query}": ${thread.id}`,
+						);
 					})
 					.catch((error) => {
 						console.error(
@@ -1032,21 +1012,11 @@ export async function performSearch(
 			};
 
 			executionCtx.waitUntil(
-				env.THREAD_SVC.fetch("http://thread-svc/threads", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(threadPayload),
-				})
-					.then((response) => {
-						if (response.ok) {
-							console.log(
-								`[SearchCore] Adverse media Grok search thread created for query "${query}"`,
-							);
-						} else {
-							console.error(
-								`[SearchCore] Failed to create adverse media thread: ${response.status}`,
-							);
-						}
+				env.THREAD_SVC.createThread(threadPayload)
+					.then((thread) => {
+						console.log(
+							`[SearchCore] Adverse media Grok search thread created for query "${query}": ${thread.id}`,
+						);
 					})
 					.catch((error) => {
 						console.error(

@@ -40,11 +40,20 @@ export interface GateResult {
 }
 
 /**
+ * Minimal fetch interface for auth-svc service binding
+ */
+interface AuthSvcFetcher {
+	fetch(request: Request | string, init?: RequestInit): Promise<Response>;
+}
+
+/**
  * Environment bindings needed for usage rights
  */
 interface UsageRightsEnv {
-	AUTH_SERVICE?: Fetcher;
+	AUTH_SERVICE?: AuthSvcFetcher;
 }
+
+const AUTH_SVC_BASE = "http://auth-service";
 
 /**
  * Usage Rights client for auth-svc communication
@@ -73,27 +82,18 @@ export class UsageRightsClient {
 
 		try {
 			const response = await authService.fetch(
-				new Request("https://auth-svc.internal/internal/usage-rights/gate", {
+				new Request(`${AUTH_SVC_BASE}/internal/usage-rights/gate`, {
 					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Accept: "application/json",
-					},
-					body: JSON.stringify({
-						organizationId: orgId,
-						metric,
-						count,
-					}),
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ organizationId: orgId, metric, count }),
 				}),
 			);
 
-			const { allowed: _, ...data } = (await response.json()) as GateResult;
-
+			const data = (await response.json()) as GateResult;
 			if (response.status === 403) {
 				return { ...data, allowed: false };
 			}
-
-			return { ...data, allowed: true };
+			return data;
 		} catch (error) {
 			console.error("[UsageRights] Error calling gate:", error);
 			return { allowed: true }; // Fail-open
@@ -114,14 +114,10 @@ export class UsageRightsClient {
 
 		try {
 			await authService.fetch(
-				new Request("https://auth-svc.internal/internal/usage-rights/meter", {
+				new Request(`${AUTH_SVC_BASE}/internal/usage-rights/meter`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						organizationId: orgId,
-						metric,
-						count,
-					}),
+					body: JSON.stringify({ organizationId: orgId, metric, count }),
 				}),
 			);
 		} catch (error) {
@@ -137,20 +133,17 @@ export class UsageRightsClient {
 		if (!authService) return null;
 
 		try {
-			const response = await authService.fetch(
-				new Request(
-					`https://auth-svc.internal/internal/usage-rights/check?organizationId=${orgId}&metric=${metric}`,
-					{ headers: { Accept: "application/json" } },
-				),
-			);
+			const url = new URL(`${AUTH_SVC_BASE}/internal/usage-rights/check`);
+			url.searchParams.set("organizationId", orgId);
+			url.searchParams.set("metric", metric);
 
-			const { allowed: _, ...data } = (await response.json()) as GateResult;
+			const response = await authService.fetch(new Request(url.toString()));
+			const data = (await response.json()) as GateResult;
 
 			if (response.status === 403) {
 				return { ...data, allowed: false };
 			}
-
-			return { ...data, allowed: true };
+			return data;
 		} catch (error) {
 			console.error("[UsageRights] Error calling check:", error);
 			return null;
