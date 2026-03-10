@@ -150,6 +150,41 @@ export type Bindings = Env & {
 		): Promise<{ id: string; status: string; [key: string]: unknown } | null>;
 	};
 	/**
+	 * Auth service binding via `AuthSvcEntrypoint`.
+	 * Caller wrangler config must include `"entrypoint": "AuthSvcEntrypoint"`.
+	 */
+	AUTH_SERVICE?: {
+		fetch(request: Request | string, init?: RequestInit): Promise<Response>;
+		getJwks(): Promise<{ keys: unknown[] }>;
+		getResolvedSettings(
+			userId: string,
+			orgId?: string,
+			headers?: string,
+		): Promise<unknown>;
+		gateUsageRights(
+			orgId: string,
+			metric: string,
+			count?: number,
+		): Promise<{ allowed: boolean; [key: string]: unknown }>;
+		meterUsageRights(
+			orgId: string,
+			metric: string,
+			count?: number,
+		): Promise<void>;
+		checkUsageRights(
+			orgId: string,
+			metric: string,
+		): Promise<{ allowed: boolean; [key: string]: unknown }>;
+		getSubscriptionStatus(orgId: string): Promise<unknown>;
+		reportSubscriptionUsage(
+			orgId: string,
+			metric: string,
+			count: number,
+		): Promise<void>;
+		checkSubscriptionUsage(orgId: string, metric: string): Promise<unknown>;
+		checkSubscriptionFeature(orgId: string, feature: string): Promise<unknown>;
+	};
+	/**
 	 * AML service binding via `AmlSvcEntrypoint`.
 	 * Caller wrangler config must include `"entrypoint": "AmlSvcEntrypoint"`.
 	 */

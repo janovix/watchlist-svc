@@ -76,40 +76,26 @@ export class IngestionProgressEndpoint extends OpenAPIRoute {
 		// Si hay vectorización en progreso, consultar su progreso
 		if (run.vectorizeThreadId && c.env.THREAD_SVC) {
 			try {
-				const threadSvc = c.env.THREAD_SVC as unknown as {
-					fetch(request: Request | string): Promise<Response>;
-				};
-				const response = await threadSvc.fetch(
-					`http://thread-svc/api/threads/${run.vectorizeThreadId}`,
-				);
+				const thread = await c.env.THREAD_SVC.getThread(run.vectorizeThreadId);
 
-				if (response.ok) {
-					const thread = (await response.json()) as {
-						status: string;
-						progress?: number;
-						phase?: string;
-					} | null;
-
-					if (thread) {
-						// Si vectorización está en progreso, combinar porcentajes
-						if (thread.status === "RUNNING") {
-							const vectorizeProgress = thread.progress ?? 0; // 0-100
-							// Ingestion = 0-70%, Vectorize = 70-100%
-							finalPercentage = 70 + Math.round(vectorizeProgress * 0.3);
-							phase = thread.phase ?? "vectorizing";
-						} else if (thread.status === "COMPLETED") {
-							finalPercentage = 100;
-							phase = "completed";
-						} else if (thread.status === "FAILED") {
-							phase = "vectorize_failed";
-						}
+				if (thread) {
+					// Si vectorización está en progreso, combinar porcentajes
+					if (thread.status === "RUNNING") {
+						const vectorizeProgress =
+							typeof thread.progress === "number" ? thread.progress : 0;
+						// Ingestion = 0-70%, Vectorize = 70-100%
+						finalPercentage = 70 + Math.round(vectorizeProgress * 0.3);
+						phase =
+							typeof thread.phase === "string" ? thread.phase : "vectorizing";
+					} else if (thread.status === "COMPLETED") {
+						finalPercentage = 100;
+						phase = "completed";
+					} else if (thread.status === "FAILED") {
+						phase = "vectorize_failed";
 					}
 				}
 			} catch (e) {
-				console.error(
-					"[IngestionProgress] Failed to fetch vectorize thread:",
-					e,
-				);
+				console.error("[IngestionProgress] Failed to get vectorize thread:", e);
 			}
 		}
 
