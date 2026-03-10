@@ -1,3 +1,10 @@
+# [1.6.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.2...v1.6.0-rc.3) (2026-03-10)
+
+
+### Features
+
+* **auth-svc:** enhance AUTH_SERVICE binding with detailed RPC methods for subscription and usage rights management ([e689627](https://github.com/janovix/watchlist-svc/commit/e68962790487fcee83e2d4976d2f2bfa8af1d5c0))
+
 # [1.6.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.1...v1.6.0-rc.2) (2026-03-10)
 
 
