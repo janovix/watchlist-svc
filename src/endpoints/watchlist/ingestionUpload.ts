@@ -427,23 +427,7 @@ This will verify the file exists in R2 and queue the ingestion job for processin
 		};
 
 		try {
-			const threadResponse = await c.env.THREAD_SVC.fetch(
-				"http://thread-svc/threads",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(threadPayload),
-				},
-			);
-
-			if (!threadResponse.ok) {
-				const errorText = await threadResponse.text();
-				throw new Error(
-					`Thread service returned ${threadResponse.status}: ${errorText}`,
-				);
-			}
-
-			const threadData = (await threadResponse.json()) as { id: string };
+			const threadData = await c.env.THREAD_SVC.createThread(threadPayload);
 			console.log(
 				`[IngestionComplete] Created thread ${threadData.id} for runId: ${run.id}, r2Key: ${r2Key}`,
 			);

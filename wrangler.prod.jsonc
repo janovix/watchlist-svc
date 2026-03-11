@@ -61,10 +61,17 @@
 		{
 			"binding": "AUTH_SERVICE",
 			"service": "auth-svc-prod",
+			"entrypoint": "AuthSvcEntrypoint",
 		},
 		{
 			"binding": "THREAD_SVC",
 			"service": "thread-svc-prod",
+			"entrypoint": "ThreadSvcEntrypoint",
+		},
+		{
+			"binding": "AML_SERVICE",
+			"service": "aml-svc-prod",
+			"entrypoint": "AmlSvcEntrypoint",
 		},
 	],
 	"vars": {

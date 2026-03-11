@@ -40,11 +40,18 @@ export interface AuthUser {
 }
 
 /**
+ * Minimal RPC interface for auth-svc's AuthSvcEntrypoint.
+ */
+interface AuthSvcRpc {
+	getJwks(): Promise<{ keys: unknown[] }>;
+}
+
+/**
  * Extended environment bindings with auth context
  */
 export interface AuthEnv {
-	/** Service binding to auth-svc for direct worker-to-worker communication */
-	AUTH_SERVICE: Fetcher;
+	/** Service binding to auth-svc via `AuthSvcEntrypoint` */
+	AUTH_SERVICE: AuthSvcRpc;
 	AUTH_JWKS_CACHE_TTL?: string;
 }
 
@@ -58,46 +65,24 @@ let cachedJWKS: jose.JSONWebKeySet | null = null;
 let cachedJWKSExpiry: number = 0;
 
 /**
- * Fetches JWKS from auth-svc with in-memory caching
- * Uses service binding for direct worker-to-worker communication
+ * Fetches JWKS from auth-svc via RPC with in-memory caching.
  */
 async function getJWKS(
 	cacheTtl: number,
-	authServiceBinding: Fetcher,
+	authServiceBinding: AuthSvcRpc,
 ): Promise<jose.JSONWebKeySet> {
 	const now = Date.now();
 
-	// Check in-memory cache
 	if (cachedJWKS && cachedJWKSExpiry > now) {
 		return cachedJWKS;
 	}
 
-	// Construct JWKS URL with internal hostname
-	// When using service binding, the hostname doesn't affect routing but is used for Host header
-	const jwksUrl = "http://internal/api/auth/jwks";
+	const jwks = (await authServiceBinding.getJwks()) as jose.JSONWebKeySet;
 
-	// Use service binding for direct worker-to-worker communication
-	// The hostname in the URL is used for the Host header but routing is handled by the binding
-	const response = await authServiceBinding.fetch(
-		new Request(jwksUrl, {
-			headers: { Accept: "application/json" },
-		}),
-	);
-
-	if (!response.ok) {
-		throw new Error(
-			`Failed to fetch JWKS from service binding: ${response.status} ${response.statusText}`,
-		);
-	}
-
-	const jwks = (await response.json()) as jose.JSONWebKeySet;
-
-	// Validate JWKS structure
 	if (!jwks.keys || !Array.isArray(jwks.keys) || jwks.keys.length === 0) {
 		throw new Error("Invalid JWKS: no keys found");
 	}
 
-	// Update in-memory cache
 	cachedJWKS = jwks;
 	cachedJWKSExpiry = now + cacheTtl * 1000;
 
@@ -105,12 +90,12 @@ async function getJWKS(
 }
 
 /**
- * Verifies a JWT using JWKS from auth-svc
+ * Verifies a JWT using JWKS from auth-svc via RPC.
  */
 async function verifyToken(
 	token: string,
 	cacheTtl: number,
-	authServiceBinding: Fetcher,
+	authServiceBinding: AuthSvcRpc,
 ): Promise<AuthTokenPayload> {
 	const jwks = await getJWKS(cacheTtl, authServiceBinding);
 

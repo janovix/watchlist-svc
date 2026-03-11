@@ -198,7 +198,7 @@ describe("OFAC Vectorize Service", () => {
 
 		it("should return prod URL for production environment", () => {
 			expect(getCallbackUrl("production")).toBe(
-				"https://watchlist.janovix.com",
+				"https://watchlist-svc.janovix.com",
 			);
 		});
 

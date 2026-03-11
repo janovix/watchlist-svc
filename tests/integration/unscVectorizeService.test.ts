@@ -420,7 +420,7 @@ describe("UNSC Vectorize Service", () => {
 
 		it("should return production URL for production environment", () => {
 			const url = getCallbackUrl("production");
-			expect(url).toBe("https://watchlist.janovix.com");
+			expect(url).toBe("https://watchlist-svc.janovix.com");
 		});
 
 		it("should default to dev URL for unknown environment", () => {

@@ -15,7 +15,7 @@ export function getCallbackUrl(environment: string | undefined): string {
 		case "preview":
 			return "https://watchlist-svc.janovix.workers.dev";
 		case "production":
-			return "https://watchlist.janovix.com";
+			return "https://watchlist-svc.janovix.com";
 		default:
 			// Default to dev for unknown environments
 			return "https://watchlist-svc.janovix.workers.dev";
