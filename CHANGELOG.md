@@ -1,3 +1,10 @@
+# [1.6.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.3...v1.6.0-rc.4) (2026-03-11)
+
+
+### Features
+
+* **matching-utils:** enhance name scoring algorithm with discriminative token handling and generic term capping ([4e883cc](https://github.com/janovix/watchlist-svc/commit/4e883cc5d76d5cb770d19c648def1b53dc42bde6))
+
 # [1.6.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.2...v1.6.0-rc.3) (2026-03-10)
 
 
