@@ -184,6 +184,33 @@ describe("matching-utils", () => {
 			]);
 			expect(score).toBe(1.0); // Should match via token-sorted
 		});
+
+		it("should not over-match when only generic term overlaps (INMOBILIARIA)", () => {
+			// Query: INMOBILIARIA MORALES; target: different company with same generic prefix
+			const score = bestNameScore(
+				"INMOBILIARIA MORALES",
+				"INMOBILIARIA EL ESCORPION DEL NORTE S.A. DE C.V.",
+				null,
+			);
+			expect(score).toBeLessThan(0.7); // So hybrid score stays below default threshold
+		});
+
+		it("should still match same entity when discriminative token matches (INMOBILIARIA MORALES)", () => {
+			const score = bestNameScore(
+				"INMOBILIARIA MORALES",
+				"INMOBILIARIA MORALES SA DE CV",
+				null,
+			);
+			expect(score).toBeGreaterThan(0.85);
+		});
+
+		it("should not cap person names (no generic-term-only overlap)", () => {
+			const score1 = bestNameScore("Juan García", "Juan García López", null);
+			expect(score1).toBeGreaterThan(0.85);
+
+			const score2 = bestNameScore("José García", "José García", null);
+			expect(score2).toBe(1.0);
+		});
 	});
 
 	describe("computeMetaScore", () => {

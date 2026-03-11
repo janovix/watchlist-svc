@@ -3,6 +3,55 @@
  * Provides normalization, Jaro-Winkler similarity, and hybrid scoring
  */
 
+/** Minimum discriminative token-set score; below this we cap name score to reduce false positives from generic-term-only overlap. Set to 0.7 so capped scores stay below default search threshold. */
+const DISCRIMINATIVE_MIN = 0.7;
+
+/**
+ * Generic entity terms (Spanish/Mexican company name boilerplate).
+ * When name similarity is driven only by these tokens, we cap the score
+ * so that e.g. "INMOBILIARIA MORALES" does not match "INMOBILIARIA EL ESCORPION DEL NORTE".
+ */
+const ENTITY_GENERIC_TERMS = new Set<string>([
+	// Legal / structural
+	"SA",
+	"DE",
+	"CV",
+	"CO",
+	"SAPI",
+	"SAB",
+	"SC",
+	"SNC",
+	"SOFOM",
+	"ENR",
+	"SRL",
+	"INC",
+	"LLC",
+	"LTD",
+	"NA",
+	// Common business words
+	"INMOBILIARIA",
+	"SOCIEDAD",
+	"COMERCIAL",
+	"CASA",
+	"GRUPO",
+	"CORPORACION",
+	"CONSTRUCTORA",
+	"DISTRIBUIDORA",
+	"OPERADORA",
+	"ADMINISTRADORA",
+	"INVERSIONES",
+	"SERVICIOS",
+	"SOLUCIONES",
+	"Y",
+	"LA",
+	"LOS",
+	"LAS",
+	"EL",
+	"DEL",
+	"AL",
+	"A",
+]);
+
 /**
  * Normalize an identifier for exact matching
  * Converts to uppercase and strips all non-alphanumeric characters
@@ -154,11 +203,31 @@ function tokenSetScore(queryTokens: string[], targetTokens: string[]): number {
 }
 
 /**
+ * Token-set score using only discriminative query tokens (excludes ENTITY_GENERIC_TERMS).
+ * If the query has no discriminative tokens, falls back to full token-set score.
+ */
+function tokenSetScoreDiscriminative(
+	queryTokens: string[],
+	targetTokens: string[],
+	genericSet: Set<string>,
+): number {
+	const discriminativeQuery = queryTokens.filter((t) => !genericSet.has(t));
+	if (discriminativeQuery.length === 0) {
+		return tokenSetScore(queryTokens, targetTokens);
+	}
+	return tokenSetScore(discriminativeQuery, targetTokens);
+}
+
+/**
  * Find the best name score by comparing query against name and all aliases.
  * Uses three strategies and picks the maximum:
  *   1. Full-string Jaro-Winkler (good for exact/near-exact matches)
  *   2. Token-sorted Jaro-Winkler (handles name reordering)
  *   3. Token-set coverage (handles missing middle names and extra tokens)
+ *
+ * When the query has discriminative tokens (non-generic), the score is capped
+ * by the discriminative token-set score so that matches driven only by
+ * generic terms (e.g. INMOBILIARIA) do not exceed the threshold.
  *
  * @param query - Search query name
  * @param name - Primary name
@@ -176,16 +245,29 @@ export function bestNameScore(
 	const queryTokens = normalizedQuery.split(" ").filter((t) => t.length > 0);
 	const nameTokens = normalizedName.split(" ").filter((t) => t.length > 0);
 
+	const discriminativeQueryTokens = queryTokens.filter(
+		(t) => !ENTITY_GENERIC_TERMS.has(t),
+	);
+
 	// Strategy 1: Full-string Jaro-Winkler
 	let maxScore = jaroWinkler(normalizedQuery, normalizedName);
+	let bestTokens = nameTokens;
 
 	// Strategy 2: Token-sorted Jaro-Winkler (handles reordering)
 	const sortedQuery = [...queryTokens].sort().join(" ");
 	const sortedName = [...nameTokens].sort().join(" ");
-	maxScore = Math.max(maxScore, jaroWinkler(sortedQuery, sortedName));
+	const score2 = jaroWinkler(sortedQuery, sortedName);
+	if (score2 > maxScore) {
+		maxScore = score2;
+		bestTokens = nameTokens;
+	}
 
 	// Strategy 3: Token-set coverage (handles extra/missing tokens like middle names)
-	maxScore = Math.max(maxScore, tokenSetScore(queryTokens, nameTokens));
+	const score3 = tokenSetScore(queryTokens, nameTokens);
+	if (score3 > maxScore) {
+		maxScore = score3;
+		bestTokens = nameTokens;
+	}
 
 	if (aliases && aliases.length > 0) {
 		for (const alias of aliases) {
@@ -194,12 +276,29 @@ export function bestNameScore(
 				.split(" ")
 				.filter((t) => t.length > 0);
 
-			maxScore = Math.max(
-				maxScore,
-				jaroWinkler(normalizedQuery, normalizedAlias),
-				jaroWinkler(sortedQuery, [...aliasTokens].sort().join(" ")),
-				tokenSetScore(queryTokens, aliasTokens),
+			const aliasFull = jaroWinkler(normalizedQuery, normalizedAlias);
+			const aliasSorted = jaroWinkler(
+				sortedQuery,
+				[...aliasTokens].sort().join(" "),
 			);
+			const aliasSet = tokenSetScore(queryTokens, aliasTokens);
+			const aliasMax = Math.max(aliasFull, aliasSorted, aliasSet);
+			if (aliasMax > maxScore) {
+				maxScore = aliasMax;
+				bestTokens = aliasTokens;
+			}
+		}
+	}
+
+	// Cap by discriminative score when overlap is only from generic terms
+	if (discriminativeQueryTokens.length > 0) {
+		const discriminativeScore = tokenSetScoreDiscriminative(
+			queryTokens,
+			bestTokens,
+			ENTITY_GENERIC_TERMS,
+		);
+		if (discriminativeScore < DISCRIMINATIVE_MIN) {
+			return Math.min(maxScore, discriminativeScore);
 		}
 	}
 
