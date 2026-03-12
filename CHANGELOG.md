@@ -1,3 +1,10 @@
+# [1.6.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.4...v1.6.0-rc.5) (2026-03-12)
+
+
+### Features
+
+* **query-source:** introduce QUERY_SOURCE constants and normalizeAmlSource function for consistent source handling ([99712ed](https://github.com/janovix/watchlist-svc/commit/99712ed470b42f730ad0b3d7306dbc88cf445021))
+
 # [1.6.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.3...v1.6.0-rc.4) (2026-03-11)
 
 
