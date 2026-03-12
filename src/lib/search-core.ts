@@ -16,6 +16,7 @@ import {
 	bestNameScore,
 	computeMetaScore,
 	computeHybridScore,
+	passesMatchFilter,
 } from "./matching-utils";
 import { createHash } from "crypto";
 import type { Bindings } from "../index";
@@ -734,8 +735,8 @@ export async function performSearch(
 			);
 		}
 
-		// Filter by threshold
-		if (finalScore < threshold) continue;
+		// Filter by threshold (or name-score override for exact/near-exact name matches)
+		if (!passesMatchFilter(finalScore, nameScore, threshold)) continue;
 
 		const match = {
 			target: candidate.target,

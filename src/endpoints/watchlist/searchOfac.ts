@@ -9,6 +9,7 @@ import {
 	bestNameScore,
 	computeMetaScore,
 	computeHybridScore,
+	passesMatchFilter,
 } from "../../lib/matching-utils";
 
 // Identifier schema
@@ -313,7 +314,7 @@ export class SearchOfacEndpoint extends OpenAPIRoute {
 					metaScore,
 				);
 
-				if (hybridScore >= data.body.threshold) {
+				if (passesMatchFilter(hybridScore, nameScore, data.body.threshold)) {
 					matches.push({
 						target: candidate.target,
 						score: hybridScore,

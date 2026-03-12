@@ -368,3 +368,25 @@ export function computeHybridScore(
 ): number {
 	return 0.35 * vectorScore + 0.55 * nameScore + 0.1 * metaScore;
 }
+
+/** Minimum name score to allow "override" when hybrid is below threshold (exact/near-exact name matches). */
+const NAME_OVERRIDE_MIN_NAME = 0.9;
+/** Minimum hybrid score when using name override (avoid pure-name matches with no semantic support). */
+const NAME_OVERRIDE_MIN_HYBRID = 0.7;
+
+/**
+ * Returns true if a candidate should be shown as a match given the hybrid score, name score, and threshold.
+ * Show match if hybrid >= threshold OR (nameScore >= 0.9 AND hybrid >= 0.7) so exact/same-person matches
+ * still appear when semantic/metadata pull the hybrid score below threshold.
+ */
+export function passesMatchFilter(
+	hybridScore: number,
+	nameScore: number,
+	threshold: number,
+): boolean {
+	if (hybridScore >= threshold) return true;
+	return (
+		nameScore >= NAME_OVERRIDE_MIN_NAME &&
+		hybridScore >= NAME_OVERRIDE_MIN_HYBRID
+	);
+}
