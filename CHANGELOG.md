@@ -1,3 +1,10 @@
+# [1.6.0-rc.7](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.6...v1.6.0-rc.7) (2026-03-12)
+
+
+### Features
+
+* **cache:** update KV cache TTL from 24 hours to 72 hours and implement caching logic for PEP and adverse media searches ([366f871](https://github.com/janovix/watchlist-svc/commit/366f871c149417dea997ec3f4b72be22bb67a354))
+
 # [1.6.0-rc.6](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.5...v1.6.0-rc.6) (2026-03-12)
 
 
