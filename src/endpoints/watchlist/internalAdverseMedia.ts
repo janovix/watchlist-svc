@@ -112,6 +112,7 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 						findings,
 						sources,
 					}),
+					adverseMediaHasRisk: risk_level !== "none",
 				},
 			});
 

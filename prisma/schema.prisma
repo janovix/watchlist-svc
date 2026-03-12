@@ -180,7 +180,8 @@ model SearchQuery {
   // Adverse Media results (async via adverse_media_grok container)
   adverseMediaStatus   String   @default("pending") @map("adverse_media_status")
   adverseMediaResult   String?  @map("adverse_media_result") // JSON result
-  
+  adverseMediaHasRisk  Boolean  @default(false) @map("adverse_media_has_risk")
+
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
   

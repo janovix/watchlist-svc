@@ -70,6 +70,7 @@ export class QueryListEndpoint extends OpenAPIRoute {
 									pepOfficialCount: z.number(),
 									pepAiStatus: z.string(),
 									adverseMediaStatus: z.string(),
+									adverseMediaHasRisk: z.boolean(),
 									// Timestamps
 									createdAt: z.string(),
 									updatedAt: z.string(),
@@ -151,6 +152,7 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					pepOfficialCount: true,
 					pepAiStatus: true,
 					adverseMediaStatus: true,
+					adverseMediaHasRisk: true,
 					// Timestamps
 					createdAt: true,
 					updatedAt: true,
@@ -207,6 +209,7 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					pepOfficialCount: q.pepOfficialCount,
 					pepAiStatus: q.pepAiStatus,
 					adverseMediaStatus: q.adverseMediaStatus,
+					adverseMediaHasRisk: q.adverseMediaHasRisk,
 					createdAt: q.createdAt.toISOString(),
 					updatedAt: q.updatedAt.toISOString(),
 				})),

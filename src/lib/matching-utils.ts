@@ -3,7 +3,7 @@
  * Provides normalization, Jaro-Winkler similarity, and hybrid scoring
  */
 
-/** Minimum discriminative token-set score; below this we cap name score to reduce false positives from generic-term-only overlap. Set to 0.7 so capped scores stay below default search threshold. */
+/** Minimum discriminative token-set score; below this we cap name score to reduce false positives from generic-term-only overlap. Set to 0.7 so capped scores stay below default search threshold (0.875). */
 const DISCRIMINATIVE_MIN = 0.7;
 
 /**

@@ -96,7 +96,7 @@ export class WatchlistEntrypoint extends WorkerEntrypoint<Bindings> {
 			countries: input.countries,
 			identifiers: input.identifiers,
 			topK: input.topK ?? 50,
-			threshold: input.threshold ?? 0.7,
+			threshold: input.threshold ?? 0.875,
 		});
 
 		return {
