@@ -1,3 +1,10 @@
+# [1.6.0-rc.8](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.7...v1.6.0-rc.8) (2026-03-12)
+
+
+### Features
+
+* **matching-utils:** add passesMatchFilter function to enhance match filtering logic across search endpoints ([5e69683](https://github.com/janovix/watchlist-svc/commit/5e696839813a11f929d5ba2d34ff986b83db64f8))
+
 # [1.6.0-rc.7](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.6...v1.6.0-rc.7) (2026-03-12)
 
 
