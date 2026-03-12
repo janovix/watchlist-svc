@@ -192,6 +192,98 @@ export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 }
 
 // =============================================================================
+// Progress payload schema (shared shape for progress events)
+// =============================================================================
+
+const progressPayloadSchema = z.object({
+	search_id: z.string().describe("Search ID for tracking"),
+	phase: z
+		.string()
+		.optional()
+		.describe("Phase identifier e.g. searching, thinking"),
+	message: z.string().optional().describe("Human-readable progress message"),
+	progress: z.number().min(0).max(1).optional().describe("Progress 0-1"),
+});
+
+// =============================================================================
+// POST /internal/grok-pep/progress - Progress updates from container
+// =============================================================================
+
+/**
+ * POST /internal/grok-pep/progress
+ * Called by pep_grok container during execution to stream progress to SSE clients.
+ */
+export class InternalGrokPepProgressEndpoint extends OpenAPIRoute {
+	schema = {
+		tags: ["Internal"],
+		summary: "Grok PEP progress (internal)",
+		description:
+			"Called by pep_grok container to broadcast progress (e.g. Searching websites..., Thinking...).",
+		security: [],
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: progressPayloadSchema,
+					},
+				},
+			},
+		},
+		responses: {
+			"200": {
+				description: "Progress broadcast sent",
+				content: {
+					"application/json": {
+						schema: z.object({
+							success: z.boolean(),
+							sent: z.number().int(),
+						}),
+					},
+				},
+			},
+		},
+	};
+
+	async handle(c: { env: Bindings; req: Request }) {
+		const body = await c.req.json();
+		const { search_id, phase, message, progress } = body as z.infer<
+			typeof progressPayloadSchema
+		>;
+
+		if (!search_id) {
+			return Response.json(
+				{ success: false, error: "search_id required" },
+				{ status: 400 },
+			);
+		}
+
+		let sent = 0;
+		if (c.env.PEP_EVENTS_DO) {
+			try {
+				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
+				const stub = c.env.PEP_EVENTS_DO.get(id);
+				const response = await stub.fetch("http://pep-events/broadcast", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						event: "pep_grok_progress",
+						payload: { phase, message, progress },
+					}),
+				});
+				if (response.ok) {
+					const result = (await response.json()) as { sent: number };
+					sent = result.sent;
+				}
+			} catch (error) {
+				console.error(`[InternalGrokPep] Progress broadcast failed:`, error);
+			}
+		}
+
+		return Response.json({ success: true, sent });
+	}
+}
+
+// =============================================================================
 // POST /internal/grok-pep/failed - Mark search as failed
 // =============================================================================
 

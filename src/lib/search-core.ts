@@ -938,14 +938,16 @@ export async function performSearch(
 			}
 
 			if (!cachedPepAi) {
-				const callbackUrl =
-					getCallbackUrl(env.ENVIRONMENT) + "/internal/grok-pep";
+				const baseUrl = getCallbackUrl(env.ENVIRONMENT);
+				const callbackUrl = baseUrl + "/internal/grok-pep";
+				const progressCallbackUrl = baseUrl + "/internal/grok-pep/progress";
 
 				const threadPayload = {
 					task_type: "pep_grok",
 					job_params: {
 						query: query,
 						callback_url: callbackUrl,
+						progress_callback_url: progressCallbackUrl,
 						search_id: pepAiSearchId,
 						birthdate: birthDate,
 						country: countries?.[0],
@@ -1044,14 +1046,17 @@ export async function performSearch(
 			}
 
 			if (!cachedAdverseMedia) {
-				const callbackUrl =
-					getCallbackUrl(env.ENVIRONMENT) + "/internal/adverse-media";
+				const baseUrl = getCallbackUrl(env.ENVIRONMENT);
+				const callbackUrl = baseUrl + "/internal/adverse-media";
+				const progressCallbackUrl =
+					baseUrl + "/internal/adverse-media/progress";
 
 				const threadPayload = {
 					task_type: "adverse_media_grok",
 					job_params: {
 						query: query,
 						callback_url: callbackUrl,
+						progress_callback_url: progressCallbackUrl,
 						search_id: adverseMediaSearchId,
 						entity_type: entityType,
 						birthdate: birthDate,

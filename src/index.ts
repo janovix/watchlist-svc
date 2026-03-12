@@ -48,10 +48,12 @@ import {
 } from "./endpoints/watchlist/internalPep";
 import {
 	InternalAdverseMediaResultsEndpoint,
+	InternalAdverseMediaProgressEndpoint,
 	InternalAdverseMediaFailedEndpoint,
 } from "./endpoints/watchlist/internalAdverseMedia";
 import {
 	InternalGrokPepResultsEndpoint,
+	InternalGrokPepProgressEndpoint,
 	InternalGrokPepFailedEndpoint,
 } from "./endpoints/watchlist/internalGrokPep";
 import { InternalSearchEndpoint } from "./endpoints/watchlist/internalSearch";
@@ -361,12 +363,17 @@ openapi.post("/internal/pep/failed", InternalPepFailedEndpoint);
 
 // Internal Grok PEP endpoints for AI-powered PEP search
 openapi.post("/internal/grok-pep/results", InternalGrokPepResultsEndpoint);
+openapi.post("/internal/grok-pep/progress", InternalGrokPepProgressEndpoint);
 openapi.post("/internal/grok-pep/failed", InternalGrokPepFailedEndpoint);
 
 // Internal Adverse Media endpoints for AI-powered adverse media search
 openapi.post(
 	"/internal/adverse-media/results",
 	InternalAdverseMediaResultsEndpoint,
+);
+openapi.post(
+	"/internal/adverse-media/progress",
+	InternalAdverseMediaProgressEndpoint,
 );
 openapi.post(
 	"/internal/adverse-media/failed",
