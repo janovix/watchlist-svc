@@ -183,6 +183,16 @@ export type Bindings = Env & {
 		): Promise<void>;
 		checkSubscriptionUsage(orgId: string, metric: string): Promise<unknown>;
 		checkSubscriptionFeature(orgId: string, feature: string): Promise<unknown>;
+		getOrganizationMembers(orgId: string): Promise<
+			Array<{
+				id: string;
+				userId: string;
+				role: string;
+				email: string;
+				name: string;
+				image: string | null;
+			}>
+		>;
 	};
 	/**
 	 * AML service binding via `AmlSvcEntrypoint`.

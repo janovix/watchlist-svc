@@ -52,6 +52,13 @@ export class QueryListEndpoint extends OpenAPIRoute {
 									userId: z.string(),
 									source: z.string(),
 									status: z.string(),
+									// Resolved user display (name + avatar) when userId is an org member
+									userDisplay: z
+										.object({
+											name: z.string(),
+											image: z.string().nullable(),
+										})
+										.nullable(),
 									// Status summary (without full result blobs)
 									ofacStatus: z.string(),
 									ofacCount: z.number(),
@@ -155,6 +162,31 @@ export class QueryListEndpoint extends OpenAPIRoute {
 				skip: offset,
 			});
 
+			// Resolve user display (name + avatar) from auth-svc for org members
+			const memberMap = new Map<
+				string,
+				{ name: string; image: string | null }
+			>();
+			try {
+				const authService = c.env.AUTH_SERVICE;
+				if (authService) {
+					const members = await authService.getOrganizationMembers(
+						organization.id,
+					);
+					for (const m of members) {
+						memberMap.set(m.userId, {
+							name: m.name,
+							image: m.image ?? null,
+						});
+					}
+				}
+			} catch (err) {
+				console.warn(
+					"[QueryList] Failed to fetch org members for userDisplay:",
+					err instanceof Error ? err.message : String(err),
+				);
+			}
+
 			return {
 				success: true,
 				queries: searchQueries.map((q) => ({
@@ -164,6 +196,7 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					userId: q.userId,
 					source: q.source,
 					status: q.status,
+					userDisplay: memberMap.get(q.userId) ?? null,
 					ofacStatus: q.ofacStatus,
 					ofacCount: q.ofacCount,
 					sat69bStatus: q.sat69bStatus,

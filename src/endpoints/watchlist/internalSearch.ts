@@ -12,6 +12,7 @@ import type { Context } from "hono";
 import { z } from "zod";
 import { contentJson } from "chanfana";
 import { performSearch } from "../../lib/search-core";
+import { normalizeAmlSource, QUERY_SOURCE } from "../../lib/query-source";
 import type { Bindings } from "../../index";
 import { ofacMatch } from "./searchOfac";
 import { unscMatch } from "./searchUnsc";
@@ -173,13 +174,16 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 		});
 
 		try {
-			// Call shared search core with source from request or default to 'aml-screening'
+			// Call shared search core with normalized source (aml variants → "aml")
+			const normalizedSource = source
+				? normalizeAmlSource(source)
+				: QUERY_SOURCE.AML;
 			const result = await performSearch({
 				env: c.env,
 				executionCtx: c.executionCtx,
 				organizationId,
 				userId,
-				source: source || "aml-screening",
+				source: normalizedSource,
 				query: q,
 				entityType,
 				birthDate,

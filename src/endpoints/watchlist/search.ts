@@ -7,6 +7,7 @@ import { unscMatch } from "./searchUnsc";
 import { sat69bMatch } from "./searchSat69b";
 import { createUsageRightsClient } from "../../lib/usage-rights-client";
 import { performSearch } from "../../lib/search-core";
+import { QUERY_SOURCE } from "../../lib/query-source";
 
 // Tipos para los targets
 type _OfacTargetType = {
@@ -223,7 +224,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 				);
 			}
 
-			// Call shared search core with source='manual' for UI-initiated searches
+			// Call shared search core with source='watchlist_query' for UI-initiated searches
 			const user = c.get("user");
 			const entityType =
 				(data.body as unknown as { entityType?: string }).entityType ??
@@ -234,7 +235,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 				executionCtx: c.executionCtx,
 				organizationId: organization.id,
 				userId: user?.id ?? "unknown",
-				source: "manual",
+				source: QUERY_SOURCE.WATCHLIST_QUERY,
 				query: data.body.q,
 				entityType,
 				birthDate: data.body.birthDate,

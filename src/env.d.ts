@@ -76,6 +76,16 @@ declare namespace Cloudflare {
 				organizationId: string,
 				feature: string,
 			): Promise<{ allowed: boolean; planTier: string | null }>;
+			getOrganizationMembers(orgId: string): Promise<
+				Array<{
+					id: string;
+					userId: string;
+					role: string;
+					email: string;
+					name: string;
+					image: string | null;
+				}>
+			>;
 		};
 		/**
 		 * Thread service binding for creating and tracking threads

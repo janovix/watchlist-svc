@@ -1,5 +1,6 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { performSearch } from "./lib/search-core";
+import { normalizeAmlSource, QUERY_SOURCE } from "./lib/query-source";
 import type { Bindings } from "./index";
 
 // =============================================================================
@@ -80,12 +81,15 @@ export class WatchlistEntrypoint extends WorkerEntrypoint<Bindings> {
 		organizationId: string,
 		userId: string,
 	): Promise<WatchlistSearchResult> {
+		const normalizedSource = input.source
+			? normalizeAmlSource(input.source)
+			: QUERY_SOURCE.AML;
 		const result = await performSearch({
 			env: this.env,
 			executionCtx: this.ctx,
 			organizationId,
 			userId,
-			source: input.source ?? "aml-screening",
+			source: normalizedSource,
 			query: input.q,
 			entityType: input.entityType ?? "person",
 			birthDate: input.birthDate,
