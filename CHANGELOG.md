@@ -1,3 +1,10 @@
+# [1.6.0-rc.9](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.8...v1.6.0-rc.9) (2026-03-12)
+
+
+### Features
+
+* **progress-endpoints:** add progress endpoints for adverse media and grok PEP, including payload schema and integration tests ([6ea7276](https://github.com/janovix/watchlist-svc/commit/6ea72762044d8ed704547693b39d64faff3d3b6c))
+
 # [1.6.0-rc.8](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.7...v1.6.0-rc.8) (2026-03-12)
 
 
