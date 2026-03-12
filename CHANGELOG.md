@@ -1,3 +1,10 @@
+# [1.6.0-rc.6](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.5...v1.6.0-rc.6) (2026-03-12)
+
+
+### Features
+
+* **search:** add adverse_media_has_risk column to search_query and update related endpoints; adjust default threshold to 0.875 ([04047c0](https://github.com/janovix/watchlist-svc/commit/04047c0eaca6278cff4cde13a0ca97e33eed9653))
+
 # [1.6.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.4...v1.6.0-rc.5) (2026-03-12)
 
 
