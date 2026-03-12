@@ -159,12 +159,12 @@ export class InternalPepResultsEndpoint extends OpenAPIRoute {
 				};
 
 				await c.env.PEP_CACHE.put(cacheKey, JSON.stringify(cacheData), {
-					expirationTtl: 86400, // 24 hours
+					expirationTtl: 259200, // 72 hours
 				});
 
 				cached = true;
 				console.log(
-					`[InternalPep] Cached ${results_sent} results for query "${query}" (TTL: 24h)`,
+					`[InternalPep] Cached ${results_sent} results for query "${query}" (TTL: 72h)`,
 				);
 			} catch (error) {
 				console.error(`[InternalPep] Failed to cache results:`, error);
