@@ -54,14 +54,14 @@
 
 * **entrypoints:** add entrypoints for Auth, Thread, and AML services in wrangler config and implement WatchlistEntrypoint for RPC communication ([9f728de](https://github.com/janovix/watchlist-svc/commit/9f728de55cc6d4265b9cf0b16d18d81e7fe361d9))
 
-# [1.6.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.5.1-rc.1...v1.6.0-rc.1) (2026-03-02)
+# [1.6.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.5.1...v1.6.0-rc.1) (2026-03-02)
 
 
 ### Features
 
 * **openapi:** add consolidated OpenAPI specification and serve at /openapi.json ([057ed8b](https://github.com/janovix/watchlist-svc/commit/057ed8b637f0c1bf3fb30fd3ac1e3df286847a97))
 
-## [1.5.1-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.5.0...v1.5.1-rc.1) (2026-02-27)
+## [1.5.1](https://github.com/janovix/watchlist-svc/compare/v1.5.0...v1.5.1) (2026-02-27)
 
 
 ### Bug Fixes
