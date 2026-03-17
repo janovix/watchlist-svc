@@ -1,3 +1,10 @@
+# [1.6.0-rc.10](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.9...v1.6.0-rc.10) (2026-03-17)
+
+
+### Features
+
+* **search:** add adverse_media_risk_level column to search_query and update related endpoints for list view badge coloring ([39b86cb](https://github.com/janovix/watchlist-svc/commit/39b86cb7c61d1b1ea925d4169e462986c1c2aab8))
+
 # [1.6.0-rc.9](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.8...v1.6.0-rc.9) (2026-03-12)
 
 
