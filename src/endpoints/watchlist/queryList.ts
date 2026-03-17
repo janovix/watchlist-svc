@@ -71,6 +71,9 @@ export class QueryListEndpoint extends OpenAPIRoute {
 									pepAiStatus: z.string(),
 									adverseMediaStatus: z.string(),
 									adverseMediaHasRisk: z.boolean(),
+									adverseMediaRiskLevel: z
+										.enum(["low", "medium", "high"])
+										.nullable(),
 									// Timestamps
 									createdAt: z.string(),
 									updatedAt: z.string(),
@@ -153,6 +156,7 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					pepAiStatus: true,
 					adverseMediaStatus: true,
 					adverseMediaHasRisk: true,
+					adverseMediaRiskLevel: true,
 					// Timestamps
 					createdAt: true,
 					updatedAt: true,
@@ -210,6 +214,7 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					pepAiStatus: q.pepAiStatus,
 					adverseMediaStatus: q.adverseMediaStatus,
 					adverseMediaHasRisk: q.adverseMediaHasRisk,
+					adverseMediaRiskLevel: q.adverseMediaRiskLevel,
 					createdAt: q.createdAt.toISOString(),
 					updatedAt: q.updatedAt.toISOString(),
 				})),
