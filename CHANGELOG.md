@@ -1,3 +1,10 @@
+# [1.6.0-rc.11](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.10...v1.6.0-rc.11) (2026-03-18)
+
+
+### Features
+
+* **aml-svc:** integrate AML service binding and enhance input validation in search endpoints ([099a29a](https://github.com/janovix/watchlist-svc/commit/099a29a5e52f3878bcfef044aa35c6c593eeca46))
+
 # [1.6.0-rc.10](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.9...v1.6.0-rc.10) (2026-03-17)
 
 
