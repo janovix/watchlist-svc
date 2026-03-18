@@ -100,6 +100,7 @@ export const openAPISpec = {
 				tags: ["Search"],
 				summary: "Semantic search for watchlist targets",
 				operationId: "searchTargets",
+				security: [{ BearerAuth: [] }],
 				requestBody: {
 					content: {
 						"application/json": {
@@ -131,6 +132,7 @@ export const openAPISpec = {
 				tags: ["Search"],
 				summary: "OFAC sanctions search",
 				operationId: "searchOfac",
+				security: [{ BearerAuth: [] }],
 				requestBody: {
 					content: {
 						"application/json": {
@@ -157,6 +159,7 @@ export const openAPISpec = {
 				tags: ["Search"],
 				summary: "UNSC sanctions search",
 				operationId: "searchUnsc",
+				security: [{ BearerAuth: [] }],
 				requestBody: {
 					content: {
 						"application/json": {
@@ -183,6 +186,7 @@ export const openAPISpec = {
 				tags: ["Search"],
 				summary: "SAT 69-B (Mexican tax) search",
 				operationId: "searchSat69b",
+				security: [{ BearerAuth: [] }],
 				requestBody: {
 					content: {
 						"application/json": {
@@ -209,6 +213,7 @@ export const openAPISpec = {
 				tags: ["Queries"],
 				summary: "List queries",
 				operationId: "queryList",
+				security: [{ BearerAuth: [] }],
 				responses: {
 					"200": { description: "List of queries" },
 					"401": { description: "Unauthorized" },
@@ -220,6 +225,7 @@ export const openAPISpec = {
 				tags: ["Queries"],
 				summary: "Get query by ID",
 				operationId: "queryRead",
+				security: [{ BearerAuth: [] }],
 				parameters: [
 					{
 						name: "queryId",
@@ -240,6 +246,7 @@ export const openAPISpec = {
 				tags: ["Ingestion"],
 				summary: "List ingestion runs",
 				operationId: "listIngestionRuns",
+				security: [{ BearerAuth: [] }],
 				parameters: [
 					{
 						name: "limit",
@@ -258,12 +265,13 @@ export const openAPISpec = {
 				tags: ["Ingestion"],
 				summary: "Get ingestion run by ID",
 				operationId: "getIngestionRun",
+				security: [{ BearerAuth: [] }],
 				parameters: [
 					{
 						name: "runId",
 						in: "path",
 						required: true,
-						schema: { type: "string" },
+						schema: { type: "integer", format: "int64" },
 					},
 				],
 				responses: {
@@ -278,12 +286,13 @@ export const openAPISpec = {
 				tags: ["Ingestion"],
 				summary: "Get ingestion run progress",
 				operationId: "getIngestionProgress",
+				security: [{ BearerAuth: [] }],
 				parameters: [
 					{
 						name: "runId",
 						in: "path",
 						required: true,
-						schema: { type: "string" },
+						schema: { type: "integer", format: "int64" },
 					},
 				],
 				responses: {
@@ -298,6 +307,7 @@ export const openAPISpec = {
 				tags: ["Ingestion"],
 				summary: "Start ingestion run",
 				operationId: "ingestionStart",
+				security: [{ BearerAuth: [] }],
 				requestBody: {
 					content: {
 						"application/json": {
@@ -323,12 +333,13 @@ export const openAPISpec = {
 				tags: ["Ingestion"],
 				summary: "Mark ingestion run complete",
 				operationId: "ingestionComplete",
+				security: [{ BearerAuth: [] }],
 				parameters: [
 					{
 						name: "runId",
 						in: "path",
 						required: true,
-						schema: { type: "string" },
+						schema: { type: "integer", format: "int64" },
 					},
 				],
 				responses: {
@@ -342,12 +353,13 @@ export const openAPISpec = {
 				tags: ["Ingestion"],
 				summary: "Mark ingestion run failed",
 				operationId: "ingestionFailed",
+				security: [{ BearerAuth: [] }],
 				parameters: [
 					{
 						name: "runId",
 						in: "path",
 						required: true,
-						schema: { type: "string" },
+						schema: { type: "integer", format: "int64" },
 					},
 				],
 				responses: {
@@ -361,6 +373,7 @@ export const openAPISpec = {
 				tags: ["Admin"],
 				summary: "Reindex all targets from D1 to Vectorize",
 				operationId: "adminVectorizeReindex",
+				security: [{ BearerAuth: [] }],
 				requestBody: {
 					content: {
 						"application/json": {
@@ -391,6 +404,7 @@ export const openAPISpec = {
 				description:
 					"Validates upload parameters and returns the upload URL and key. Use before uploading SDN XML files (max 150MB). Requires admin auth.",
 				operationId: "upload-sdn-xml-prepare",
+				security: [{ BearerAuth: [] }],
 				requestBody: {
 					content: {
 						"application/json": {
@@ -426,6 +440,28 @@ export const openAPISpec = {
 				description:
 					"Upload an SDN XML file as multipart/form-data. Expects 'file' (required) and optionally 'key' from /sdn-xml/prepare. Requires admin auth.",
 				operationId: "upload-sdn-xml",
+				security: [{ BearerAuth: [] }],
+				requestBody: {
+					content: {
+						"multipart/form-data": {
+							schema: {
+								type: "object",
+								properties: {
+									file: {
+										type: "string",
+										format: "binary",
+										description: "SDN XML file to upload",
+									},
+									key: {
+										type: "string",
+										description: "Optional key from /sdn-xml/prepare",
+									},
+								},
+								required: ["file"],
+							},
+						},
+					},
+				},
 				responses: {
 					"200": { description: "File uploaded successfully" },
 					"400": { description: "Invalid input" },
@@ -441,6 +477,7 @@ export const openAPISpec = {
 				description:
 					"Delete an uploaded SDN XML file by its storage key. Requires admin auth.",
 				operationId: "upload-sdn-xml-delete",
+				security: [{ BearerAuth: [] }],
 				parameters: [
 					{
 						name: "key",

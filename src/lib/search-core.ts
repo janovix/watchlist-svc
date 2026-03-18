@@ -101,7 +101,7 @@ export interface SearchParams {
 	executionCtx: ExecutionContext;
 	organizationId: string;
 	userId: string;
-	source: string; // 'manual' | 'aml-screening'
+	source: string; // canonical: 'aml' | 'manual' | etc.
 	query: string;
 	entityType?: string;
 	birthDate?: string;
@@ -159,12 +159,12 @@ export interface SearchResult {
 	};
 	pepAiSearch?: {
 		searchId: string;
-		status: "completed" | "pending" | "skipped" | "disabled";
+		status: "completed" | "pending" | "skipped" | "disabled" | "failed";
 		result: unknown | null;
 	};
 	adverseMediaSearch?: {
 		searchId: string;
-		status: "completed" | "pending" | "disabled";
+		status: "completed" | "pending" | "disabled" | "failed";
 		result: unknown | null;
 	};
 }
@@ -899,7 +899,7 @@ export async function performSearch(
 	let pepAiSearch:
 		| {
 				searchId: string;
-				status: "completed" | "pending" | "skipped" | "disabled";
+				status: "completed" | "pending" | "skipped" | "disabled" | "failed";
 				result: unknown | null;
 		  }
 		| undefined = undefined;
@@ -922,7 +922,14 @@ export async function performSearch(
 			let cachedPepAi: unknown = null;
 			if (cacheEnabled && env.PEP_CACHE) {
 				try {
-					const cacheKey = generateCacheKey("pep_ai", query);
+					const pepCacheSuffix = [entityType, birthDate, countries?.[0]]
+						.filter(Boolean)
+						.join(":");
+					const cacheKey = generateCacheKey(
+						"pep_ai",
+						query,
+						pepCacheSuffix || undefined,
+					);
 					cachedPepAi = await readCache(env.PEP_CACHE, cacheKey);
 					if (cachedPepAi) {
 						console.log(`[SearchCore] PEP Grok cache hit for query "${query}"`);
@@ -931,6 +938,14 @@ export async function performSearch(
 							status: "completed",
 							result: cachedPepAi,
 						};
+						await prisma.searchQuery.update({
+							where: { id: queryId },
+							data: {
+								pepAiStatus: "completed",
+								pepAiResult: JSON.stringify(cachedPepAi),
+							},
+						});
+						await checkAndUpdateQueryCompletion(prisma, queryId);
 					}
 				} catch (error) {
 					console.warn(`[SearchCore] Failed to check PEP Grok cache:`, error);
@@ -955,32 +970,28 @@ export async function performSearch(
 					metadata: {
 						source: "watchlist-svc",
 						triggered_by: "search",
-						env: {
-							XAI_API_KEY: env.GROK_API_KEY,
-						},
+						needs_grok_key: true,
 					},
 				};
 
-				executionCtx.waitUntil(
-					env.THREAD_SVC.createThread(threadPayload)
-						.then((thread) => {
-							console.log(
-								`[SearchCore] Grok PEP AI search thread created for query "${query}": ${thread.id}`,
-							);
-						})
-						.catch((error) => {
-							console.error(
-								`[SearchCore] Error creating Grok PEP thread:`,
-								error,
-							);
-						}),
-				);
-
-				pepAiSearch = {
-					searchId: pepAiSearchId,
-					status: "pending",
-					result: null,
-				};
+				try {
+					await env.THREAD_SVC.createThread(threadPayload);
+					pepAiSearch = {
+						searchId: pepAiSearchId,
+						status: "pending",
+						result: null,
+					};
+				} catch (threadError) {
+					console.error(
+						`[SearchCore] Error creating Grok PEP thread:`,
+						threadError,
+					);
+					pepAiSearch = {
+						searchId: pepAiSearchId,
+						status: "failed",
+						result: null,
+					};
+				}
 			}
 		} catch (error) {
 			console.error(`[SearchCore] Failed to trigger Grok PEP search:`, error);
@@ -1000,7 +1011,7 @@ export async function performSearch(
 	let adverseMediaSearch:
 		| {
 				searchId: string;
-				status: "completed" | "pending" | "disabled";
+				status: "completed" | "pending" | "disabled" | "failed";
 				result: unknown | null;
 		  }
 		| undefined = undefined;
@@ -1036,6 +1047,14 @@ export async function performSearch(
 							status: "completed",
 							result: cachedAdverseMedia,
 						};
+						await prisma.searchQuery.update({
+							where: { id: queryId },
+							data: {
+								adverseMediaStatus: "completed",
+								adverseMediaResult: JSON.stringify(cachedAdverseMedia),
+							},
+						});
+						await checkAndUpdateQueryCompletion(prisma, queryId);
 					}
 				} catch (error) {
 					console.warn(
@@ -1065,32 +1084,28 @@ export async function performSearch(
 					metadata: {
 						source: "watchlist-svc",
 						triggered_by: "search",
-						env: {
-							XAI_API_KEY: env.GROK_API_KEY,
-						},
+						needs_grok_key: true,
 					},
 				};
 
-				executionCtx.waitUntil(
-					env.THREAD_SVC.createThread(threadPayload)
-						.then((thread) => {
-							console.log(
-								`[SearchCore] Adverse media Grok search thread created for query "${query}": ${thread.id}`,
-							);
-						})
-						.catch((error) => {
-							console.error(
-								`[SearchCore] Error creating adverse media thread:`,
-								error,
-							);
-						}),
-				);
-
-				adverseMediaSearch = {
-					searchId: adverseMediaSearchId,
-					status: "pending",
-					result: null,
-				};
+				try {
+					await env.THREAD_SVC.createThread(threadPayload);
+					adverseMediaSearch = {
+						searchId: adverseMediaSearchId,
+						status: "pending",
+						result: null,
+					};
+				} catch (threadError) {
+					console.error(
+						`[SearchCore] Error creating adverse media thread:`,
+						threadError,
+					);
+					adverseMediaSearch = {
+						searchId: adverseMediaSearchId,
+						status: "failed",
+						result: null,
+					};
+				}
 			}
 		} catch (error) {
 			console.error(

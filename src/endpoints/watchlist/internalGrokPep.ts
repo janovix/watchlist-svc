@@ -11,6 +11,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
 import { createPrismaClient } from "../../lib/prisma";
+import { QUERY_SOURCE } from "../../lib/query-source";
 import {
 	generateCacheKey,
 	writeCache,
@@ -114,7 +115,7 @@ export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
 			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
 					await c.env.AML_SERVICE.processScreeningCallback({
 						queryId: search_id,
@@ -245,6 +246,16 @@ export class InternalGrokPepProgressEndpoint extends OpenAPIRoute {
 	};
 
 	async handle(c: { env: Bindings; req: Request }) {
+		if (
+			c.env.INTERNAL_SECRET != null &&
+			c.env.INTERNAL_SECRET !== "" &&
+			c.req.headers.get("X-Internal-Secret") !== c.env.INTERNAL_SECRET
+		) {
+			return Response.json(
+				{ success: false, error: "Unauthorized" },
+				{ status: 401 },
+			);
+		}
 		const body = await c.req.json();
 		const { search_id, phase, message, progress } = body as z.infer<
 			typeof progressPayloadSchema
@@ -349,7 +360,7 @@ export class InternalGrokPepFailedEndpoint extends OpenAPIRoute {
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
 			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
 					await c.env.AML_SERVICE.processScreeningCallback({
 						queryId: search_id,

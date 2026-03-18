@@ -69,6 +69,11 @@
 			"service": "thread-svc",
 			"entrypoint": "ThreadSvcEntrypoint",
 		},
+		{
+			"binding": "AML_SERVICE",
+			"service": "aml-svc",
+			"entrypoint": "AmlSvcEntrypoint",
+		},
 	],
 	"vars": {
 		"ENVIRONMENT": "preview",

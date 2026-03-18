@@ -51,6 +51,9 @@ export default defineWorkersConfig({
 				"src/endpoints/watchlist/internalPep.ts", // Requires PEP_CACHE and PEP_EVENTS_DO bindings
 				"src/endpoints/watchlist/internalAdverseMedia.ts", // Requires PEP_EVENTS_DO binding
 				"src/endpoints/watchlist/internalGrokPep.ts", // Requires PEP_EVENTS_DO binding
+				"src/entrypoint.ts", // RPC entrypoint calls performSearch (AI/Vectorize bindings)
+				"src/endpoints/watchlist/events.ts", // Requires PEP_EVENTS_DO Durable Object
+				"src/endpoints/watchlist/adminVectorize.ts", // Requires THREAD_SVC.createThread RPC
 			],
 			thresholds: {
 				lines: 85,

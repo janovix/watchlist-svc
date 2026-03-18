@@ -81,22 +81,52 @@ export class WatchlistEntrypoint extends WorkerEntrypoint<Bindings> {
 		organizationId: string,
 		userId: string,
 	): Promise<WatchlistSearchResult> {
+		if (typeof organizationId !== "string" || !organizationId.trim()) {
+			throw new Error(
+				"RPC search: organizationId is required and must be a non-empty string",
+			);
+		}
+		if (typeof userId !== "string" || !userId.trim()) {
+			throw new Error(
+				"RPC search: userId is required and must be a non-empty string",
+			);
+		}
+		if (typeof input?.q !== "string" || !input.q.trim()) {
+			throw new Error(
+				"RPC search: input.q is required and must be a non-empty string",
+			);
+		}
+		const entityType = input.entityType ?? "person";
+		if (entityType !== "person" && entityType !== "organization") {
+			throw new Error(
+				`RPC search: input.entityType must be "person" or "organization", got ${JSON.stringify(entityType)}`,
+			);
+		}
+		const topK = Math.min(
+			1000,
+			Math.max(1, Math.floor(Number(input.topK) || 50)),
+		);
+		const rawThreshold = Number(input.threshold);
+		const threshold = Number.isFinite(rawThreshold)
+			? Math.min(1, Math.max(0, rawThreshold))
+			: 0.875;
+
 		const normalizedSource = input.source
 			? normalizeAmlSource(input.source)
 			: QUERY_SOURCE.AML;
 		const result = await performSearch({
 			env: this.env,
 			executionCtx: this.ctx,
-			organizationId,
-			userId,
+			organizationId: organizationId.trim(),
+			userId: userId.trim(),
 			source: normalizedSource,
-			query: input.q,
-			entityType: input.entityType ?? "person",
+			query: input.q.trim(),
+			entityType,
 			birthDate: input.birthDate,
 			countries: input.countries,
 			identifiers: input.identifiers,
-			topK: input.topK ?? 50,
-			threshold: input.threshold ?? 0.875,
+			topK,
+			threshold,
 		});
 
 		return {

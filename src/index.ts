@@ -69,6 +69,11 @@ import {
 	InternalVectorizeSearchHydratedEndpoint,
 } from "./endpoints/watchlist/internalVectorize";
 import { AdminVectorizeReindexEndpoint } from "./endpoints/watchlist/adminVectorize";
+import type {
+	AmlServiceBinding,
+	AuthServiceBinding,
+	ThreadSvcBinding,
+} from "./types/service-bindings";
 
 // Export Durable Objects
 export { PepEventsDO } from "./durable-objects/pep-events";
@@ -95,6 +100,11 @@ export type Bindings = Env & {
 	 * Environment identifier (e.g., "dev", "production").
 	 */
 	ENVIRONMENT?: string;
+	/**
+	 * Optional shared secret for internal progress callbacks.
+	 * When set, progress endpoints require X-Internal-Secret header to match.
+	 */
+	INTERNAL_SECRET?: string;
 	/**
 	 * Grok API key for AI-powered features.
 	 */
@@ -127,88 +137,17 @@ export type Bindings = Env & {
 	 * Thread service binding via `ThreadSvcEntrypoint`.
 	 * Caller wrangler config must include `"entrypoint": "ThreadSvcEntrypoint"`.
 	 */
-	THREAD_SVC?: {
-		fetch(request: Request | string, init?: RequestInit): Promise<Response>;
-		createThread(data: {
-			task_type: string;
-			job_params?: unknown;
-			metadata?: unknown;
-		}): Promise<{ id: string; status: string; [key: string]: unknown }>;
-		getThread(
-			id: string,
-		): Promise<{ id: string; status: string; [key: string]: unknown } | null>;
-		cancelThread(
-			id: string,
-		): Promise<{ id: string; status: string; [key: string]: unknown } | null>;
-		updateThreadStatus(
-			id: string,
-			status: string,
-			data?: unknown,
-		): Promise<{ id: string; status: string; [key: string]: unknown } | null>;
-		updateThreadProgress(
-			id: string,
-			progress: number,
-			phase?: string,
-		): Promise<{ id: string; status: string; [key: string]: unknown } | null>;
-	};
+	THREAD_SVC?: ThreadSvcBinding;
 	/**
 	 * Auth service binding via `AuthSvcEntrypoint`.
 	 * Caller wrangler config must include `"entrypoint": "AuthSvcEntrypoint"`.
 	 */
-	AUTH_SERVICE?: {
-		fetch(request: Request | string, init?: RequestInit): Promise<Response>;
-		getJwks(): Promise<{ keys: unknown[] }>;
-		getResolvedSettings(
-			userId: string,
-			orgId?: string,
-			headers?: string,
-		): Promise<unknown>;
-		gateUsageRights(
-			orgId: string,
-			metric: string,
-			count?: number,
-		): Promise<{ allowed: boolean; [key: string]: unknown }>;
-		meterUsageRights(
-			orgId: string,
-			metric: string,
-			count?: number,
-		): Promise<void>;
-		checkUsageRights(
-			orgId: string,
-			metric: string,
-		): Promise<{ allowed: boolean; [key: string]: unknown }>;
-		getSubscriptionStatus(orgId: string): Promise<unknown>;
-		reportSubscriptionUsage(
-			orgId: string,
-			metric: string,
-			count: number,
-		): Promise<void>;
-		checkSubscriptionUsage(orgId: string, metric: string): Promise<unknown>;
-		checkSubscriptionFeature(orgId: string, feature: string): Promise<unknown>;
-		getOrganizationMembers(orgId: string): Promise<
-			Array<{
-				id: string;
-				userId: string;
-				role: string;
-				email: string;
-				name: string;
-				image: string | null;
-			}>
-		>;
-	};
+	AUTH_SERVICE?: AuthServiceBinding;
 	/**
 	 * AML service binding via `AmlSvcEntrypoint`.
 	 * Caller wrangler config must include `"entrypoint": "AmlSvcEntrypoint"`.
 	 */
-	AML_SERVICE?: {
-		fetch(request: Request | string, init?: RequestInit): Promise<Response>;
-		processScreeningCallback(data: {
-			queryId: string;
-			type: string;
-			status: string;
-			matched: boolean;
-		}): Promise<void>;
-	};
+	AML_SERVICE?: AmlServiceBinding;
 	/**
 	 * PEP cache KV namespace for temporary 24h result caching.
 	 */

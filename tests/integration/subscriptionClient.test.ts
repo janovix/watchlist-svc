@@ -101,33 +101,44 @@ describe("SubscriptionClient", () => {
 			expect(consoleSpy).toHaveBeenCalled();
 			consoleSpy.mockRestore();
 		});
+
+		it("should use default status and planTier when RPC returns null for them", async () => {
+			mockAuthSvc.getSubscriptionStatus.mockResolvedValue({
+				hasSubscription: false,
+				isEnterprise: false,
+				status: null,
+				planTier: null,
+				planName: null,
+				features: null,
+			});
+
+			const result = await client.getSubscriptionStatus("org-123");
+
+			expect(result).not.toBeNull();
+			expect(result?.status).toBe("inactive");
+			expect(result?.planTier).toBe("none");
+			expect(result?.features).toEqual([]);
+		});
 	});
 
 	describe("reportUsage", () => {
-		it("should return null when AUTH_SERVICE is not available", async () => {
+		it("should return without calling RPC when AUTH_SERVICE is not available", async () => {
 			const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 			const clientWithoutService = new SubscriptionClient({});
 
-			const result = await clientWithoutService.reportUsage(
-				"org-123",
-				"alerts",
-				1,
-			);
+			await clientWithoutService.reportUsage("org-123", "alerts", 1);
 
-			expect(result).toBeNull();
 			expect(consoleSpy).toHaveBeenCalledWith(
 				"AUTH_SERVICE binding not available, skipping usage report",
 			);
 			consoleSpy.mockRestore();
 		});
 
-		it("should report usage and return allowed result", async () => {
+		it("should report usage and return void", async () => {
 			mockAuthSvc.reportSubscriptionUsage.mockResolvedValue(undefined);
 
-			const result = await client.reportUsage("org-123", "alerts", 5);
+			await client.reportUsage("org-123", "alerts", 5);
 
-			expect(result).not.toBeNull();
-			expect(result?.allowed).toBe(true);
 			expect(mockAuthSvc.reportSubscriptionUsage).toHaveBeenCalledWith(
 				"org-123",
 				"alerts",
@@ -147,7 +158,7 @@ describe("SubscriptionClient", () => {
 			);
 		});
 
-		it("should return null on RPC error", async () => {
+		it("should throw on RPC error", async () => {
 			mockAuthSvc.reportSubscriptionUsage.mockRejectedValue(
 				new Error("RPC error"),
 			);
@@ -155,9 +166,9 @@ describe("SubscriptionClient", () => {
 				.spyOn(console, "error")
 				.mockImplementation(() => {});
 
-			const result = await client.reportUsage("org-123", "alerts", 1);
-
-			expect(result).toBeNull();
+			await expect(client.reportUsage("org-123", "alerts", 1)).rejects.toThrow(
+				"RPC error",
+			);
 			consoleSpy.mockRestore();
 		});
 	});
@@ -224,6 +235,44 @@ describe("SubscriptionClient", () => {
 			expect(result).toBeNull();
 			consoleSpy.mockRestore();
 		});
+
+		it("should use tier when planTier is undefined (fallback path)", async () => {
+			mockAuthSvc.checkSubscriptionUsage.mockResolvedValue({
+				allowed: true,
+				used: 0,
+				included: 10,
+				remaining: 10,
+				overage: 0,
+				planTier: undefined,
+				tier: "free",
+			});
+
+			const result = await client.checkUsage("org-123", "alerts");
+
+			expect(result).not.toBeNull();
+			expect(result?.planTier).toBe("free");
+		});
+
+		it("should use default values when RPC returns undefined for numeric fields", async () => {
+			mockAuthSvc.checkSubscriptionUsage.mockResolvedValue({
+				allowed: undefined,
+				used: undefined,
+				included: undefined,
+				remaining: undefined,
+				overage: undefined,
+			});
+
+			const result = await client.checkUsage("org-123", "alerts");
+
+			expect(result).toEqual({
+				allowed: false,
+				used: 0,
+				included: 0,
+				remaining: 0,
+				overage: 0,
+				planTier: "none",
+			});
+		});
 	});
 
 	describe("hasFeature", () => {
@@ -285,6 +334,18 @@ describe("SubscriptionClient", () => {
 
 			expect(result).toBeNull();
 			consoleSpy.mockRestore();
+		});
+
+		it("should use default planTier when RPC returns null", async () => {
+			mockAuthSvc.checkSubscriptionFeature.mockResolvedValue({
+				allowed: true,
+				planTier: null,
+			});
+
+			const result = await client.hasFeature("org-123", "api_access");
+
+			expect(result).not.toBeNull();
+			expect(result?.planTier).toBe("none");
 		});
 	});
 

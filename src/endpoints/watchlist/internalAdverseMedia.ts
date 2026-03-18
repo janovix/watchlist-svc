@@ -11,6 +11,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
 import { createPrismaClient } from "../../lib/prisma";
+import { QUERY_SOURCE } from "../../lib/query-source";
 import {
 	generateCacheKey,
 	writeCache,
@@ -125,7 +126,7 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
 			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
 					await c.env.AML_SERVICE.processScreeningCallback({
 						queryId: search_id,
@@ -264,17 +265,37 @@ export class InternalAdverseMediaProgressEndpoint extends OpenAPIRoute {
 	};
 
 	async handle(c: { env: Bindings; req: Request }) {
-		const body = await c.req.json();
-		const { search_id, phase, message, progress } = body as z.infer<
-			typeof progressPayloadSchema
-		>;
-
-		if (!search_id) {
+		if (
+			c.env.INTERNAL_SECRET != null &&
+			c.env.INTERNAL_SECRET !== "" &&
+			c.req.headers.get("X-Internal-Secret") !== c.env.INTERNAL_SECRET
+		) {
 			return Response.json(
-				{ success: false, error: "search_id required" },
+				{ success: false, error: "Unauthorized" },
+				{ status: 401 },
+			);
+		}
+		let body: unknown;
+		try {
+			body = await c.req.json();
+		} catch {
+			return Response.json(
+				{ success: false, error: "Invalid JSON body" },
 				{ status: 400 },
 			);
 		}
+		const parsed = progressPayloadSchema.safeParse(body);
+		if (!parsed.success) {
+			return Response.json(
+				{
+					success: false,
+					error: "Validation failed",
+					issues: parsed.error.issues,
+				},
+				{ status: 400 },
+			);
+		}
+		const { search_id, phase, message, progress } = parsed.data;
 
 		let sent = 0;
 		if (c.env.PEP_EVENTS_DO) {
@@ -371,7 +392,7 @@ export class InternalAdverseMediaFailedEndpoint extends OpenAPIRoute {
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
 			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
 					await c.env.AML_SERVICE.processScreeningCallback({
 						queryId: search_id,

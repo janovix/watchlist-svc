@@ -77,10 +77,19 @@ async function getJWKS(
 		return cachedJWKS;
 	}
 
-	const jwks = (await authServiceBinding.getJwks()) as jose.JSONWebKeySet;
+	let jwks: jose.JSONWebKeySet;
+	try {
+		jwks = (await authServiceBinding.getJwks()) as jose.JSONWebKeySet;
+	} catch (e) {
+		const err = new Error("Failed to fetch JWKS", { cause: e });
+		(err as Error & { statusCode?: number }).statusCode = 503;
+		throw err;
+	}
 
 	if (!jwks.keys || !Array.isArray(jwks.keys) || jwks.keys.length === 0) {
-		throw new Error("Invalid JWKS: no keys found");
+		const err = new Error("Failed to fetch JWKS: Invalid JWKS: no keys found");
+		(err as Error & { statusCode?: number }).statusCode = 503;
+		throw err;
 	}
 
 	cachedJWKS = jwks;

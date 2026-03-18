@@ -1,5 +1,6 @@
 import { env, SELF } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { InternalSat69bCompleteEndpoint } from "../../src/endpoints/watchlist/internalSat69b";
 import { createPrismaClient } from "../../src/lib/prisma";
 
 /**
@@ -434,6 +435,51 @@ describe("Internal SAT 69-B Endpoints", () => {
 			expect(body.success).toBe(true);
 			// Should return null because THREAD_SVC binding is not configured in test env
 			expect(body.vectorization_thread_id).toBeNull();
+		});
+
+		it("should trigger vectorization and return thread id when THREAD_SVC is configured", async () => {
+			const createThread = vi
+				.fn()
+				.mockResolvedValue({ id: "thread-sat69b-vec-1" });
+			const endpoint = new (InternalSat69bCompleteEndpoint as any)();
+			const mockReq = {
+				json: async () => ({
+					run_id: testRunId,
+					total_records: 100,
+					total_batches: 1,
+					errors: [],
+					skip_vectorization: false,
+				}),
+			};
+			const mockC = {
+				env: {
+					DB: env.DB,
+					THREAD_SVC: { createThread },
+					ENVIRONMENT: "test",
+				},
+				req: mockReq,
+			};
+
+			const response = await endpoint.handle(mockC);
+			const data = await response.json();
+
+			expect(data.success).toBe(true);
+			expect(data.vectorization_thread_id).toBe("thread-sat69b-vec-1");
+			expect(createThread).toHaveBeenCalledWith(
+				expect.objectContaining({
+					task_type: "vectorize_index",
+					job_params: expect.objectContaining({
+						dataset: "sat_69b",
+						triggered_by: `sat_69b_ingestion_run_${testRunId}`,
+					}),
+				}),
+			);
+
+			const run = await prisma.watchlistIngestionRun.findUnique({
+				where: { id: testRunId },
+			});
+			expect(run?.vectorizeThreadId).toBe("thread-sat69b-vec-1");
+			expect(run?.progressPhase).toBe("vectorizing");
 		});
 	});
 

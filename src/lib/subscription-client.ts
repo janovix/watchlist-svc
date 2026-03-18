@@ -155,10 +155,10 @@ export class SubscriptionClient {
 		organizationId: string,
 		metric: UsageMetric,
 		count: number = 1,
-	): Promise<UsageCheckResult | null> {
+	): Promise<void> {
 		if (!this.authService) {
 			console.warn("AUTH_SERVICE binding not available, skipping usage report");
-			return null;
+			return;
 		}
 
 		try {
@@ -167,18 +167,9 @@ export class SubscriptionClient {
 				metric,
 				count,
 			);
-			// reportSubscriptionUsage returns void; return a minimal allowed result
-			return {
-				allowed: true,
-				used: 0,
-				included: 0,
-				remaining: 0,
-				overage: 0,
-				planTier: "none",
-			};
 		} catch (error) {
 			console.error("Error reporting usage:", error);
-			return null;
+			throw error;
 		}
 	}
 
@@ -201,13 +192,22 @@ export class SubscriptionClient {
 			);
 			if (!data) return null;
 
+			const d = data as {
+				allowed?: boolean;
+				used?: number;
+				included?: number;
+				remaining?: number;
+				overage?: number;
+				planTier?: string;
+				tier?: string;
+			};
 			return {
-				allowed: data.allowed,
-				used: data.used,
-				included: data.included,
-				remaining: data.remaining,
-				overage: data.overage,
-				planTier: "none",
+				allowed: d.allowed ?? false,
+				used: d.used ?? 0,
+				included: d.included ?? 0,
+				remaining: d.remaining ?? 0,
+				overage: d.overage ?? 0,
+				planTier: (d.planTier ?? d.tier ?? "none") as PlanTier,
 			};
 		} catch (error) {
 			console.error("Error checking usage:", error);

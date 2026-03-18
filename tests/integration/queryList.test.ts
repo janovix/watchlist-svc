@@ -1,5 +1,5 @@
 import { SELF, env } from "cloudflare:test";
-import { describe, expect, it, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryListEndpoint } from "../../src/endpoints/watchlist/queryList";
 import { createPrismaClient } from "../../src/lib/prisma";
 import type { AppContext } from "../../src/types";
@@ -508,5 +508,86 @@ describe("QueryListEndpoint.handle()", () => {
 		expect(response.queries.length).toBe(5);
 		expect(response.pagination.total).toBe(5);
 		expect(response.pagination.hasMore).toBe(false);
+	});
+
+	it("should populate userDisplay when AUTH_SERVICE returns members", async () => {
+		const orgId = "org-userdisplay-" + Date.now();
+		const userId = "user-display-1";
+
+		await prisma.searchQuery.create({
+			data: {
+				id: `query-userdisplay-${orgId}`,
+				organizationId: orgId,
+				userId,
+				query: "user display test",
+				entityType: "person",
+				status: "completed",
+				ofacStatus: "completed",
+				sat69bStatus: "completed",
+				unStatus: "completed",
+				pepOfficialStatus: "completed",
+				pepAiStatus: "completed",
+				adverseMediaStatus: "completed",
+			},
+		});
+
+		const mockAuthService = {
+			getOrganizationMembers: async () => [
+				{ userId, name: "Jane Doe", image: "https://example.com/avatar.png" },
+			],
+		};
+
+		const mockContext = {
+			env: { ...env, AUTH_SERVICE: mockAuthService } as any,
+			req: { json: async () => ({}) },
+			get: (key: string) => (key === "organization" ? { id: orgId } : null),
+		} as unknown as AppContext;
+
+		(endpoint.getValidatedData as any) = async () => ({
+			query: { limit: 20, offset: 0 },
+		});
+
+		const response = await endpoint.handle(mockContext as any);
+		expect(response.queries.length).toBe(1);
+		expect(response.queries[0].userDisplay).toEqual({
+			name: "Jane Doe",
+			image: "https://example.com/avatar.png",
+		});
+	});
+
+	it("should wrap non-ApiException errors with 500", async () => {
+		const orgId = "org-error-" + Date.now();
+		const dbError = new Error("Database connection failed");
+		const mockPrisma = {
+			searchQuery: {
+				count: () => Promise.reject(dbError),
+				findMany: () => Promise.resolve([]),
+			},
+		};
+		const prismaModule = await import("../../src/lib/prisma");
+		vi.spyOn(prismaModule, "createPrismaClient").mockReturnValue(
+			mockPrisma as any,
+		);
+
+		const mockContext = {
+			env: env as any,
+			req: { json: async () => ({}) },
+			get: (key: string) => (key === "organization" ? { id: orgId } : null),
+		} as unknown as AppContext;
+
+		(endpoint.getValidatedData as any) = async () => ({
+			query: { limit: 20, offset: 0 },
+		});
+
+		try {
+			await endpoint.handle(mockContext as any);
+			throw new Error("Expected handle to throw");
+		} catch (e: any) {
+			expect(e.message).toBe("Database connection failed");
+			expect(e.status).toBe(500);
+			expect(e.code).toBe(500);
+		} finally {
+			vi.mocked(prismaModule.createPrismaClient).mockRestore();
+		}
 	});
 });

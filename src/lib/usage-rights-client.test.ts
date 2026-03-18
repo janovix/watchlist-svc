@@ -135,7 +135,7 @@ describe("UsageRightsClient", () => {
 
 			await expect(
 				client.meter("org-123", "watchlistQueries"),
-			).resolves.not.toThrow();
+			).resolves.toBeUndefined();
 		});
 
 		it("should use default count of 1", async () => {

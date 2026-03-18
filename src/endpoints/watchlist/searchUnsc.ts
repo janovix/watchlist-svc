@@ -334,7 +334,10 @@ export class SearchUnscEndpoint extends OpenAPIRoute {
 					metaScore,
 				);
 
-				if (passesMatchFilter(hybridScore, nameScore, data.body.threshold)) {
+				const accept =
+					candidate.identifierMatch ||
+					passesMatchFilter(hybridScore, nameScore, data.body.threshold);
+				if (accept) {
 					matches.push({
 						target: candidate.target,
 						score: hybridScore,

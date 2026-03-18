@@ -12,6 +12,7 @@ import { z } from "zod";
 import type { Bindings } from "../../index";
 import { createHash } from "crypto";
 import { createPrismaClient } from "../../lib/prisma";
+import { QUERY_SOURCE } from "../../lib/query-source";
 import { checkAndUpdateQueryCompletion } from "../../lib/search-query-utils";
 
 // =============================================================================
@@ -197,7 +198,7 @@ export class InternalPepResultsEndpoint extends OpenAPIRoute {
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
 			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
 					await c.env.AML_SERVICE.processScreeningCallback({
 						queryId: search_id,
@@ -351,7 +352,7 @@ export class InternalPepFailedEndpoint extends OpenAPIRoute {
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
 			// If this is an AML-screening query, callback to aml-svc
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
 					await c.env.AML_SERVICE.processScreeningCallback({
 						queryId: search_id,

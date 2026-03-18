@@ -168,7 +168,9 @@ export class QueryListEndpoint extends OpenAPIRoute {
 				skip: offset,
 			});
 
-			// Resolve user display (name + avatar) from auth-svc for org members
+			// Resolve user display (name + avatar) for users on this page only.
+			// TODO: Replace with batched getUsersByIds(orgId, userIds) when auth-svc supports it to avoid fetching full org roster.
+			const pageUserIds = new Set(searchQueries.map((q) => q.userId));
 			const memberMap = new Map<
 				string,
 				{ name: string; image: string | null }
@@ -180,10 +182,12 @@ export class QueryListEndpoint extends OpenAPIRoute {
 						organization.id,
 					);
 					for (const m of members) {
-						memberMap.set(m.userId, {
-							name: m.name,
-							image: m.image ?? null,
-						});
+						if (pageUserIds.has(m.userId)) {
+							memberMap.set(m.userId, {
+								name: m.name,
+								image: m.image ?? null,
+							});
+						}
 					}
 				}
 			} catch (err) {

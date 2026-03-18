@@ -178,6 +178,14 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 			const normalizedSource = source
 				? normalizeAmlSource(source)
 				: QUERY_SOURCE.AML;
+			if (normalizedSource !== QUERY_SOURCE.AML) {
+				const err = new ApiException(
+					`Invalid source for internal AML search: only AML-originated sources are allowed`,
+				);
+				err.status = 400;
+				err.code = 400;
+				throw err;
+			}
 			const result = await performSearch({
 				env: c.env,
 				executionCtx: c.executionCtx,

@@ -115,8 +115,8 @@ export async function getResolvedSettings(
 			success?: boolean;
 			data?: ResolvedSettings;
 		} & ResolvedSettings;
-		// Auth-svc returns { success, data } envelope
-		if ("success" in typed && "data" in typed) {
+		// Auth-svc returns { success, data? } envelope
+		if ("success" in typed && typeof typed.success === "boolean") {
 			return typed.success ? (typed.data ?? null) : null;
 		}
 		// Direct object (already resolved)
