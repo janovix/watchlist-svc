@@ -7,35 +7,38 @@ import {
 	type FeatureCheckResult,
 } from "../../src/lib/subscription-client";
 
+type MockAuthSvc = {
+	getSubscriptionStatus: ReturnType<typeof vi.fn>;
+	reportSubscriptionUsage: ReturnType<typeof vi.fn>;
+	checkSubscriptionUsage: ReturnType<typeof vi.fn>;
+	checkSubscriptionFeature: ReturnType<typeof vi.fn>;
+};
+
 describe("SubscriptionClient", () => {
 	let client: SubscriptionClient;
-	let mockEnv: Cloudflare.Env;
-	let mockAuthService: {
-		fetch: ReturnType<typeof vi.fn>;
-	};
+	let mockAuthSvc: MockAuthSvc;
 
 	beforeEach(() => {
-		mockAuthService = {
-			fetch: vi.fn(),
+		mockAuthSvc = {
+			getSubscriptionStatus: vi.fn(),
+			reportSubscriptionUsage: vi.fn(),
+			checkSubscriptionUsage: vi.fn(),
+			checkSubscriptionFeature: vi.fn(),
 		};
-		mockEnv = {
-			AUTH_SERVICE: mockAuthService as unknown as Service,
-		} as Cloudflare.Env;
-		client = new SubscriptionClient(mockEnv);
+		client = new SubscriptionClient({ AUTH_SERVICE: mockAuthSvc });
 	});
 
 	describe("constructor", () => {
 		it("should create a subscription client instance", () => {
-			const instance = new SubscriptionClient(mockEnv);
+			const instance = new SubscriptionClient({ AUTH_SERVICE: mockAuthSvc });
 			expect(instance).toBeInstanceOf(SubscriptionClient);
 		});
 	});
 
 	describe("getSubscriptionStatus", () => {
 		it("should return null when AUTH_SERVICE is not available", async () => {
-			const envWithoutService = {} as Cloudflare.Env;
-			const clientWithoutService = new SubscriptionClient(envWithoutService);
 			const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const clientWithoutService = new SubscriptionClient({});
 
 			const result =
 				await clientWithoutService.getSubscriptionStatus("org-123");
@@ -48,7 +51,7 @@ describe("SubscriptionClient", () => {
 		});
 
 		it("should return subscription status on success", async () => {
-			const mockStatus: SubscriptionStatus = {
+			const mockRpcData = {
 				hasSubscription: true,
 				isEnterprise: false,
 				status: "active",
@@ -56,203 +59,124 @@ describe("SubscriptionClient", () => {
 				planName: "Business Plan",
 				features: ["api_access", "report_generation"],
 			};
-
-			mockAuthService.fetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					success: true,
-					data: mockStatus,
-				}),
-			});
+			mockAuthSvc.getSubscriptionStatus.mockResolvedValue(mockRpcData);
 
 			const result = await client.getSubscriptionStatus("org-123");
 
-			expect(result).toEqual(mockStatus);
-			expect(mockAuthService.fetch).toHaveBeenCalledWith(
-				expect.objectContaining({
-					url: expect.stringContaining(
-						"https://auth-svc.internal/internal/subscription/status?organizationId=org-123",
-					),
-				}),
+			const expected: SubscriptionStatus = {
+				hasSubscription: true,
+				isEnterprise: false,
+				status: "active",
+				planTier: "business",
+				planName: "Business Plan",
+				features: ["api_access", "report_generation"],
+			};
+			expect(result).toEqual(expected);
+			expect(mockAuthSvc.getSubscriptionStatus).toHaveBeenCalledWith("org-123");
+		});
+
+		it("should return null when RPC returns null", async () => {
+			mockAuthSvc.getSubscriptionStatus.mockResolvedValue(null);
+			const consoleSpy = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+
+			const result = await client.getSubscriptionStatus("org-123");
+
+			expect(result).toBeNull();
+			consoleSpy.mockRestore();
+		});
+
+		it("should return null on RPC error", async () => {
+			mockAuthSvc.getSubscriptionStatus.mockRejectedValue(
+				new Error("RPC error"),
 			);
+			const consoleSpy = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+
+			const result = await client.getSubscriptionStatus("org-123");
+
+			expect(result).toBeNull();
+			expect(consoleSpy).toHaveBeenCalled();
+			consoleSpy.mockRestore();
 		});
 
-		it("should return null when response is not ok", async () => {
-			mockAuthService.fetch.mockResolvedValue({
-				ok: false,
-				status: 500,
-				statusText: "Internal Server Error",
+		it("should use default status and planTier when RPC returns null for them", async () => {
+			mockAuthSvc.getSubscriptionStatus.mockResolvedValue({
+				hasSubscription: false,
+				isEnterprise: false,
+				status: null,
+				planTier: null,
+				planName: null,
+				features: null,
 			});
 
-			const consoleSpy = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
 			const result = await client.getSubscriptionStatus("org-123");
 
-			expect(result).toBeNull();
-			expect(consoleSpy).toHaveBeenCalled();
-			consoleSpy.mockRestore();
-		});
-
-		it("should return null when success is false", async () => {
-			mockAuthService.fetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					success: false,
-					error: "Subscription not found",
-				}),
-			});
-
-			const consoleSpy = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
-			const result = await client.getSubscriptionStatus("org-123");
-
-			expect(result).toBeNull();
-			expect(consoleSpy).toHaveBeenCalled();
-			consoleSpy.mockRestore();
-		});
-
-		it("should return null on fetch error", async () => {
-			mockAuthService.fetch.mockRejectedValue(new Error("Network error"));
-
-			const consoleSpy = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
-			const result = await client.getSubscriptionStatus("org-123");
-
-			expect(result).toBeNull();
-			expect(consoleSpy).toHaveBeenCalled();
-			consoleSpy.mockRestore();
+			expect(result).not.toBeNull();
+			expect(result?.status).toBe("inactive");
+			expect(result?.planTier).toBe("none");
+			expect(result?.features).toEqual([]);
 		});
 	});
 
 	describe("reportUsage", () => {
-		it("should return null when AUTH_SERVICE is not available", async () => {
-			const envWithoutService = {} as Cloudflare.Env;
-			const clientWithoutService = new SubscriptionClient(envWithoutService);
+		it("should return without calling RPC when AUTH_SERVICE is not available", async () => {
 			const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const clientWithoutService = new SubscriptionClient({});
 
-			const result = await clientWithoutService.reportUsage(
-				"org-123",
-				"alerts",
-				1,
-			);
+			await clientWithoutService.reportUsage("org-123", "alerts", 1);
 
-			expect(result).toBeNull();
 			expect(consoleSpy).toHaveBeenCalledWith(
 				"AUTH_SERVICE binding not available, skipping usage report",
 			);
 			consoleSpy.mockRestore();
 		});
 
-		it("should report usage successfully", async () => {
-			const mockUsageResult: UsageCheckResult = {
-				allowed: true,
-				used: 10,
-				included: 100,
-				remaining: 90,
-				overage: 0,
-				planTier: "business",
-			};
+		it("should report usage and return void", async () => {
+			mockAuthSvc.reportSubscriptionUsage.mockResolvedValue(undefined);
 
-			mockAuthService.fetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					success: true,
-					data: mockUsageResult,
-				}),
-			});
+			await client.reportUsage("org-123", "alerts", 5);
 
-			const result = await client.reportUsage("org-123", "alerts", 5);
-
-			expect(result).toEqual(mockUsageResult);
-			expect(mockAuthService.fetch).toHaveBeenCalledWith(
-				expect.objectContaining({
-					url: expect.stringContaining(
-						"https://auth-svc.internal/internal/subscription/usage/report",
-					),
-				}),
+			expect(mockAuthSvc.reportSubscriptionUsage).toHaveBeenCalledWith(
+				"org-123",
+				"alerts",
+				5,
 			);
 		});
 
 		it("should use default count of 1", async () => {
-			const mockUsageResult: UsageCheckResult = {
-				allowed: true,
-				used: 1,
-				included: 100,
-				remaining: 99,
-				overage: 0,
-				planTier: "business",
-			};
-
-			mockAuthService.fetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					success: true,
-					data: mockUsageResult,
-				}),
-			});
+			mockAuthSvc.reportSubscriptionUsage.mockResolvedValue(undefined);
 
 			await client.reportUsage("org-123", "alerts");
 
-			const callArgs = mockAuthService.fetch.mock.calls[0][0] as Request;
-			const body = (await callArgs.json()) as { count: number };
-			expect(body.count).toBe(1);
+			expect(mockAuthSvc.reportSubscriptionUsage).toHaveBeenCalledWith(
+				"org-123",
+				"alerts",
+				1,
+			);
 		});
 
-		it("should return null when response is not ok", async () => {
-			mockAuthService.fetch.mockResolvedValue({
-				ok: false,
-				status: 500,
-				statusText: "Internal Server Error",
-			});
-
+		it("should throw on RPC error", async () => {
+			mockAuthSvc.reportSubscriptionUsage.mockRejectedValue(
+				new Error("RPC error"),
+			);
 			const consoleSpy = vi
 				.spyOn(console, "error")
 				.mockImplementation(() => {});
-			const result = await client.reportUsage("org-123", "alerts", 1);
 
-			expect(result).toBeNull();
-			consoleSpy.mockRestore();
-		});
-
-		it("should return null when success is false", async () => {
-			mockAuthService.fetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					success: false,
-					error: "Usage report failed",
-				}),
-			});
-
-			const consoleSpy = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
-			const result = await client.reportUsage("org-123", "alerts", 1);
-
-			expect(result).toBeNull();
-			consoleSpy.mockRestore();
-		});
-
-		it("should return null on fetch error", async () => {
-			mockAuthService.fetch.mockRejectedValue(new Error("Network error"));
-
-			const consoleSpy = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
-			const result = await client.reportUsage("org-123", "alerts", 1);
-
-			expect(result).toBeNull();
+			await expect(client.reportUsage("org-123", "alerts", 1)).rejects.toThrow(
+				"RPC error",
+			);
 			consoleSpy.mockRestore();
 		});
 	});
 
 	describe("checkUsage", () => {
 		it("should return null when AUTH_SERVICE is not available", async () => {
-			const envWithoutService = {} as Cloudflare.Env;
-			const clientWithoutService = new SubscriptionClient(envWithoutService);
 			const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const clientWithoutService = new SubscriptionClient({});
 
 			const result = await clientWithoutService.checkUsage("org-123", "alerts");
 
@@ -264,83 +188,97 @@ describe("SubscriptionClient", () => {
 		});
 
 		it("should check usage successfully", async () => {
-			const mockUsageResult: UsageCheckResult = {
+			const mockRpcData = {
 				allowed: true,
 				used: 50,
 				included: 100,
 				remaining: 50,
 				overage: 0,
-				planTier: "business",
 			};
-
-			mockAuthService.fetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					success: true,
-					data: mockUsageResult,
-				}),
-			});
+			mockAuthSvc.checkSubscriptionUsage.mockResolvedValue(mockRpcData);
 
 			const result = await client.checkUsage("org-123", "alerts");
 
-			expect(result).toEqual(mockUsageResult);
-			expect(mockAuthService.fetch).toHaveBeenCalledWith(
-				expect.objectContaining({
-					url: expect.stringContaining(
-						"https://auth-svc.internal/internal/subscription/usage/check",
-					),
-				}),
+			const expected: UsageCheckResult = {
+				allowed: true,
+				used: 50,
+				included: 100,
+				remaining: 50,
+				overage: 0,
+				planTier: "none",
+			};
+			expect(result).toEqual(expected);
+			expect(mockAuthSvc.checkSubscriptionUsage).toHaveBeenCalledWith(
+				"org-123",
+				"alerts",
 			);
 		});
 
-		it("should return null when response is not ok", async () => {
-			mockAuthService.fetch.mockResolvedValue({
-				ok: false,
-				status: 500,
-				statusText: "Internal Server Error",
-			});
-
-			const consoleSpy = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
-			const result = await client.checkUsage("org-123", "alerts");
-
-			expect(result).toBeNull();
-			consoleSpy.mockRestore();
-		});
-
-		it("should return null when success is false", async () => {
-			mockAuthService.fetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					success: false,
-					error: "Usage check failed",
-				}),
-			});
+		it("should return null when RPC returns null", async () => {
+			mockAuthSvc.checkSubscriptionUsage.mockResolvedValue(null);
 
 			const result = await client.checkUsage("org-123", "alerts");
 
 			expect(result).toBeNull();
 		});
 
-		it("should return null on fetch error", async () => {
-			mockAuthService.fetch.mockRejectedValue(new Error("Network error"));
-
+		it("should return null on RPC error", async () => {
+			mockAuthSvc.checkSubscriptionUsage.mockRejectedValue(
+				new Error("RPC error"),
+			);
 			const consoleSpy = vi
 				.spyOn(console, "error")
 				.mockImplementation(() => {});
+
 			const result = await client.checkUsage("org-123", "alerts");
 
 			expect(result).toBeNull();
 			consoleSpy.mockRestore();
+		});
+
+		it("should use tier when planTier is undefined (fallback path)", async () => {
+			mockAuthSvc.checkSubscriptionUsage.mockResolvedValue({
+				allowed: true,
+				used: 0,
+				included: 10,
+				remaining: 10,
+				overage: 0,
+				planTier: undefined,
+				tier: "free",
+			});
+
+			const result = await client.checkUsage("org-123", "alerts");
+
+			expect(result).not.toBeNull();
+			expect(result?.planTier).toBe("free");
+		});
+
+		it("should use default values when RPC returns undefined for numeric fields", async () => {
+			mockAuthSvc.checkSubscriptionUsage.mockResolvedValue({
+				allowed: undefined,
+				used: undefined,
+				included: undefined,
+				remaining: undefined,
+				overage: undefined,
+			});
+
+			const result = await client.checkUsage("org-123", "alerts");
+
+			expect(result).toEqual({
+				allowed: false,
+				used: 0,
+				included: 0,
+				remaining: 0,
+				overage: 0,
+				planTier: "none",
+			});
 		});
 	});
 
 	describe("hasFeature", () => {
 		it("should return null when AUTH_SERVICE is not available", async () => {
-			const envWithoutService = {} as Cloudflare.Env;
-			const clientWithoutService = new SubscriptionClient(envWithoutService);
 			const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const clientWithoutService = new SubscriptionClient({});
 
 			const result = await clientWithoutService.hasFeature(
 				"org-123",
@@ -355,77 +293,65 @@ describe("SubscriptionClient", () => {
 		});
 
 		it("should check feature successfully", async () => {
-			const mockFeatureResult: FeatureCheckResult = {
+			mockAuthSvc.checkSubscriptionFeature.mockResolvedValue({
+				allowed: true,
+				planTier: "business",
+			});
+
+			const result = await client.hasFeature("org-123", "api_access");
+
+			const expected: FeatureCheckResult = {
 				allowed: true,
 				planTier: "business",
 			};
-
-			mockAuthService.fetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					success: true,
-					data: mockFeatureResult,
-				}),
-			});
-
-			const result = await client.hasFeature("org-123", "api_access");
-
-			expect(result).toEqual(mockFeatureResult);
-			expect(mockAuthService.fetch).toHaveBeenCalledWith(
-				expect.objectContaining({
-					url: expect.stringContaining(
-						"https://auth-svc.internal/internal/subscription/feature/check",
-					),
-				}),
+			expect(result).toEqual(expected);
+			expect(mockAuthSvc.checkSubscriptionFeature).toHaveBeenCalledWith(
+				"org-123",
+				"api_access",
 			);
 		});
 
-		it("should return null when response is not ok", async () => {
-			mockAuthService.fetch.mockResolvedValue({
-				ok: false,
-				status: 500,
-				statusText: "Internal Server Error",
+		it("should return allowed:false when feature is denied", async () => {
+			mockAuthSvc.checkSubscriptionFeature.mockResolvedValue({
+				allowed: false,
+				planTier: "business",
 			});
 
+			const result = await client.hasFeature("org-123", "api_access");
+
+			expect(result?.allowed).toBe(false);
+		});
+
+		it("should return null on RPC error", async () => {
+			mockAuthSvc.checkSubscriptionFeature.mockRejectedValue(
+				new Error("RPC error"),
+			);
 			const consoleSpy = vi
 				.spyOn(console, "error")
 				.mockImplementation(() => {});
+
 			const result = await client.hasFeature("org-123", "api_access");
 
 			expect(result).toBeNull();
 			consoleSpy.mockRestore();
 		});
 
-		it("should return null when success is false", async () => {
-			mockAuthService.fetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					success: false,
-					error: "Feature check failed",
-				}),
+		it("should use default planTier when RPC returns null", async () => {
+			mockAuthSvc.checkSubscriptionFeature.mockResolvedValue({
+				allowed: true,
+				planTier: null,
 			});
 
 			const result = await client.hasFeature("org-123", "api_access");
 
-			expect(result).toBeNull();
-		});
-
-		it("should return null on fetch error", async () => {
-			mockAuthService.fetch.mockRejectedValue(new Error("Network error"));
-
-			const consoleSpy = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
-			const result = await client.hasFeature("org-123", "api_access");
-
-			expect(result).toBeNull();
-			consoleSpy.mockRestore();
+			expect(result).not.toBeNull();
+			expect(result?.planTier).toBe("none");
 		});
 	});
 
 	describe("createSubscriptionClient", () => {
 		it("should create a subscription client instance", () => {
-			const instance = createSubscriptionClient(mockEnv);
+			const instance = createSubscriptionClient({ AUTH_SERVICE: mockAuthSvc });
 			expect(instance).toBeInstanceOf(SubscriptionClient);
 		});
 	});

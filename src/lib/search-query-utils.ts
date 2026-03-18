@@ -2,9 +2,12 @@
  * Shared utilities for search query persistence and caching.
  *
  * Two-layer storage:
- * - Layer 1: KV cache (cross-org, 24h TTL) for reduced latency
+ * - Layer 1: KV cache (cross-org, 72h TTL) for reduced latency
  * - Layer 2: D1 search_query table (org-scoped, permanent) for audit trail
  */
+
+/** TTL for PEP / adverse media KV cache: 72 hours (seconds). */
+export const GROK_CACHE_TTL_SECONDS = 259200;
 
 import { createHash } from "crypto";
 import type { PrismaClient } from "@prisma/client";
@@ -42,7 +45,7 @@ export async function readCache<T = unknown>(
 }
 
 /**
- * Write to KV cache with 24h TTL.
+ * Write to KV cache with 72h TTL.
  */
 export async function writeCache(
 	kv: KVNamespace,
@@ -51,9 +54,9 @@ export async function writeCache(
 ): Promise<void> {
 	try {
 		await kv.put(key, JSON.stringify(value), {
-			expirationTtl: 86400, // 24 hours
+			expirationTtl: GROK_CACHE_TTL_SECONDS, // 72 hours
 		});
-		console.log(`[Cache] Wrote to KV (key: ${key}, TTL: 24h)`);
+		console.log(`[Cache] Wrote to KV (key: ${key}, TTL: 72h)`);
 	} catch (error) {
 		console.error(`[Cache] Failed to write to KV (key: ${key}):`, error);
 		// Don't throw - cache failures shouldn't break the flow

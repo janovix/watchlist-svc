@@ -165,6 +165,76 @@ describe("Internal Grok PEP Endpoints", () => {
 	});
 
 	// =========================================================================
+	// POST /internal/grok-pep/progress
+	// =========================================================================
+	describe("POST /internal/grok-pep/progress", () => {
+		it("should accept progress and return success with sent count", async () => {
+			const payload = {
+				search_id: "test-progress-uuid",
+				phase: "searching",
+				message: "Searching websites...",
+			};
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/grok-pep/progress",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(payload),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = (await response.json()) as {
+				success: boolean;
+				sent: number;
+			};
+			expect(body.success).toBe(true);
+			expect(typeof body.sent).toBe("number");
+		});
+
+		it("should accept progress with optional progress number", async () => {
+			const payload = {
+				search_id: "test-progress-uuid-2",
+				phase: "analyzing",
+				message: "Analyzing...",
+				progress: 0.5,
+			};
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/grok-pep/progress",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(payload),
+				},
+			);
+
+			expect(response.status).toBe(200);
+			const body = (await response.json()) as { success: boolean };
+			expect(body.success).toBe(true);
+		});
+
+		it("should return 400 when search_id is missing", async () => {
+			const payload = {
+				phase: "thinking",
+				message: "Thinking...",
+			};
+
+			const response = await SELF.fetch(
+				"http://local.test/internal/grok-pep/progress",
+				{
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify(payload),
+				},
+			);
+
+			expect(response.status).toBe(400);
+		});
+	});
+
+	// =========================================================================
 	// POST /internal/grok-pep/failed
 	// =========================================================================
 	describe("POST /internal/grok-pep/failed", () => {
@@ -191,7 +261,7 @@ describe("Internal Grok PEP Endpoints", () => {
 		it("should handle API key errors", async () => {
 			const payload = {
 				search_id: "test-api-key-error",
-				error: "Invalid API key: XAI_API_KEY not configured",
+				error: "Invalid API key: GROK_API_KEY not configured",
 			};
 
 			const response = await SELF.fetch(

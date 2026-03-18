@@ -9,6 +9,7 @@ import {
 	bestNameScore,
 	computeMetaScore,
 	computeHybridScore,
+	passesMatchFilter,
 } from "../../lib/matching-utils";
 
 // Identifier schema
@@ -63,7 +64,7 @@ export class SearchOfacEndpoint extends OpenAPIRoute {
 					birthDate: z.string().optional(),
 					identifiers: z.array(z.string()).optional(),
 					topK: z.number().int().min(1).max(100).optional().default(50),
-					threshold: z.number().min(0).max(1).optional().default(0.7),
+					threshold: z.number().min(0).max(1).optional().default(0.875),
 				}),
 			),
 		},
@@ -313,7 +314,10 @@ export class SearchOfacEndpoint extends OpenAPIRoute {
 					metaScore,
 				);
 
-				if (hybridScore >= data.body.threshold) {
+				const accept =
+					candidate.identifierMatch ||
+					passesMatchFilter(hybridScore, nameScore, data.body.threshold);
+				if (accept) {
 					matches.push({
 						target: candidate.target,
 						score: hybridScore,

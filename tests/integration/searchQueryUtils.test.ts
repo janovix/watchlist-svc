@@ -5,6 +5,7 @@ import {
 	readCache,
 	writeCache,
 	checkAndUpdateQueryCompletion,
+	GROK_CACHE_TTL_SECONDS,
 } from "../../src/lib/search-query-utils";
 import { createPrismaClient } from "../../src/lib/prisma";
 
@@ -129,6 +130,10 @@ describe("Search Query Utils", () => {
 	// writeCache
 	// =========================================================================
 	describe("writeCache", () => {
+		it("should use 72h TTL constant (259200 seconds)", () => {
+			expect(GROK_CACHE_TTL_SECONDS).toBe(259200); // 72 * 60 * 60
+		});
+
 		it("should write value to cache", async () => {
 			const kv = (env as { WATCHLIST_KV?: KVNamespace }).WATCHLIST_KV;
 			if (!kv) {
@@ -144,7 +149,7 @@ describe("Search Query Utils", () => {
 			expect(cached).toEqual(testValue);
 		});
 
-		it("should set 24 hour TTL", async () => {
+		it("should set 72 hour TTL", async () => {
 			const kv = (env as { WATCHLIST_KV?: KVNamespace }).WATCHLIST_KV;
 			if (!kv) {
 				return;
@@ -154,7 +159,7 @@ describe("Search Query Utils", () => {
 			const testValue = { ttl: "test" };
 			await writeCache(kv, "ttl-test-key", testValue);
 
-			// TTL is 24h (86400s), we can't directly verify but write succeeds
+			// TTL is 72h (259200s), we can't directly verify but write succeeds
 			const cached = await kv.get("ttl-test-key", "json");
 			expect(cached).toEqual(testValue);
 		});

@@ -24,9 +24,69 @@ declare namespace Cloudflare {
 		 */
 		ENVIRONMENT?: string;
 		/**
-		 * Auth service binding for subscription checks
+		 * Auth service binding via `AuthSvcEntrypoint`.
+		 * Caller wrangler config must include `"entrypoint": "AuthSvcEntrypoint"`.
 		 */
-		AUTH_SERVICE?: Service;
+		AUTH_SERVICE?: {
+			fetch(request: Request | string, init?: RequestInit): Promise<Response>;
+			getJwks(): Promise<{ keys: unknown[] }>;
+			getResolvedSettings(
+				userId: string,
+				orgId?: string,
+				headers?: string,
+			): Promise<unknown>;
+			gateUsageRights(
+				orgId: string,
+				metric: string,
+				count?: number,
+			): Promise<{ allowed: boolean; [key: string]: unknown }>;
+			meterUsageRights(
+				orgId: string,
+				metric: string,
+				count?: number,
+			): Promise<void>;
+			checkUsageRights(
+				orgId: string,
+				metric: string,
+			): Promise<{ allowed: boolean; [key: string]: unknown }>;
+			getSubscriptionStatus(organizationId: string): Promise<{
+				hasSubscription: boolean;
+				isEnterprise: boolean;
+				status: string | null;
+				planTier: string | null;
+				planName: string | null;
+				features: string[];
+			} | null>;
+			reportSubscriptionUsage(
+				organizationId: string,
+				metric: string,
+				count?: number,
+			): Promise<void>;
+			checkSubscriptionUsage(
+				organizationId: string,
+				metric: string,
+			): Promise<{
+				allowed: boolean;
+				used: number;
+				included: number;
+				remaining: number;
+				overage: number;
+			} | null>;
+			checkSubscriptionFeature(
+				organizationId: string,
+				feature: string,
+			): Promise<{ allowed: boolean; planTier: string | null }>;
+			getOrganizationMembers(orgId: string): Promise<
+				Array<{
+					id: string;
+					userId: string;
+					role: string;
+					email: string;
+					name: string;
+					image: string | null;
+				}>
+			>;
+		};
 		/**
 		 * Thread service binding for creating and tracking threads
 		 */

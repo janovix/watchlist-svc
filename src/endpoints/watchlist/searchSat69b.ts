@@ -8,6 +8,7 @@ import {
 	normalizeIdentifier,
 	bestNameScore,
 	computeHybridScore,
+	passesMatchFilter,
 } from "../../lib/matching-utils";
 
 // SAT 69-B phase schema
@@ -58,7 +59,7 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 					q: z.string().min(1, "Query string is required"),
 					rfc: z.string().optional(),
 					topK: z.number().int().min(1).max(100).optional().default(50),
-					threshold: z.number().min(0).max(1).optional().default(0.7),
+					threshold: z.number().min(0).max(1).optional().default(0.875),
 				}),
 			),
 		},
@@ -331,7 +332,10 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 					0, // SAT 69-B doesn't have birth date
 				);
 
-				if (hybridScore >= data.body.threshold) {
+				const accept =
+					candidate.identifierMatch ||
+					passesMatchFilter(hybridScore, nameScore, data.body.threshold);
+				if (accept) {
 					matches.push({
 						target: candidate.target,
 						score: hybridScore,

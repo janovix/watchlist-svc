@@ -11,6 +11,7 @@ import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
 import { createPrismaClient } from "../../lib/prisma";
+import { QUERY_SOURCE } from "../../lib/query-source";
 import {
 	generateCacheKey,
 	writeCache,
@@ -112,6 +113,8 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 						findings,
 						sources,
 					}),
+					adverseMediaHasRisk: risk_level !== "none",
+					adverseMediaRiskLevel: risk_level !== "none" ? risk_level : null,
 				},
 			});
 
@@ -122,33 +125,18 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 			// Check if all search types completed
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
-			// If this is an AML-screening query, callback to aml-svc
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			// If this is an AML-screening query, callback to aml-svc via RPC
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
-					const response = await c.env.AML_SERVICE.fetch(
-						"http://aml-svc/internal/screening-callback",
-						{
-							method: "PATCH",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify({
-								queryId: search_id,
-								type: "adverse_media",
-								status: "completed",
-								matched: risk_level === "high" || risk_level === "medium",
-							}),
-						},
+					await c.env.AML_SERVICE.processScreeningCallback({
+						queryId: search_id,
+						type: "adverse_media",
+						status: "completed",
+						matched: risk_level === "high" || risk_level === "medium",
+					});
+					console.log(
+						`[InternalAdverseMedia] AML callback sent for query ${search_id}`,
 					);
-
-					if (response.ok) {
-						console.log(
-							`[InternalAdverseMedia] AML callback sent for query ${search_id}`,
-						);
-					} else {
-						const errorText = await response.text();
-						console.error(
-							`[InternalAdverseMedia] AML callback failed: ${response.status} ${errorText}`,
-						);
-					}
 				} catch (callbackError) {
 					console.error(
 						`[InternalAdverseMedia] Failed to send AML callback:`,
@@ -224,6 +212,121 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 }
 
 // =============================================================================
+// Progress payload schema (shared shape for progress events)
+// =============================================================================
+
+const progressPayloadSchema = z.object({
+	search_id: z.string().describe("Search ID for tracking"),
+	phase: z
+		.string()
+		.optional()
+		.describe("Phase identifier e.g. searching, thinking"),
+	message: z.string().optional().describe("Human-readable progress message"),
+	progress: z.number().min(0).max(1).optional().describe("Progress 0-1"),
+});
+
+// =============================================================================
+// POST /internal/adverse-media/progress - Progress updates from container
+// =============================================================================
+
+/**
+ * POST /internal/adverse-media/progress
+ * Called by adverse_media_grok container during execution to stream progress to SSE clients.
+ */
+export class InternalAdverseMediaProgressEndpoint extends OpenAPIRoute {
+	schema = {
+		tags: ["Internal"],
+		summary: "Adverse Media progress (internal)",
+		description:
+			"Called by adverse_media_grok container to broadcast progress (e.g. Searching websites..., Thinking...).",
+		security: [],
+		request: {
+			body: {
+				content: {
+					"application/json": {
+						schema: progressPayloadSchema,
+					},
+				},
+			},
+		},
+		responses: {
+			"200": {
+				description: "Progress broadcast sent",
+				content: {
+					"application/json": {
+						schema: z.object({
+							success: z.boolean(),
+							sent: z.number().int(),
+						}),
+					},
+				},
+			},
+		},
+	};
+
+	async handle(c: { env: Bindings; req: Request }) {
+		if (
+			c.env.INTERNAL_SECRET != null &&
+			c.env.INTERNAL_SECRET !== "" &&
+			c.req.headers.get("X-Internal-Secret") !== c.env.INTERNAL_SECRET
+		) {
+			return Response.json(
+				{ success: false, error: "Unauthorized" },
+				{ status: 401 },
+			);
+		}
+		let body: unknown;
+		try {
+			body = await c.req.json();
+		} catch {
+			return Response.json(
+				{ success: false, error: "Invalid JSON body" },
+				{ status: 400 },
+			);
+		}
+		const parsed = progressPayloadSchema.safeParse(body);
+		if (!parsed.success) {
+			return Response.json(
+				{
+					success: false,
+					error: "Validation failed",
+					issues: parsed.error.issues,
+				},
+				{ status: 400 },
+			);
+		}
+		const { search_id, phase, message, progress } = parsed.data;
+
+		let sent = 0;
+		if (c.env.PEP_EVENTS_DO) {
+			try {
+				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
+				const stub = c.env.PEP_EVENTS_DO.get(id);
+				const response = await stub.fetch("http://pep-events/broadcast", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						event: "adverse_media_progress",
+						payload: { phase, message, progress },
+					}),
+				});
+				if (response.ok) {
+					const result = (await response.json()) as { sent: number };
+					sent = result.sent;
+				}
+			} catch (error) {
+				console.error(
+					`[InternalAdverseMedia] Progress broadcast failed:`,
+					error,
+				);
+			}
+		}
+
+		return Response.json({ success: true, sent });
+	}
+}
+
+// =============================================================================
 // POST /internal/adverse-media/failed - Mark search as failed
 // =============================================================================
 
@@ -288,33 +391,18 @@ export class InternalAdverseMediaFailedEndpoint extends OpenAPIRoute {
 			// Check if all search types completed
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
-			// If this is an AML-screening query, callback to aml-svc
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			// If this is an AML-screening query, callback to aml-svc via RPC
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
-					const response = await c.env.AML_SERVICE.fetch(
-						"http://aml-svc/internal/screening-callback",
-						{
-							method: "PATCH",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify({
-								queryId: search_id,
-								type: "adverse_media",
-								status: "failed",
-								matched: false,
-							}),
-						},
+					await c.env.AML_SERVICE.processScreeningCallback({
+						queryId: search_id,
+						type: "adverse_media",
+						status: "failed",
+						matched: false,
+					});
+					console.log(
+						`[InternalAdverseMedia] AML callback sent for failed query ${search_id}`,
 					);
-
-					if (response.ok) {
-						console.log(
-							`[InternalAdverseMedia] AML callback sent for failed query ${search_id}`,
-						);
-					} else {
-						const errorText = await response.text();
-						console.error(
-							`[InternalAdverseMedia] AML callback failed: ${response.status} ${errorText}`,
-						);
-					}
 				} catch (callbackError) {
 					console.error(
 						`[InternalAdverseMedia] Failed to send AML callback:`,

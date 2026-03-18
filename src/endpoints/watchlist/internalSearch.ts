@@ -12,6 +12,7 @@ import type { Context } from "hono";
 import { z } from "zod";
 import { contentJson } from "chanfana";
 import { performSearch } from "../../lib/search-core";
+import { normalizeAmlSource, QUERY_SOURCE } from "../../lib/query-source";
 import type { Bindings } from "../../index";
 import { ofacMatch } from "./searchOfac";
 import { unscMatch } from "./searchUnsc";
@@ -43,7 +44,7 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 					countries: z.array(z.string()).optional(),
 					identifiers: z.array(z.string()).optional(),
 					topK: z.number().int().min(1).max(100).optional().default(50),
-					threshold: z.number().min(0).max(1).optional().default(0.7),
+					threshold: z.number().min(0).max(1).optional().default(0.875),
 				}),
 			),
 		},
@@ -149,7 +150,7 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 			countries,
 			identifiers,
 			topK = 50,
-			threshold = 0.7,
+			threshold = 0.875,
 		} = data.body as {
 			q: string;
 			entityType?: string;
@@ -173,13 +174,24 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 		});
 
 		try {
-			// Call shared search core with source from request or default to 'aml-screening'
+			// Call shared search core with normalized source (aml variants → "aml")
+			const normalizedSource = source
+				? normalizeAmlSource(source)
+				: QUERY_SOURCE.AML;
+			if (normalizedSource !== QUERY_SOURCE.AML) {
+				const err = new ApiException(
+					`Invalid source for internal AML search: only AML-originated sources are allowed`,
+				);
+				err.status = 400;
+				err.code = 400;
+				throw err;
+			}
 			const result = await performSearch({
 				env: c.env,
 				executionCtx: c.executionCtx,
 				organizationId,
 				userId,
-				source: source || "aml-screening",
+				source: normalizedSource,
 				query: q,
 				entityType,
 				birthDate,

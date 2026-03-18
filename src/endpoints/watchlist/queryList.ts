@@ -52,6 +52,13 @@ export class QueryListEndpoint extends OpenAPIRoute {
 									userId: z.string(),
 									source: z.string(),
 									status: z.string(),
+									// Resolved user display (name + avatar) when userId is an org member
+									userDisplay: z
+										.object({
+											name: z.string(),
+											image: z.string().nullable(),
+										})
+										.nullable(),
 									// Status summary (without full result blobs)
 									ofacStatus: z.string(),
 									ofacCount: z.number(),
@@ -63,6 +70,10 @@ export class QueryListEndpoint extends OpenAPIRoute {
 									pepOfficialCount: z.number(),
 									pepAiStatus: z.string(),
 									adverseMediaStatus: z.string(),
+									adverseMediaHasRisk: z.boolean(),
+									adverseMediaRiskLevel: z
+										.enum(["low", "medium", "high"])
+										.nullable(),
 									// Timestamps
 									createdAt: z.string(),
 									updatedAt: z.string(),
@@ -144,6 +155,8 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					pepOfficialCount: true,
 					pepAiStatus: true,
 					adverseMediaStatus: true,
+					adverseMediaHasRisk: true,
+					adverseMediaRiskLevel: true,
 					// Timestamps
 					createdAt: true,
 					updatedAt: true,
@@ -155,6 +168,35 @@ export class QueryListEndpoint extends OpenAPIRoute {
 				skip: offset,
 			});
 
+			// Resolve user display (name + avatar) for users on this page only.
+			// TODO: Replace with batched getUsersByIds(orgId, userIds) when auth-svc supports it to avoid fetching full org roster.
+			const pageUserIds = new Set(searchQueries.map((q) => q.userId));
+			const memberMap = new Map<
+				string,
+				{ name: string; image: string | null }
+			>();
+			try {
+				const authService = c.env.AUTH_SERVICE;
+				if (authService) {
+					const members = await authService.getOrganizationMembers(
+						organization.id,
+					);
+					for (const m of members) {
+						if (pageUserIds.has(m.userId)) {
+							memberMap.set(m.userId, {
+								name: m.name,
+								image: m.image ?? null,
+							});
+						}
+					}
+				}
+			} catch (err) {
+				console.warn(
+					"[QueryList] Failed to fetch org members for userDisplay:",
+					err instanceof Error ? err.message : String(err),
+				);
+			}
+
 			return {
 				success: true,
 				queries: searchQueries.map((q) => ({
@@ -164,6 +206,7 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					userId: q.userId,
 					source: q.source,
 					status: q.status,
+					userDisplay: memberMap.get(q.userId) ?? null,
 					ofacStatus: q.ofacStatus,
 					ofacCount: q.ofacCount,
 					sat69bStatus: q.sat69bStatus,
@@ -174,6 +217,8 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					pepOfficialCount: q.pepOfficialCount,
 					pepAiStatus: q.pepAiStatus,
 					adverseMediaStatus: q.adverseMediaStatus,
+					adverseMediaHasRisk: q.adverseMediaHasRisk,
+					adverseMediaRiskLevel: q.adverseMediaRiskLevel,
 					createdAt: q.createdAt.toISOString(),
 					updatedAt: q.updatedAt.toISOString(),
 				})),

@@ -1,10 +1,10 @@
 /**
- * Usage Rights client via auth-svc service binding
+ * Usage Rights client via auth-svc RPC service binding
  *
  * Provides gate-and-meter, check, and meter operations via the
- * /internal/usage-rights/* endpoints on auth-svc.
+ * `AuthSvcEntrypoint` RPC methods on auth-svc.
  *
- * Uses Cloudflare service bindings -- no auth headers needed.
+ * Uses Cloudflare service bindings -- no HTTP fetch needed.
  */
 
 /**
@@ -40,10 +40,30 @@ export interface GateResult {
 }
 
 /**
+ * Minimal RPC interface for auth-svc's AuthSvcEntrypoint (usage-rights methods).
+ */
+interface AuthSvcRpc {
+	gateUsageRights(
+		orgId: string,
+		metric: string,
+		count?: number,
+	): Promise<{ allowed: boolean; [key: string]: unknown }>;
+	meterUsageRights(
+		orgId: string,
+		metric: string,
+		count?: number,
+	): Promise<void>;
+	checkUsageRights(
+		orgId: string,
+		metric: string,
+	): Promise<{ allowed: boolean; [key: string]: unknown }>;
+}
+
+/**
  * Environment bindings needed for usage rights
  */
 interface UsageRightsEnv {
-	AUTH_SERVICE?: Fetcher;
+	AUTH_SERVICE?: AuthSvcRpc;
 }
 
 /**
@@ -54,7 +74,7 @@ export class UsageRightsClient {
 
 	/**
 	 * Gate-and-meter: check if action is allowed + increment meter atomically.
-	 * Returns allowed=true if permitted, allowed=false with 403 details if not.
+	 * Returns allowed=true if permitted, allowed=false with details if not.
 	 *
 	 * Fail-open: if the AUTH_SERVICE binding is unavailable, allows the action.
 	 */
@@ -72,30 +92,10 @@ export class UsageRightsClient {
 		}
 
 		try {
-			const response = await authService.fetch(
-				new Request("https://auth-svc.internal/internal/usage-rights/gate", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Accept: "application/json",
-					},
-					body: JSON.stringify({
-						organizationId: orgId,
-						metric,
-						count,
-					}),
-				}),
-			);
-
-			const { allowed: _, ...data } = (await response.json()) as GateResult;
-
-			if (response.status === 403) {
-				return { ...data, allowed: false };
-			}
-
-			return { ...data, allowed: true };
+			const data = await authService.gateUsageRights(orgId, metric, count);
+			return data as GateResult;
 		} catch (error) {
-			console.error("[UsageRights] Error calling gate:", error);
+			console.error("[UsageRights] Error calling gateUsageRights:", error);
 			return { allowed: true }; // Fail-open
 		}
 	}
@@ -113,19 +113,9 @@ export class UsageRightsClient {
 		if (!authService) return;
 
 		try {
-			await authService.fetch(
-				new Request("https://auth-svc.internal/internal/usage-rights/meter", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						organizationId: orgId,
-						metric,
-						count,
-					}),
-				}),
-			);
+			await authService.meterUsageRights(orgId, metric, count);
 		} catch (error) {
-			console.error("[UsageRights] Error calling meter:", error);
+			console.error("[UsageRights] Error calling meterUsageRights:", error);
 		}
 	}
 
@@ -137,22 +127,10 @@ export class UsageRightsClient {
 		if (!authService) return null;
 
 		try {
-			const response = await authService.fetch(
-				new Request(
-					`https://auth-svc.internal/internal/usage-rights/check?organizationId=${orgId}&metric=${metric}`,
-					{ headers: { Accept: "application/json" } },
-				),
-			);
-
-			const { allowed: _, ...data } = (await response.json()) as GateResult;
-
-			if (response.status === 403) {
-				return { ...data, allowed: false };
-			}
-
-			return { ...data, allowed: true };
+			const data = await authService.checkUsageRights(orgId, metric);
+			return data as GateResult;
 		} catch (error) {
-			console.error("[UsageRights] Error calling check:", error);
+			console.error("[UsageRights] Error calling checkUsageRights:", error);
 			return null;
 		}
 	}

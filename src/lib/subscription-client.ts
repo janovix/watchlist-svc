@@ -1,8 +1,9 @@
 /**
- * Subscription client via service binding
+ * Subscription client via auth-svc RPC service binding
  *
  * This module provides helpers for checking subscription status,
- * reporting usage, and verifying features via auth-svc service binding.
+ * reporting usage, and verifying features via the `AuthSvcEntrypoint`
+ * RPC binding on auth-svc.
  */
 
 /**
@@ -74,13 +75,46 @@ export interface SubscriptionStatus {
 }
 
 /**
- * Subscription client for auth-svc communication
+ * Minimal RPC interface for auth-svc subscription methods
+ */
+interface AuthSvcSubscriptionRpc {
+	getSubscriptionStatus(organizationId: string): Promise<{
+		hasSubscription: boolean;
+		isEnterprise: boolean;
+		status: string | null;
+		planTier: string | null;
+		planName: string | null;
+		features: string[];
+	} | null>;
+	reportSubscriptionUsage(
+		organizationId: string,
+		metric: string,
+		count?: number,
+	): Promise<void>;
+	checkSubscriptionUsage(
+		organizationId: string,
+		metric: string,
+	): Promise<{
+		allowed: boolean;
+		used: number;
+		included: number;
+		remaining: number;
+		overage: number;
+	} | null>;
+	checkSubscriptionFeature(
+		organizationId: string,
+		feature: string,
+	): Promise<{ allowed: boolean; planTier: string | null }>;
+}
+
+/**
+ * Subscription client for auth-svc communication via RPC
  */
 export class SubscriptionClient {
-	private env: Cloudflare.Env;
+	private authService: AuthSvcSubscriptionRpc | undefined;
 
-	constructor(env: Cloudflare.Env) {
-		this.env = env;
+	constructor(env: { AUTH_SERVICE?: unknown }) {
+		this.authService = env.AUTH_SERVICE as AuthSvcSubscriptionRpc | undefined;
 	}
 
 	/**
@@ -89,8 +123,7 @@ export class SubscriptionClient {
 	async getSubscriptionStatus(
 		organizationId: string,
 	): Promise<SubscriptionStatus | null> {
-		const authService = this.env.AUTH_SERVICE;
-		if (!authService) {
+		if (!this.authService) {
 			console.warn(
 				"AUTH_SERVICE binding not available, skipping subscription check",
 			);
@@ -98,37 +131,17 @@ export class SubscriptionClient {
 		}
 
 		try {
-			const response = await authService.fetch(
-				new Request(
-					`https://auth-svc.internal/internal/subscription/status?organizationId=${organizationId}`,
-					{
-						method: "GET",
-						headers: {
-							Accept: "application/json",
-						},
-					},
-				),
-			);
+			const data = await this.authService.getSubscriptionStatus(organizationId);
+			if (!data) return null;
 
-			if (!response.ok) {
-				console.error(
-					`Failed to get subscription status: ${response.status} ${response.statusText}`,
-				);
-				return null;
-			}
-
-			const result = (await response.json()) as {
-				success: boolean;
-				data: SubscriptionStatus;
-				error?: string;
+			return {
+				hasSubscription: data.hasSubscription,
+				isEnterprise: data.isEnterprise,
+				status: (data.status ?? "inactive") as SubscriptionStatus["status"],
+				planTier: (data.planTier ?? "none") as PlanTier,
+				planName: data.planName,
+				features: (data.features ?? []) as Feature[],
 			};
-
-			if (!result.success) {
-				console.error("Subscription status check failed:", result.error);
-				return null;
-			}
-
-			return result.data;
 		} catch (error) {
 			console.error("Error getting subscription status:", error);
 			return null;
@@ -137,116 +150,65 @@ export class SubscriptionClient {
 
 	/**
 	 * Report usage increment (call after finding matches in watchlists)
-	 *
-	 * @param organizationId - Organization ID
-	 * @param metric - Usage metric type
-	 * @param count - Number of items created (default 1)
-	 * @returns Updated usage status or null if failed
 	 */
 	async reportUsage(
 		organizationId: string,
 		metric: UsageMetric,
 		count: number = 1,
-	): Promise<UsageCheckResult | null> {
-		const authService = this.env.AUTH_SERVICE;
-		if (!authService) {
+	): Promise<void> {
+		if (!this.authService) {
 			console.warn("AUTH_SERVICE binding not available, skipping usage report");
-			return null;
+			return;
 		}
 
 		try {
-			const response = await authService.fetch(
-				new Request(
-					"https://auth-svc.internal/internal/subscription/usage/report",
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Accept: "application/json",
-						},
-						body: JSON.stringify({
-							organizationId,
-							metric,
-							count,
-						}),
-					},
-				),
+			await this.authService.reportSubscriptionUsage(
+				organizationId,
+				metric,
+				count,
 			);
-
-			if (!response.ok) {
-				console.error(
-					`Failed to report usage: ${response.status} ${response.statusText}`,
-				);
-				return null;
-			}
-
-			const result = (await response.json()) as {
-				success: boolean;
-				data: UsageCheckResult;
-				error?: string;
-			};
-
-			if (!result.success) {
-				console.error("Usage report failed:", result.error);
-				return null;
-			}
-
-			return result.data;
 		} catch (error) {
 			console.error("Error reporting usage:", error);
-			return null;
+			throw error;
 		}
 	}
 
 	/**
 	 * Check if usage is allowed before performing action
-	 *
-	 * @param organizationId - Organization ID
-	 * @param metric - Usage metric to check
-	 * @returns Usage check result or null if failed
 	 */
 	async checkUsage(
 		organizationId: string,
 		metric: UsageMetric | "users",
 	): Promise<UsageCheckResult | null> {
-		const authService = this.env.AUTH_SERVICE;
-		if (!authService) {
+		if (!this.authService) {
 			console.warn("AUTH_SERVICE binding not available, allowing action");
 			return null;
 		}
 
 		try {
-			const response = await authService.fetch(
-				new Request(
-					"https://auth-svc.internal/internal/subscription/usage/check",
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Accept: "application/json",
-						},
-						body: JSON.stringify({
-							organizationId,
-							metric,
-						}),
-					},
-				),
+			const data = await this.authService.checkSubscriptionUsage(
+				organizationId,
+				metric,
 			);
+			if (!data) return null;
 
-			if (!response.ok) {
-				console.error(
-					`Failed to check usage: ${response.status} ${response.statusText}`,
-				);
-				return null;
-			}
-
-			const result = (await response.json()) as {
-				success: boolean;
-				data: UsageCheckResult;
-				error?: string;
+			const d = data as {
+				allowed?: boolean;
+				used?: number;
+				included?: number;
+				remaining?: number;
+				overage?: number;
+				planTier?: string;
+				tier?: string;
 			};
-
-			return result.success ? result.data : null;
+			return {
+				allowed: d.allowed ?? false,
+				used: d.used ?? 0,
+				included: d.included ?? 0,
+				remaining: d.remaining ?? 0,
+				overage: d.overage ?? 0,
+				planTier: (d.planTier ?? d.tier ?? "none") as PlanTier,
+			};
 		} catch (error) {
 			console.error("Error checking usage:", error);
 			return null;
@@ -255,53 +217,25 @@ export class SubscriptionClient {
 
 	/**
 	 * Check if organization has access to a feature
-	 *
-	 * @param organizationId - Organization ID
-	 * @param feature - Feature to check
-	 * @returns Feature check result or null if failed
 	 */
 	async hasFeature(
 		organizationId: string,
 		feature: Feature,
 	): Promise<FeatureCheckResult | null> {
-		const authService = this.env.AUTH_SERVICE;
-		if (!authService) {
+		if (!this.authService) {
 			console.warn("AUTH_SERVICE binding not available, allowing feature");
 			return null;
 		}
 
 		try {
-			const response = await authService.fetch(
-				new Request(
-					"https://auth-svc.internal/internal/subscription/feature/check",
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-							Accept: "application/json",
-						},
-						body: JSON.stringify({
-							organizationId,
-							feature,
-						}),
-					},
-				),
+			const data = await this.authService.checkSubscriptionFeature(
+				organizationId,
+				feature,
 			);
-
-			if (!response.ok) {
-				console.error(
-					`Failed to check feature: ${response.status} ${response.statusText}`,
-				);
-				return null;
-			}
-
-			const result = (await response.json()) as {
-				success: boolean;
-				data: FeatureCheckResult;
-				error?: string;
+			return {
+				allowed: data.allowed,
+				planTier: (data.planTier ?? "none") as PlanTier,
 			};
-
-			return result.success ? result.data : null;
 		} catch (error) {
 			console.error("Error checking feature:", error);
 			return null;
@@ -312,8 +246,8 @@ export class SubscriptionClient {
 /**
  * Create a subscription client instance
  */
-export function createSubscriptionClient(
-	env: Cloudflare.Env,
-): SubscriptionClient {
+export function createSubscriptionClient(env: {
+	AUTH_SERVICE?: unknown;
+}): SubscriptionClient {
 	return new SubscriptionClient(env);
 }
