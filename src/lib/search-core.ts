@@ -971,6 +971,9 @@ export async function performSearch(
 						source: "watchlist-svc",
 						triggered_by: "search",
 						needs_grok_key: true,
+						...(env.GROK_API_KEY && {
+							env: { GROK_API_KEY: env.GROK_API_KEY },
+						}),
 					},
 				};
 
@@ -1085,6 +1088,9 @@ export async function performSearch(
 						source: "watchlist-svc",
 						triggered_by: "search",
 						needs_grok_key: true,
+						...(env.GROK_API_KEY && {
+							env: { GROK_API_KEY: env.GROK_API_KEY },
+						}),
 					},
 				};
 

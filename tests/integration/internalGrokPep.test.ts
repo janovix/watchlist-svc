@@ -261,7 +261,7 @@ describe("Internal Grok PEP Endpoints", () => {
 		it("should handle API key errors", async () => {
 			const payload = {
 				search_id: "test-api-key-error",
-				error: "Invalid API key: XAI_API_KEY not configured",
+				error: "Invalid API key: GROK_API_KEY not configured",
 			};
 
 			const response = await SELF.fetch(
