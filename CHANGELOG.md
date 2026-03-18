@@ -1,3 +1,10 @@
+# [1.6.0-rc.12](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.11...v1.6.0-rc.12) (2026-03-18)
+
+
+### Bug Fixes
+
+* **search:** update performSearch to include GROK_API_KEY in environment configuration and adjust error message in tests ([15c842c](https://github.com/janovix/watchlist-svc/commit/15c842cdf748d4e511450eb1c4bb97e985d1feca))
+
 # [1.6.0-rc.11](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.10...v1.6.0-rc.11) (2026-03-18)
 
 
