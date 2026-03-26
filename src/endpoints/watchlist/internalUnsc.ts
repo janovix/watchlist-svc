@@ -540,58 +540,44 @@ export class InternalUnscCompleteEndpoint extends OpenAPIRoute {
 
 			try {
 				const callbackUrl = getCallbackUrl(c.env.ENVIRONMENT);
-				const response = await c.env.THREAD_SVC.fetch(
-					"http://thread-svc/threads",
-					{
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({
-							task_type: "vectorize_index",
-							job_params: {
-								dataset: "unsc",
-								reindex_all: true,
-								batch_size: 100,
-								callback_url: callbackUrl,
-								triggered_by: `unsc_ingestion_run_${run_id}`,
-							},
-							metadata: {
-								source: "auto_trigger",
-								unsc_run_id: run_id,
-								total_records: total_records,
-							},
-						}),
+				const thread = await c.env.THREAD_SVC.createThread({
+					task_type: "vectorize_index",
+					job_params: {
+						dataset: "unsc",
+						reindex_all: true,
+						batch_size: 100,
+						callback_url: callbackUrl,
+						triggered_by: `unsc_ingestion_run_${run_id}`,
 					},
+					metadata: {
+						source: "auto_trigger",
+						unsc_run_id: run_id,
+						total_records: total_records,
+					},
+				});
+
+				vectorizeThreadId = thread.id;
+				console.log(
+					`[InternalUnsc] Vectorization thread created: ${vectorizeThreadId}`,
 				);
 
-				if (response.ok) {
-					const thread = (await response.json()) as { id: string };
-					vectorizeThreadId = thread.id;
+				// Update the run with the vectorize thread ID and phase
+				try {
+					await prisma.watchlistIngestionRun.update({
+						where: { id: run_id },
+						data: {
+							vectorizeThreadId: vectorizeThreadId,
+							progressPhase: "vectorizing",
+							progressUpdatedAt: new Date(),
+						},
+					});
 					console.log(
-						`[InternalUnsc] Vectorization thread created: ${vectorizeThreadId}`,
+						`[InternalUnsc] Run ${run_id} updated with vectorize thread ID`,
 					);
-
-					// Update the run with the vectorize thread ID and phase
-					try {
-						await prisma.watchlistIngestionRun.update({
-							where: { id: run_id },
-							data: {
-								vectorizeThreadId: vectorizeThreadId,
-								progressPhase: "vectorizing",
-								progressUpdatedAt: new Date(),
-							},
-						});
-						console.log(
-							`[InternalUnsc] Run ${run_id} updated with vectorize thread ID`,
-						);
-					} catch (updateErr) {
-						console.error(
-							`[InternalUnsc] Failed to update run with vectorize thread ID:`,
-							updateErr,
-						);
-					}
-				} else {
+				} catch (updateErr) {
 					console.error(
-						`[InternalUnsc] Failed to create vectorization thread: ${response.status}`,
+						`[InternalUnsc] Failed to update run with vectorize thread ID:`,
+						updateErr,
 					);
 				}
 			} catch (e) {

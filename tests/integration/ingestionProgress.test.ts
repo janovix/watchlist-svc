@@ -262,12 +262,12 @@ describe("Ingestion Progress API", () => {
 describe("IngestionProgressEndpoint.handle() - Vectorize Progress", () => {
 	let endpoint: IngestionProgressEndpoint;
 	let prisma: ReturnType<typeof createPrismaClient>;
-	let mockThreadSvc: { fetch: ReturnType<typeof vi.fn> };
+	let mockThreadSvc: { getThread: ReturnType<typeof vi.fn> };
 
 	beforeEach(() => {
 		endpoint = new (IngestionProgressEndpoint as any)();
 		prisma = createPrismaClient((env as any).DB);
-		mockThreadSvc = { fetch: vi.fn() };
+		mockThreadSvc = { getThread: vi.fn() };
 	});
 
 	it("should combine ingestion and vectorize progress when thread running", async () => {
@@ -285,12 +285,11 @@ describe("IngestionProgressEndpoint.handle() - Vectorize Progress", () => {
 			},
 		});
 
-		// Mock THREAD_SVC response with 50% progress
-		mockThreadSvc.fetch.mockResolvedValueOnce(
-			new Response(JSON.stringify({ status: "RUNNING", progress: 50 }), {
-				status: 200,
-			}),
-		);
+		// Mock getThread RPC response with 50% progress
+		mockThreadSvc.getThread.mockResolvedValueOnce({
+			status: "RUNNING",
+			progress: 50,
+		});
 
 		const mockEnv = {
 			DB: (env as any).DB,
@@ -328,11 +327,7 @@ describe("IngestionProgressEndpoint.handle() - Vectorize Progress", () => {
 			},
 		});
 
-		mockThreadSvc.fetch.mockResolvedValueOnce(
-			new Response(JSON.stringify({ status: "COMPLETED" }), {
-				status: 200,
-			}),
-		);
+		mockThreadSvc.getThread.mockResolvedValueOnce({ status: "COMPLETED" });
 
 		const mockEnv = {
 			DB: (env as any).DB,
@@ -366,11 +361,7 @@ describe("IngestionProgressEndpoint.handle() - Vectorize Progress", () => {
 			},
 		});
 
-		mockThreadSvc.fetch.mockResolvedValueOnce(
-			new Response(JSON.stringify({ status: "FAILED" }), {
-				status: 200,
-			}),
-		);
+		mockThreadSvc.getThread.mockResolvedValueOnce({ status: "FAILED" });
 
 		const mockEnv = {
 			DB: (env as any).DB,
@@ -404,7 +395,7 @@ describe("IngestionProgressEndpoint.handle() - Vectorize Progress", () => {
 			},
 		});
 
-		mockThreadSvc.fetch.mockRejectedValueOnce(new Error("Network error"));
+		mockThreadSvc.getThread.mockRejectedValueOnce(new Error("Network error"));
 
 		const mockEnv = {
 			DB: (env as any).DB,
@@ -452,10 +443,10 @@ describe("IngestionProgressEndpoint.handle() - Vectorize Progress", () => {
 		await endpoint.handle({ env: mockEnv, req: {} as any } as any);
 
 		// Should never call THREAD_SVC
-		expect(mockThreadSvc.fetch).not.toHaveBeenCalled();
+		expect(mockThreadSvc.getThread).not.toHaveBeenCalled();
 	});
 
-	it("should handle THREAD_SVC 500 response", async () => {
+	it("should handle THREAD_SVC RPC error gracefully", async () => {
 		const prisma = createPrismaClient((env as any).DB);
 
 		const run = await prisma.watchlistIngestionRun.create({
@@ -469,11 +460,8 @@ describe("IngestionProgressEndpoint.handle() - Vectorize Progress", () => {
 			},
 		});
 
-		mockThreadSvc.fetch.mockResolvedValueOnce(
-			new Response(JSON.stringify({ error: "Internal error" }), {
-				status: 500,
-			}),
-		);
+		// RPC returning null simulates thread not found / error
+		mockThreadSvc.getThread.mockResolvedValueOnce(null);
 
 		const mockEnv = {
 			DB: (env as any).DB,

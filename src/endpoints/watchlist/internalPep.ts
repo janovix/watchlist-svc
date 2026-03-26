@@ -12,6 +12,7 @@ import { z } from "zod";
 import type { Bindings } from "../../index";
 import { createHash } from "crypto";
 import { createPrismaClient } from "../../lib/prisma";
+import { QUERY_SOURCE } from "../../lib/query-source";
 import { checkAndUpdateQueryCompletion } from "../../lib/search-query-utils";
 
 // =============================================================================
@@ -159,12 +160,12 @@ export class InternalPepResultsEndpoint extends OpenAPIRoute {
 				};
 
 				await c.env.PEP_CACHE.put(cacheKey, JSON.stringify(cacheData), {
-					expirationTtl: 86400, // 24 hours
+					expirationTtl: 259200, // 72 hours
 				});
 
 				cached = true;
 				console.log(
-					`[InternalPep] Cached ${results_sent} results for query "${query}" (TTL: 24h)`,
+					`[InternalPep] Cached ${results_sent} results for query "${query}" (TTL: 72h)`,
 				);
 			} catch (error) {
 				console.error(`[InternalPep] Failed to cache results:`, error);
@@ -196,33 +197,16 @@ export class InternalPepResultsEndpoint extends OpenAPIRoute {
 			// Check if all searches are done and update overall status
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
-			// If this is an AML-screening query, callback to aml-svc
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			// If this is an AML-screening query, callback to aml-svc via RPC
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
-					const response = await c.env.AML_SERVICE.fetch(
-						"http://aml-svc/internal/screening-callback",
-						{
-							method: "PATCH",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify({
-								queryId: search_id,
-								type: "pep_official",
-								status: "completed",
-								matched: results_sent > 0,
-							}),
-						},
-					);
-
-					if (response.ok) {
-						console.log(
-							`[InternalPep] AML callback sent for query ${search_id}`,
-						);
-					} else {
-						const errorText = await response.text();
-						console.error(
-							`[InternalPep] AML callback failed: ${response.status} ${errorText}`,
-						);
-					}
+					await c.env.AML_SERVICE.processScreeningCallback({
+						queryId: search_id,
+						type: "pep_official",
+						status: "completed",
+						matched: results_sent > 0,
+					});
+					console.log(`[InternalPep] AML callback sent for query ${search_id}`);
 				} catch (callbackError) {
 					console.error(
 						`[InternalPep] Failed to send AML callback:`,
@@ -368,32 +352,17 @@ export class InternalPepFailedEndpoint extends OpenAPIRoute {
 			await checkAndUpdateQueryCompletion(prisma, search_id);
 
 			// If this is an AML-screening query, callback to aml-svc
-			if (searchQuery.source === "aml-screening" && c.env.AML_SERVICE) {
+			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
 				try {
-					const response = await c.env.AML_SERVICE.fetch(
-						"http://aml-svc/internal/screening-callback",
-						{
-							method: "PATCH",
-							headers: { "Content-Type": "application/json" },
-							body: JSON.stringify({
-								queryId: search_id,
-								type: "pep_official",
-								status: "failed",
-								matched: false,
-							}),
-						},
+					await c.env.AML_SERVICE.processScreeningCallback({
+						queryId: search_id,
+						type: "pep_official",
+						status: "failed",
+						matched: false,
+					});
+					console.log(
+						`[InternalPep] AML callback sent for failed query ${search_id}`,
 					);
-
-					if (response.ok) {
-						console.log(
-							`[InternalPep] AML callback sent for failed query ${search_id}`,
-						);
-					} else {
-						const errorText = await response.text();
-						console.error(
-							`[InternalPep] AML callback failed: ${response.status} ${errorText}`,
-						);
-					}
 				} catch (callbackError) {
 					console.error(
 						`[InternalPep] Failed to send AML callback:`,

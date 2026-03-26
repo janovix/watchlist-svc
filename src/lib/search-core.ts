@@ -4,7 +4,11 @@
 
 import { ApiException } from "chanfana";
 import { createPrismaClient } from "./prisma";
-import { checkAndUpdateQueryCompletion } from "./search-query-utils";
+import {
+	checkAndUpdateQueryCompletion,
+	generateCacheKey,
+	readCache,
+} from "./search-query-utils";
 import { parseVectorId } from "./ofac-vectorize-service";
 import { getCallbackUrl } from "./callback-utils";
 import {
@@ -12,6 +16,7 @@ import {
 	bestNameScore,
 	computeMetaScore,
 	computeHybridScore,
+	passesMatchFilter,
 } from "./matching-utils";
 import { createHash } from "crypto";
 import type { Bindings } from "../index";
@@ -96,7 +101,7 @@ export interface SearchParams {
 	executionCtx: ExecutionContext;
 	organizationId: string;
 	userId: string;
-	source: string; // 'manual' | 'aml-screening'
+	source: string; // canonical: 'aml' | 'manual' | etc.
 	query: string;
 	entityType?: string;
 	birthDate?: string;
@@ -154,12 +159,12 @@ export interface SearchResult {
 	};
 	pepAiSearch?: {
 		searchId: string;
-		status: "completed" | "pending" | "skipped" | "disabled";
+		status: "completed" | "pending" | "skipped" | "disabled" | "failed";
 		result: unknown | null;
 	};
 	adverseMediaSearch?: {
 		searchId: string;
-		status: "completed" | "pending" | "disabled";
+		status: "completed" | "pending" | "disabled" | "failed";
 		result: unknown | null;
 	};
 }
@@ -182,7 +187,7 @@ export async function performSearch(
 		countries,
 		identifiers,
 		topK = 50,
-		threshold = 0.7,
+		threshold = 0.875,
 	} = params;
 
 	// Generate query ID for persistent tracking and SSE subscription
@@ -730,8 +735,8 @@ export async function performSearch(
 			);
 		}
 
-		// Filter by threshold
-		if (finalScore < threshold) continue;
+		// Filter by threshold (or name-score override for exact/near-exact name matches)
+		if (!passesMatchFilter(finalScore, nameScore, threshold)) continue;
 
 		const match = {
 			target: candidate.target,
@@ -866,21 +871,11 @@ export async function performSearch(
 
 				// Fire-and-forget: use waitUntil to prevent cancellation
 				executionCtx.waitUntil(
-					env.THREAD_SVC.fetch("http://thread-svc/threads", {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify(threadPayload),
-					})
-						.then((response) => {
-							if (response.ok) {
-								console.log(
-									`[SearchCore] PEP search thread created for query "${query}"`,
-								);
-							} else {
-								console.error(
-									`[SearchCore] Failed to create PEP thread: ${response.status}`,
-								);
-							}
+					env.THREAD_SVC.createThread(threadPayload)
+						.then((thread) => {
+							console.log(
+								`[SearchCore] PEP search thread created for query "${query}": ${thread.id}`,
+							);
 						})
 						.catch((error) => {
 							console.error(`[SearchCore] Error creating PEP thread:`, error);
@@ -904,7 +899,7 @@ export async function performSearch(
 	let pepAiSearch:
 		| {
 				searchId: string;
-				status: "completed" | "pending" | "skipped" | "disabled";
+				status: "completed" | "pending" | "skipped" | "disabled" | "failed";
 				result: unknown | null;
 		  }
 		| undefined = undefined;
@@ -921,57 +916,86 @@ export async function performSearch(
 	} else if (entityType === "person" && env.THREAD_SVC) {
 		try {
 			const pepAiSearchId = queryId; // Use queryId for unified SSE
-			const callbackUrl =
-				getCallbackUrl(env.ENVIRONMENT) + "/internal/grok-pep";
 
-			const threadPayload = {
-				task_type: "pep_grok",
-				job_params: {
-					query: query,
-					callback_url: callbackUrl,
-					search_id: pepAiSearchId,
-					birthdate: birthDate,
-					country: countries?.[0],
-				},
-				metadata: {
-					source: "watchlist-svc",
-					triggered_by: "search",
-					env: {
-						XAI_API_KEY: env.GROK_API_KEY,
+			// Check KV cache before triggering pep_grok thread
+			const cacheEnabled = env.PEP_CACHE_ENABLED === "true";
+			let cachedPepAi: unknown = null;
+			if (cacheEnabled && env.PEP_CACHE) {
+				try {
+					const pepCacheSuffix = [entityType, birthDate, countries?.[0]]
+						.filter(Boolean)
+						.join(":");
+					const cacheKey = generateCacheKey(
+						"pep_ai",
+						query,
+						pepCacheSuffix || undefined,
+					);
+					cachedPepAi = await readCache(env.PEP_CACHE, cacheKey);
+					if (cachedPepAi) {
+						console.log(`[SearchCore] PEP Grok cache hit for query "${query}"`);
+						pepAiSearch = {
+							searchId: pepAiSearchId,
+							status: "completed",
+							result: cachedPepAi,
+						};
+						await prisma.searchQuery.update({
+							where: { id: queryId },
+							data: {
+								pepAiStatus: "completed",
+								pepAiResult: JSON.stringify(cachedPepAi),
+							},
+						});
+						await checkAndUpdateQueryCompletion(prisma, queryId);
+					}
+				} catch (error) {
+					console.warn(`[SearchCore] Failed to check PEP Grok cache:`, error);
+				}
+			}
+
+			if (!cachedPepAi) {
+				const baseUrl = getCallbackUrl(env.ENVIRONMENT);
+				const callbackUrl = baseUrl + "/internal/grok-pep";
+				const progressCallbackUrl = baseUrl + "/internal/grok-pep/progress";
+
+				const threadPayload = {
+					task_type: "pep_grok",
+					job_params: {
+						query: query,
+						callback_url: callbackUrl,
+						progress_callback_url: progressCallbackUrl,
+						search_id: pepAiSearchId,
+						birthdate: birthDate,
+						country: countries?.[0],
 					},
-				},
-			};
+					metadata: {
+						source: "watchlist-svc",
+						triggered_by: "search",
+						needs_grok_key: true,
+						...(env.GROK_API_KEY && {
+							env: { GROK_API_KEY: env.GROK_API_KEY },
+						}),
+					},
+				};
 
-			executionCtx.waitUntil(
-				env.THREAD_SVC.fetch("http://thread-svc/threads", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(threadPayload),
-				})
-					.then((response) => {
-						if (response.ok) {
-							console.log(
-								`[SearchCore] Grok PEP AI search thread created for query "${query}"`,
-							);
-						} else {
-							console.error(
-								`[SearchCore] Failed to create Grok PEP thread: ${response.status}`,
-							);
-						}
-					})
-					.catch((error) => {
-						console.error(
-							`[SearchCore] Error creating Grok PEP thread:`,
-							error,
-						);
-					}),
-			);
-
-			pepAiSearch = {
-				searchId: pepAiSearchId,
-				status: "pending",
-				result: null,
-			};
+				try {
+					await env.THREAD_SVC.createThread(threadPayload);
+					pepAiSearch = {
+						searchId: pepAiSearchId,
+						status: "pending",
+						result: null,
+					};
+				} catch (threadError) {
+					console.error(
+						`[SearchCore] Error creating Grok PEP thread:`,
+						threadError,
+					);
+					pepAiSearch = {
+						searchId: pepAiSearchId,
+						status: "failed",
+						result: null,
+					};
+				}
+			}
 		} catch (error) {
 			console.error(`[SearchCore] Failed to trigger Grok PEP search:`, error);
 			// Don't fail the whole search if Grok PEP fails
@@ -990,7 +1014,7 @@ export async function performSearch(
 	let adverseMediaSearch:
 		| {
 				searchId: string;
-				status: "completed" | "pending" | "disabled";
+				status: "completed" | "pending" | "disabled" | "failed";
 				result: unknown | null;
 		  }
 		| undefined = undefined;
@@ -1009,58 +1033,86 @@ export async function performSearch(
 	} else if (env.THREAD_SVC) {
 		try {
 			const adverseMediaSearchId = queryId; // Use queryId for unified SSE
-			const callbackUrl =
-				getCallbackUrl(env.ENVIRONMENT) + "/internal/adverse-media";
 
-			const threadPayload = {
-				task_type: "adverse_media_grok",
-				job_params: {
-					query: query,
-					callback_url: callbackUrl,
-					search_id: adverseMediaSearchId,
-					entity_type: entityType,
-					birthdate: birthDate,
-					country: countries?.[0],
-				},
-				metadata: {
-					source: "watchlist-svc",
-					triggered_by: "search",
-					env: {
-						XAI_API_KEY: env.GROK_API_KEY,
-					},
-				},
-			};
-
-			executionCtx.waitUntil(
-				env.THREAD_SVC.fetch("http://thread-svc/threads", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(threadPayload),
-				})
-					.then((response) => {
-						if (response.ok) {
-							console.log(
-								`[SearchCore] Adverse media Grok search thread created for query "${query}"`,
-							);
-						} else {
-							console.error(
-								`[SearchCore] Failed to create adverse media thread: ${response.status}`,
-							);
-						}
-					})
-					.catch((error) => {
-						console.error(
-							`[SearchCore] Error creating adverse media thread:`,
-							error,
+			// Check KV cache before triggering adverse_media_grok thread
+			const cacheEnabled = env.PEP_CACHE_ENABLED === "true";
+			let cachedAdverseMedia: unknown = null;
+			if (cacheEnabled && env.PEP_CACHE) {
+				try {
+					const cacheKey = generateCacheKey("adverse_media", query, entityType);
+					cachedAdverseMedia = await readCache(env.PEP_CACHE, cacheKey);
+					if (cachedAdverseMedia) {
+						console.log(
+							`[SearchCore] Adverse media cache hit for query "${query}" (entity: ${entityType})`,
 						);
-					}),
-			);
+						adverseMediaSearch = {
+							searchId: adverseMediaSearchId,
+							status: "completed",
+							result: cachedAdverseMedia,
+						};
+						await prisma.searchQuery.update({
+							where: { id: queryId },
+							data: {
+								adverseMediaStatus: "completed",
+								adverseMediaResult: JSON.stringify(cachedAdverseMedia),
+							},
+						});
+						await checkAndUpdateQueryCompletion(prisma, queryId);
+					}
+				} catch (error) {
+					console.warn(
+						`[SearchCore] Failed to check adverse media cache:`,
+						error,
+					);
+				}
+			}
 
-			adverseMediaSearch = {
-				searchId: adverseMediaSearchId,
-				status: "pending",
-				result: null,
-			};
+			if (!cachedAdverseMedia) {
+				const baseUrl = getCallbackUrl(env.ENVIRONMENT);
+				const callbackUrl = baseUrl + "/internal/adverse-media";
+				const progressCallbackUrl =
+					baseUrl + "/internal/adverse-media/progress";
+
+				const threadPayload = {
+					task_type: "adverse_media_grok",
+					job_params: {
+						query: query,
+						callback_url: callbackUrl,
+						progress_callback_url: progressCallbackUrl,
+						search_id: adverseMediaSearchId,
+						entity_type: entityType,
+						birthdate: birthDate,
+						country: countries?.[0],
+					},
+					metadata: {
+						source: "watchlist-svc",
+						triggered_by: "search",
+						needs_grok_key: true,
+						...(env.GROK_API_KEY && {
+							env: { GROK_API_KEY: env.GROK_API_KEY },
+						}),
+					},
+				};
+
+				try {
+					await env.THREAD_SVC.createThread(threadPayload);
+					adverseMediaSearch = {
+						searchId: adverseMediaSearchId,
+						status: "pending",
+						result: null,
+					};
+				} catch (threadError) {
+					console.error(
+						`[SearchCore] Error creating adverse media thread:`,
+						threadError,
+					);
+					adverseMediaSearch = {
+						searchId: adverseMediaSearchId,
+						status: "failed",
+						result: null,
+					};
+				}
+			}
 		} catch (error) {
 			console.error(
 				`[SearchCore] Failed to trigger adverse media search:`,

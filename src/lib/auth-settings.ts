@@ -1,8 +1,8 @@
 /**
- * Auth Settings integration via service binding
+ * Auth Settings integration via auth-svc RPC service binding
  *
  * This module provides helpers for fetching user settings from auth-svc
- * via Cloudflare service binding.
+ * via the `AuthSvcEntrypoint` RPC binding.
  */
 
 import type { Bindings } from "../index";
@@ -100,37 +100,27 @@ export async function getResolvedSettings(
 	}
 
 	try {
-		const params = new URLSearchParams();
-		params.set("userId", userId);
-		if (orgId) {
-			params.set("orgId", orgId);
-		}
-		if (browserHints) {
-			params.set("headers", encodeBrowserHints(browserHints));
-		}
-
-		const response = await authService.fetch(
-			new Request(
-				`https://auth-svc.internal/internal/settings/resolved?${params}`,
-				{
-					headers: { Accept: "application/json" },
-				},
-			),
+		const headersEncoded = browserHints
+			? encodeBrowserHints(browserHints)
+			: undefined;
+		const result = await authService.getResolvedSettings(
+			userId,
+			orgId,
+			headersEncoded,
 		);
 
-		if (!response.ok) {
-			console.error(
-				`Failed to fetch settings: ${response.status} ${response.statusText}`,
-			);
-			return null;
+		if (!result || typeof result !== "object") return null;
+
+		const typed = result as {
+			success?: boolean;
+			data?: ResolvedSettings;
+		} & ResolvedSettings;
+		// Auth-svc returns { success, data? } envelope
+		if ("success" in typed && typeof typed.success === "boolean") {
+			return typed.success ? (typed.data ?? null) : null;
 		}
-
-		const result = (await response.json()) as {
-			success: boolean;
-			data: ResolvedSettings;
-		};
-
-		return result.success ? result.data : null;
+		// Direct object (already resolved)
+		return typed as ResolvedSettings;
 	} catch (error) {
 		console.error("Error fetching settings from auth-svc:", error);
 		return null;

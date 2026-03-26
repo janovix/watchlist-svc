@@ -76,23 +76,17 @@ export class IngestionProgressEndpoint extends OpenAPIRoute {
 		// Si hay vectorización en progreso, consultar su progreso
 		if (run.vectorizeThreadId && c.env.THREAD_SVC) {
 			try {
-				const threadResponse = await c.env.THREAD_SVC.fetch(
-					`http://thread-svc/threads/${run.vectorizeThreadId}`,
-				);
+				const thread = await c.env.THREAD_SVC.getThread(run.vectorizeThreadId);
 
-				if (threadResponse.ok) {
-					const thread = (await threadResponse.json()) as {
-						status: string;
-						progress?: number;
-						phase?: string;
-					};
-
+				if (thread) {
 					// Si vectorización está en progreso, combinar porcentajes
 					if (thread.status === "RUNNING") {
-						const vectorizeProgress = thread.progress ?? 0; // 0-100
+						const vectorizeProgress =
+							typeof thread.progress === "number" ? thread.progress : 0;
 						// Ingestion = 0-70%, Vectorize = 70-100%
 						finalPercentage = 70 + Math.round(vectorizeProgress * 0.3);
-						phase = thread.phase ?? "vectorizing";
+						phase =
+							typeof thread.phase === "string" ? thread.phase : "vectorizing";
 					} else if (thread.status === "COMPLETED") {
 						finalPercentage = 100;
 						phase = "completed";
@@ -101,10 +95,7 @@ export class IngestionProgressEndpoint extends OpenAPIRoute {
 					}
 				}
 			} catch (e) {
-				console.error(
-					"[IngestionProgress] Failed to fetch vectorize thread:",
-					e,
-				);
+				console.error("[IngestionProgress] Failed to get vectorize thread:", e);
 			}
 		}
 

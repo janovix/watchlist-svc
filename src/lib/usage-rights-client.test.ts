@@ -6,11 +6,17 @@ import {
 
 describe("UsageRightsClient", () => {
 	let client: UsageRightsClient;
-	let mockFetcher: { fetch: ReturnType<typeof vi.fn> };
+	let mockAuthSvc: {
+		gateUsageRights: ReturnType<typeof vi.fn>;
+		meterUsageRights: ReturnType<typeof vi.fn>;
+		checkUsageRights: ReturnType<typeof vi.fn>;
+	};
 
 	beforeEach(() => {
-		mockFetcher = {
-			fetch: vi.fn(),
+		mockAuthSvc = {
+			gateUsageRights: vi.fn(),
+			meterUsageRights: vi.fn(),
+			checkUsageRights: vi.fn(),
 		};
 	});
 
@@ -25,22 +31,15 @@ describe("UsageRightsClient", () => {
 			expect(result).toEqual({ allowed: true });
 		});
 
-		it("should return allowed:true on 200 response", async () => {
-			mockFetcher.fetch.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({
-						allowed: true,
-						used: 10,
-						limit: 100,
-						remaining: 90,
-					}),
-					{ status: 200, headers: { "Content-Type": "application/json" } },
-				),
-			);
-
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
+		it("should return allowed:true on successful gate", async () => {
+			mockAuthSvc.gateUsageRights.mockResolvedValueOnce({
+				allowed: true,
+				used: 10,
+				limit: 100,
+				remaining: 90,
 			});
+
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			const result = await client.gate("org-123", "watchlistQueries", 1);
 			expect(result.allowed).toBe(true);
@@ -48,56 +47,57 @@ describe("UsageRightsClient", () => {
 			expect(result.remaining).toBe(90);
 		});
 
-		it("should return allowed:false on 403 response", async () => {
-			mockFetcher.fetch.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({
-						used: 100,
-						limit: 100,
-						remaining: 0,
-						error: "Limit exceeded",
-					}),
-					{ status: 403, headers: { "Content-Type": "application/json" } },
-				),
-			);
-
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
+		it("should return allowed:false when gate denies", async () => {
+			mockAuthSvc.gateUsageRights.mockResolvedValueOnce({
+				allowed: false,
+				used: 100,
+				limit: 100,
+				remaining: 0,
+				error: "Limit exceeded",
 			});
+
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			const result = await client.gate("org-123", "watchlistQueries");
 			expect(result.allowed).toBe(false);
 			expect(result.error).toBe("Limit exceeded");
 		});
 
-		it("should return allowed:true and fail-open on fetch error", async () => {
-			mockFetcher.fetch.mockRejectedValueOnce(new Error("Network error"));
+		it("should return allowed:true and fail-open on RPC error", async () => {
+			mockAuthSvc.gateUsageRights.mockRejectedValueOnce(new Error("RPC error"));
 
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
-			});
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			const result = await client.gate("org-123", "watchlistQueries");
 			expect(result.allowed).toBe(true);
 		});
 
-		it("should include count in request", async () => {
-			mockFetcher.fetch.mockResolvedValueOnce(
-				new Response(JSON.stringify({ allowed: true }), {
-					status: 200,
-				}),
-			);
+		it("should pass orgId, metric and count to gateUsageRights", async () => {
+			mockAuthSvc.gateUsageRights.mockResolvedValueOnce({ allowed: true });
 
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
-			});
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			await client.gate("org-123", "watchlistQueries", 5);
 
-			const call = mockFetcher.fetch.mock.calls[0][0];
-			expect(call).toBeInstanceOf(Request);
-			const body = JSON.parse(await call.clone().text());
-			expect(body.count).toBe(5);
+			expect(mockAuthSvc.gateUsageRights).toHaveBeenCalledWith(
+				"org-123",
+				"watchlistQueries",
+				5,
+			);
+		});
+
+		it("should use default count of 1", async () => {
+			mockAuthSvc.gateUsageRights.mockResolvedValueOnce({ allowed: true });
+
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
+
+			await client.gate("org-123", "watchlistQueries");
+
+			expect(mockAuthSvc.gateUsageRights).toHaveBeenCalledWith(
+				"org-123",
+				"watchlistQueries",
+				1,
+			);
 		});
 	});
 
@@ -112,48 +112,44 @@ describe("UsageRightsClient", () => {
 			).resolves.toBeUndefined();
 		});
 
-		it("should call AUTH_SERVICE on meter request", async () => {
-			mockFetcher.fetch.mockResolvedValueOnce(
-				new Response(JSON.stringify({}), { status: 200 }),
-			);
+		it("should call meterUsageRights RPC", async () => {
+			mockAuthSvc.meterUsageRights.mockResolvedValueOnce(undefined);
 
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
-			});
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			await client.meter("org-123", "watchlistQueries", 1);
 
-			expect(mockFetcher.fetch).toHaveBeenCalledTimes(1);
-			const call = mockFetcher.fetch.mock.calls[0][0];
-			expect(call.url).toContain("/internal/usage-rights/meter");
+			expect(mockAuthSvc.meterUsageRights).toHaveBeenCalledWith(
+				"org-123",
+				"watchlistQueries",
+				1,
+			);
 		});
 
-		it("should not throw on meter fetch error", async () => {
-			mockFetcher.fetch.mockRejectedValueOnce(new Error("Network error"));
+		it("should not throw on RPC error", async () => {
+			mockAuthSvc.meterUsageRights.mockRejectedValueOnce(
+				new Error("RPC error"),
+			);
 
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
-			});
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			await expect(
 				client.meter("org-123", "watchlistQueries"),
-			).resolves.not.toThrow();
+			).resolves.toBeUndefined();
 		});
 
 		it("should use default count of 1", async () => {
-			mockFetcher.fetch.mockResolvedValueOnce(
-				new Response(JSON.stringify({}), { status: 200 }),
-			);
+			mockAuthSvc.meterUsageRights.mockResolvedValueOnce(undefined);
 
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
-			});
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			await client.meter("org-123", "watchlistQueries");
 
-			const call = mockFetcher.fetch.mock.calls[0][0];
-			const body = JSON.parse(await call.clone().text());
-			expect(body.count).toBe(1);
+			expect(mockAuthSvc.meterUsageRights).toHaveBeenCalledWith(
+				"org-123",
+				"watchlistQueries",
+				1,
+			);
 		});
 	});
 
@@ -168,73 +164,57 @@ describe("UsageRightsClient", () => {
 			expect(result).toBeNull();
 		});
 
-		it("should return gate result on 200 response", async () => {
-			mockFetcher.fetch.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({
-						allowed: true,
-						used: 5,
-						limit: 100,
-						remaining: 95,
-					}),
-					{ status: 200, headers: { "Content-Type": "application/json" } },
-				),
-			);
-
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
+		it("should return gate result on successful check", async () => {
+			mockAuthSvc.checkUsageRights.mockResolvedValueOnce({
+				allowed: true,
+				used: 5,
+				limit: 100,
+				remaining: 95,
 			});
+
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			const result = await client.check("org-123", "watchlistQueries");
 			expect(result?.allowed).toBe(true);
 			expect(result?.used).toBe(5);
 		});
 
-		it("should return allowed:false on 403 response", async () => {
-			mockFetcher.fetch.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({
-						used: 100,
-						limit: 100,
-						remaining: 0,
-					}),
-					{ status: 403, headers: { "Content-Type": "application/json" } },
-				),
-			);
-
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
+		it("should return allowed:false when check denies", async () => {
+			mockAuthSvc.checkUsageRights.mockResolvedValueOnce({
+				allowed: false,
+				used: 100,
+				limit: 100,
+				remaining: 0,
 			});
+
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			const result = await client.check("org-123", "watchlistQueries");
 			expect(result?.allowed).toBe(false);
 		});
 
-		it("should return null on fetch error", async () => {
-			mockFetcher.fetch.mockRejectedValueOnce(new Error("Network error"));
+		it("should return null on RPC error", async () => {
+			mockAuthSvc.checkUsageRights.mockRejectedValueOnce(
+				new Error("RPC error"),
+			);
 
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
-			});
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			const result = await client.check("org-123", "watchlistQueries");
 			expect(result).toBeNull();
 		});
 
-		it("should use query params for org and metric", async () => {
-			mockFetcher.fetch.mockResolvedValueOnce(
-				new Response(JSON.stringify({ allowed: true }), { status: 200 }),
-			);
+		it("should pass orgId and metric to checkUsageRights", async () => {
+			mockAuthSvc.checkUsageRights.mockResolvedValueOnce({ allowed: true });
 
-			client = new UsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
-			});
+			client = new UsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			await client.check("org-456", "reports");
 
-			const call = mockFetcher.fetch.mock.calls[0][0];
-			expect(call.url).toContain("organizationId=org-456");
-			expect(call.url).toContain("metric=reports");
+			expect(mockAuthSvc.checkUsageRights).toHaveBeenCalledWith(
+				"org-456",
+				"reports",
+			);
 		});
 	});
 
@@ -247,17 +227,13 @@ describe("UsageRightsClient", () => {
 			expect(client).toBeInstanceOf(UsageRightsClient);
 		});
 
-		it("should pass env to client", async () => {
-			mockFetcher.fetch.mockResolvedValueOnce(
-				new Response(JSON.stringify({}), { status: 200 }),
-			);
+		it("should pass env to client and call meterUsageRights", async () => {
+			mockAuthSvc.meterUsageRights.mockResolvedValueOnce(undefined);
 
-			const client = createUsageRightsClient({
-				AUTH_SERVICE: mockFetcher as unknown as Fetcher,
-			});
+			const client = createUsageRightsClient({ AUTH_SERVICE: mockAuthSvc });
 
 			await client.meter("org-123", "watchlistQueries");
-			expect(mockFetcher.fetch).toHaveBeenCalled();
+			expect(mockAuthSvc.meterUsageRights).toHaveBeenCalled();
 		});
 	});
 });

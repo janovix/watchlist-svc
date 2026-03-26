@@ -609,58 +609,44 @@ export class InternalSat69bCompleteEndpoint extends OpenAPIRoute {
 
 			try {
 				const callbackUrl = getCallbackUrl(c.env.ENVIRONMENT);
-				const response = await c.env.THREAD_SVC.fetch(
-					"http://thread-svc/threads",
-					{
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({
-							task_type: "vectorize_index",
-							job_params: {
-								dataset: "sat_69b",
-								reindex_all: true,
-								batch_size: 100,
-								callback_url: callbackUrl,
-								triggered_by: `sat_69b_ingestion_run_${run_id}`,
-							},
-							metadata: {
-								source: "auto_trigger",
-								sat_69b_run_id: run_id,
-								total_records: total_records,
-							},
-						}),
+				const thread = await c.env.THREAD_SVC.createThread({
+					task_type: "vectorize_index",
+					job_params: {
+						dataset: "sat_69b",
+						reindex_all: true,
+						batch_size: 100,
+						callback_url: callbackUrl,
+						triggered_by: `sat_69b_ingestion_run_${run_id}`,
 					},
+					metadata: {
+						source: "auto_trigger",
+						sat_69b_run_id: run_id,
+						total_records: total_records,
+					},
+				});
+
+				vectorizationThreadId = thread.id;
+				console.log(
+					`[InternalSat69b] Vectorization thread created: ${vectorizationThreadId}`,
 				);
 
-				if (response.ok) {
-					const thread = (await response.json()) as { id: string };
-					vectorizationThreadId = thread.id;
+				// Update the run with the vectorize thread ID and phase
+				try {
+					await prisma.watchlistIngestionRun.update({
+						where: { id: run_id },
+						data: {
+							vectorizeThreadId: vectorizationThreadId,
+							progressPhase: "vectorizing",
+							progressUpdatedAt: new Date(),
+						},
+					});
 					console.log(
-						`[InternalSat69b] Vectorization thread created: ${vectorizationThreadId}`,
+						`[InternalSat69b] Run ${run_id} updated with vectorize thread ID`,
 					);
-
-					// Update the run with the vectorize thread ID and phase
-					try {
-						await prisma.watchlistIngestionRun.update({
-							where: { id: run_id },
-							data: {
-								vectorizeThreadId: vectorizationThreadId,
-								progressPhase: "vectorizing",
-								progressUpdatedAt: new Date(),
-							},
-						});
-						console.log(
-							`[InternalSat69b] Run ${run_id} updated with vectorize thread ID`,
-						);
-					} catch (updateErr) {
-						console.error(
-							`[InternalSat69b] Failed to update run with vectorize thread ID:`,
-							updateErr,
-						);
-					}
-				} else {
+				} catch (updateErr) {
 					console.error(
-						`[InternalSat69b] Failed to create vectorization thread: ${response.status}`,
+						`[InternalSat69b] Failed to update run with vectorize thread ID:`,
+						updateErr,
 					);
 				}
 			} catch (e) {

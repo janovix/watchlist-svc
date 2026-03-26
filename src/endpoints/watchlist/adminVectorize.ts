@@ -105,43 +105,21 @@ export class AdminVectorizeReindexEndpoint extends OpenAPIRoute {
 		try {
 			const callbackUrl = getCallbackUrl(c.env.ENVIRONMENT);
 
-			const response = await c.env.THREAD_SVC.fetch(
-				"http://thread-svc/threads",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						task_type: "vectorize_index",
-						job_params: {
-							dataset: dataset,
-							reindex_all: reindex_all ?? true,
-							batch_size: batch_size ?? 100,
-							callback_url: callbackUrl,
-							triggered_by: "admin_manual",
-						},
-						metadata: {
-							source: "admin_api",
-							environment: c.env.ENVIRONMENT,
-						},
-					}),
+			const thread = await c.env.THREAD_SVC.createThread({
+				task_type: "vectorize_index",
+				job_params: {
+					dataset: dataset,
+					reindex_all: reindex_all ?? true,
+					batch_size: batch_size ?? 100,
+					callback_url: callbackUrl,
+					triggered_by: "admin_manual",
 				},
-			);
+				metadata: {
+					source: "admin_api",
+					environment: c.env.ENVIRONMENT,
+				},
+			});
 
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error(
-					`[AdminVectorize] Failed to create thread: ${response.status} - ${errorText}`,
-				);
-				return Response.json(
-					{
-						success: false,
-						error: `Failed to create vectorization job: ${response.status}`,
-					},
-					{ status: 500 },
-				);
-			}
-
-			const thread = (await response.json()) as { id: string };
 			console.log(
 				`[AdminVectorize] Vectorization thread created: ${thread.id}`,
 			);
