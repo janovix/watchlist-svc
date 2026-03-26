@@ -1,3 +1,25 @@
+# [1.6.0](https://github.com/janovix/watchlist-svc/compare/v1.5.1...v1.6.0) (2026-03-26)
+
+
+### Bug Fixes
+
+* **search:** update performSearch to include GROK_API_KEY in environment configuration and adjust error message in tests ([15c842c](https://github.com/janovix/watchlist-svc/commit/15c842cdf748d4e511450eb1c4bb97e985d1feca))
+
+
+### Features
+
+* **aml-svc:** integrate AML service binding and enhance input validation in search endpoints ([099a29a](https://github.com/janovix/watchlist-svc/commit/099a29a5e52f3878bcfef044aa35c6c593eeca46))
+* **auth-svc:** enhance AUTH_SERVICE binding with detailed RPC methods for subscription and usage rights management ([e689627](https://github.com/janovix/watchlist-svc/commit/e68962790487fcee83e2d4976d2f2bfa8af1d5c0))
+* **cache:** update KV cache TTL from 24 hours to 72 hours and implement caching logic for PEP and adverse media searches ([366f871](https://github.com/janovix/watchlist-svc/commit/366f871c149417dea997ec3f4b72be22bb67a354))
+* **entrypoints:** add entrypoints for Auth, Thread, and AML services in wrangler config and implement WatchlistEntrypoint for RPC communication ([9f728de](https://github.com/janovix/watchlist-svc/commit/9f728de55cc6d4265b9cf0b16d18d81e7fe361d9))
+* **matching-utils:** add passesMatchFilter function to enhance match filtering logic across search endpoints ([5e69683](https://github.com/janovix/watchlist-svc/commit/5e696839813a11f929d5ba2d34ff986b83db64f8))
+* **matching-utils:** enhance name scoring algorithm with discriminative token handling and generic term capping ([4e883cc](https://github.com/janovix/watchlist-svc/commit/4e883cc5d76d5cb770d19c648def1b53dc42bde6))
+* **openapi:** add consolidated OpenAPI specification and serve at /openapi.json ([057ed8b](https://github.com/janovix/watchlist-svc/commit/057ed8b637f0c1bf3fb30fd3ac1e3df286847a97))
+* **progress-endpoints:** add progress endpoints for adverse media and grok PEP, including payload schema and integration tests ([6ea7276](https://github.com/janovix/watchlist-svc/commit/6ea72762044d8ed704547693b39d64faff3d3b6c))
+* **query-source:** introduce QUERY_SOURCE constants and normalizeAmlSource function for consistent source handling ([99712ed](https://github.com/janovix/watchlist-svc/commit/99712ed470b42f730ad0b3d7306dbc88cf445021))
+* **search:** add adverse_media_has_risk column to search_query and update related endpoints; adjust default threshold to 0.875 ([04047c0](https://github.com/janovix/watchlist-svc/commit/04047c0eaca6278cff4cde13a0ca97e33eed9653))
+* **search:** add adverse_media_risk_level column to search_query and update related endpoints for list view badge coloring ([39b86cb](https://github.com/janovix/watchlist-svc/commit/39b86cb7c61d1b1ea925d4169e462986c1c2aab8))
+
 # [1.6.0-rc.12](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.11...v1.6.0-rc.12) (2026-03-18)
 
 
