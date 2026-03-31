@@ -100,26 +100,38 @@ async function getJWKS(
 
 /**
  * Verifies a JWT using JWKS from auth-svc via RPC.
+ *
+ * On JWKSNoMatchingKey the cache is busted and the verification is retried
+ * once with fresh keys. This self-heals the stale-cache window that opens
+ * whenever auth-svc regenerates its signing key (e.g. after a JWKS decrypt
+ * error triggers clearJwksAndResetAuth). Without the retry, every request
+ * in the isolate's remaining cache TTL (up to 1 h) would fail with 401.
  */
 async function verifyToken(
 	token: string,
 	cacheTtl: number,
 	authServiceBinding: AuthSvcRpc,
+	isRetry = false,
 ): Promise<AuthTokenPayload> {
 	const jwks = await getJWKS(cacheTtl, authServiceBinding);
-
-	// Create a local JWKS for verification
 	const jwksInstance = jose.createLocalJWKSet(jwks);
 
-	// Verify the token
-	const { payload } = await jose.jwtVerify(token, jwksInstance);
+	try {
+		const { payload } = await jose.jwtVerify(token, jwksInstance);
 
-	// Validate required claims
-	if (!payload.sub) {
-		throw new Error("Token missing required 'sub' claim");
+		if (!payload.sub) {
+			throw new Error("Token missing required 'sub' claim");
+		}
+
+		return payload as AuthTokenPayload;
+	} catch (error) {
+		if (error instanceof jose.errors.JWKSNoMatchingKey && !isRetry) {
+			cachedJWKS = null;
+			cachedJWKSExpiry = 0;
+			return verifyToken(token, cacheTtl, authServiceBinding, true);
+		}
+		throw error;
 	}
-
-	return payload as AuthTokenPayload;
 }
 
 /**

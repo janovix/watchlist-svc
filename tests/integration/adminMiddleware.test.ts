@@ -6,47 +6,49 @@ import {
 	type AuthEnv,
 	type AuthUser,
 	type AuthTokenPayload,
-} from "../../src/lib/auth-middleware";
+} from "../../src/middleware/auth";
 
 type TestBindings = AuthEnv & { ENVIRONMENT?: string };
 type TestVariables = {
 	user?: AuthUser;
 	token?: string;
 	tokenPayload?: AuthTokenPayload;
+	organization?: { id: string } | null;
 };
 
-/**
- * Unit tests for adminMiddleware
- *
- * These tests verify the adminMiddleware authorization logic
- * by manually setting up the context variables that would
- * normally be set by authMiddleware.
- */
-describe("adminMiddleware", () => {
-	it("should return 401 when tokenPayload is not set", async () => {
-		const app = new Hono<{
-			Bindings: TestBindings;
-			Variables: TestVariables;
-		}>();
+type AdminTestApp = Hono<{
+	Bindings: TestBindings;
+	Variables: TestVariables;
+}>;
 
-		// Apply only adminMiddleware (without authMiddleware setting tokenPayload)
+function attachAdminErrorHandler(app: AdminTestApp) {
+	app.onError((err, c) => {
+		if (err instanceof ApiException) {
+			return c.json(
+				{ success: false, error: err.message },
+				err.status as 401 | 403 | 500,
+			);
+		}
+		return c.json({ success: false, error: "Internal error" }, 500);
+	});
+}
+
+function createAdminTestApp(): AdminTestApp {
+	const app = new Hono<{
+		Bindings: TestBindings;
+		Variables: TestVariables;
+	}>();
+	attachAdminErrorHandler(app);
+	return app;
+}
+
+describe("adminMiddleware", () => {
+	it("returns 401 when tokenPayload is not set", async () => {
+		const app = createAdminTestApp();
 		app.use("/admin/*", adminMiddleware());
 		app.get("/admin/test", (c) => c.json({ success: true }));
 
-		// Override error handler to return JSON
-		app.onError((err, c) => {
-			if (err instanceof ApiException) {
-				return c.json(
-					{ success: false, error: err.message },
-					err.status as 401 | 403 | 500,
-				);
-			}
-			return c.json({ success: false, error: "Internal error" }, 500);
-		});
-
-		const response = await app.request("/admin/test", {
-			method: "GET",
-		});
+		const response = await app.request("/admin/test", { method: "GET" });
 
 		expect(response.status).toBe(401);
 		const body = await response.json<{ success: boolean; error: string }>();
@@ -54,37 +56,20 @@ describe("adminMiddleware", () => {
 		expect(body.error).toBe("Unauthorized");
 	});
 
-	it("should return 403 when user role is not admin", async () => {
-		const app = new Hono<{
-			Bindings: TestBindings;
-			Variables: TestVariables;
-		}>();
-
-		// Middleware to simulate a non-admin user
+	it("returns 403 when user role is not admin", async () => {
+		const app = createAdminTestApp();
 		app.use("/admin/*", async (c, next) => {
 			c.set("tokenPayload", {
 				sub: "user-123",
 				email: "user@example.com",
-				role: "user", // Not admin
+				role: "user",
 			});
 			return next();
 		});
 		app.use("/admin/*", adminMiddleware());
 		app.get("/admin/test", (c) => c.json({ success: true }));
 
-		app.onError((err, c) => {
-			if (err instanceof ApiException) {
-				return c.json(
-					{ success: false, error: err.message },
-					err.status as 401 | 403 | 500,
-				);
-			}
-			return c.json({ success: false, error: "Internal error" }, 500);
-		});
-
-		const response = await app.request("/admin/test", {
-			method: "GET",
-		});
+		const response = await app.request("/admin/test", { method: "GET" });
 
 		expect(response.status).toBe(403);
 		const body = await response.json<{ success: boolean; error: string }>();
@@ -92,12 +77,8 @@ describe("adminMiddleware", () => {
 		expect(body.error).toBe("Admin access required");
 	});
 
-	it("should return 403 when role is visitor", async () => {
-		const app = new Hono<{
-			Bindings: TestBindings;
-			Variables: TestVariables;
-		}>();
-
+	it("returns 403 when role is visitor", async () => {
+		const app = createAdminTestApp();
 		app.use("/admin/*", async (c, next) => {
 			c.set("tokenPayload", {
 				sub: "visitor-123",
@@ -109,63 +90,30 @@ describe("adminMiddleware", () => {
 		app.use("/admin/*", adminMiddleware());
 		app.get("/admin/test", (c) => c.json({ success: true }));
 
-		app.onError((err, c) => {
-			if (err instanceof ApiException) {
-				return c.json(
-					{ success: false, error: err.message },
-					err.status as 401 | 403 | 500,
-				);
-			}
-			return c.json({ success: false, error: "Internal error" }, 500);
-		});
-
-		const response = await app.request("/admin/test", {
-			method: "GET",
-		});
+		const response = await app.request("/admin/test", { method: "GET" });
 
 		expect(response.status).toBe(403);
 	});
 
-	it("should return 403 when role is undefined", async () => {
-		const app = new Hono<{
-			Bindings: TestBindings;
-			Variables: TestVariables;
-		}>();
-
+	it("returns 403 when role is undefined", async () => {
+		const app = createAdminTestApp();
 		app.use("/admin/*", async (c, next) => {
 			c.set("tokenPayload", {
 				sub: "user-123",
 				email: "user@example.com",
-				// role is undefined
 			});
 			return next();
 		});
 		app.use("/admin/*", adminMiddleware());
 		app.get("/admin/test", (c) => c.json({ success: true }));
 
-		app.onError((err, c) => {
-			if (err instanceof ApiException) {
-				return c.json(
-					{ success: false, error: err.message },
-					err.status as 401 | 403 | 500,
-				);
-			}
-			return c.json({ success: false, error: "Internal error" }, 500);
-		});
-
-		const response = await app.request("/admin/test", {
-			method: "GET",
-		});
+		const response = await app.request("/admin/test", { method: "GET" });
 
 		expect(response.status).toBe(403);
 	});
 
-	it("should allow request when user has admin role", async () => {
-		const app = new Hono<{
-			Bindings: TestBindings;
-			Variables: TestVariables;
-		}>();
-
+	it("allows request when user has admin role", async () => {
+		const app = createAdminTestApp();
 		app.use("/admin/*", async (c, next) => {
 			c.set("tokenPayload", {
 				sub: "admin-123",
@@ -177,9 +125,7 @@ describe("adminMiddleware", () => {
 		app.use("/admin/*", adminMiddleware());
 		app.get("/admin/test", (c) => c.json({ success: true, user: "admin" }));
 
-		const response = await app.request("/admin/test", {
-			method: "GET",
-		});
+		const response = await app.request("/admin/test", { method: "GET" });
 
 		expect(response.status).toBe(200);
 		const body = await response.json<{ success: boolean; user: string }>();
@@ -187,15 +133,9 @@ describe("adminMiddleware", () => {
 		expect(body.user).toBe("admin");
 	});
 
-	it("should work correctly with authMiddleware in test environment", async () => {
-		const app = new Hono<{
-			Bindings: TestBindings;
-			Variables: TestVariables;
-		}>();
-
-		// Simulate test environment
+	it("works when tokenPayload is set like authMiddleware in test env", async () => {
+		const app = createAdminTestApp();
 		app.use("/admin/*", async (c, next) => {
-			// This simulates what authMiddleware does in test environment
 			const mockPayload: AuthTokenPayload = {
 				sub: "test-user-id",
 				email: "test@example.com",
@@ -219,9 +159,7 @@ describe("adminMiddleware", () => {
 			});
 		});
 
-		const response = await app.request("/admin/test", {
-			method: "GET",
-		});
+		const response = await app.request("/admin/test", { method: "GET" });
 
 		expect(response.status).toBe(200);
 		const body = await response.json<{ success: boolean; role: string }>();
