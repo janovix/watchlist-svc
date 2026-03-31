@@ -126,8 +126,6 @@ async function verifyToken(
 		return payload as AuthTokenPayload;
 	} catch (error) {
 		if (error instanceof jose.errors.JWKSNoMatchingKey && !isRetry) {
-			// The cached JWKS is stale — auth-svc rotated its signing key after
-			// this isolate last fetched. Bust the cache and retry once.
 			cachedJWKS = null;
 			cachedJWKSExpiry = 0;
 			return verifyToken(token, cacheTtl, authServiceBinding, true);
