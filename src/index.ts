@@ -5,7 +5,7 @@ import * as Sentry from "@sentry/cloudflare";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
 import { openAPISpec } from "./openapi";
-import { authMiddleware, adminMiddleware } from "./lib/auth-middleware";
+import { authMiddleware, adminMiddleware } from "./middleware/auth";
 import { corsMiddleware } from "./middleware/cors";
 import { HealthEndpoint } from "./endpoints/watchlist/health";
 import { ConfigEndpoint } from "./endpoints/watchlist/config";
