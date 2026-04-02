@@ -1,3 +1,10 @@
+# [1.6.0-rc.14](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.13...v1.6.0-rc.14) (2026-04-02)
+
+
+### Features
+
+* **queryList:** add computePepAiIndicatesMatch function and integrate into QueryListEndpoint ([f76eec1](https://github.com/janovix/watchlist-svc/commit/f76eec1e818b4d6a1e50d3acab0db17fdbc22c21))
+
 # [1.6.0-rc.13](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.12...v1.6.0-rc.13) (2026-04-02)
 
 
