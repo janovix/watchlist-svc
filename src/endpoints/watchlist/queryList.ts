@@ -8,6 +8,7 @@ import { OpenAPIRoute, ApiException } from "chanfana";
 import { z } from "zod";
 import { AppContext } from "../../types";
 import { createPrismaClient } from "../../lib/prisma";
+import { computePepAiIndicatesMatch } from "../../lib/search-query-utils";
 
 export class QueryListEndpoint extends OpenAPIRoute {
 	schema = {
@@ -69,6 +70,8 @@ export class QueryListEndpoint extends OpenAPIRoute {
 									pepOfficialStatus: z.string(),
 									pepOfficialCount: z.number(),
 									pepAiStatus: z.string(),
+									/** True when Grok PEP completed with probability above zero (summary only; no pep_ai blob). */
+									pepAiIndicatesMatch: z.boolean(),
 									adverseMediaStatus: z.string(),
 									adverseMediaHasRisk: z.boolean(),
 									adverseMediaRiskLevel: z
@@ -154,6 +157,7 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					pepOfficialStatus: true,
 					pepOfficialCount: true,
 					pepAiStatus: true,
+					pepAiResult: true,
 					adverseMediaStatus: true,
 					adverseMediaHasRisk: true,
 					adverseMediaRiskLevel: true,
@@ -216,6 +220,10 @@ export class QueryListEndpoint extends OpenAPIRoute {
 					pepOfficialStatus: q.pepOfficialStatus,
 					pepOfficialCount: q.pepOfficialCount,
 					pepAiStatus: q.pepAiStatus,
+					pepAiIndicatesMatch: computePepAiIndicatesMatch(
+						q.pepAiStatus,
+						q.pepAiResult,
+					),
 					adverseMediaStatus: q.adverseMediaStatus,
 					adverseMediaHasRisk: q.adverseMediaHasRisk,
 					adverseMediaRiskLevel: q.adverseMediaRiskLevel,
