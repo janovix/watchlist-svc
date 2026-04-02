@@ -1,3 +1,10 @@
+# [1.6.0-rc.13](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.12...v1.6.0-rc.13) (2026-04-02)
+
+
+### Features
+
+* **queryRead:** add source and userDisplay fields to QueryReadEndpoint response ([96967f2](https://github.com/janovix/watchlist-svc/commit/96967f2f6c94a729f8119082c6d59a1248196271))
+
 # [1.6.0-rc.12](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.11...v1.6.0-rc.12) (2026-03-18)
 
 
