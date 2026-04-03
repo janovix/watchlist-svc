@@ -5,7 +5,10 @@ import { z } from "zod";
 import { ofacMatch } from "./searchOfac";
 import { unscMatch } from "./searchUnsc";
 import { sat69bMatch } from "./searchSat69b";
-import { createUsageRightsClient } from "../../lib/usage-rights-client";
+import {
+	buildGateDenialBody,
+	createUsageRightsClient,
+} from "../../lib/usage-rights-client";
 import { performSearch } from "../../lib/search-core";
 import { QUERY_SOURCE } from "../../lib/query-source";
 
@@ -207,21 +210,12 @@ export class SearchEndpoint extends OpenAPIRoute {
 			);
 
 			if (!gateResult.allowed) {
-				return c.json(
-					{
-						success: false,
-						error: gateResult.error ?? "usage_limit_exceeded",
-						code: "USAGE_LIMIT_EXCEEDED",
-						upgradeRequired: true,
-						metric: "watchlistQueries",
-						used: gateResult.used,
-						limit: gateResult.limit,
-						entitlementType: gateResult.entitlementType,
-						message:
-							"Daily watchlist query limit reached. Please upgrade or try again tomorrow.",
-					},
-					403,
-				);
+				const body = buildGateDenialBody("watchlistQueries", gateResult);
+				if (body.code === "USAGE_LIMIT_EXCEEDED") {
+					body.message =
+						"Daily watchlist query limit reached. Please upgrade or try again tomorrow.";
+				}
+				return c.json(body, 403);
 			}
 
 			// Call shared search core with source='watchlist_query' for UI-initiated searches
