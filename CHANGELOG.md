@@ -1,3 +1,10 @@
+# [1.6.0-rc.15](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.14...v1.6.0-rc.15) (2026-04-03)
+
+
+### Features
+
+* **auth:** implement requireActiveOrganization middleware to block mutating requests for inactive organizations ([86d885f](https://github.com/janovix/watchlist-svc/commit/86d885f5ed29861f76b3a3142549b5250d406956))
+
 # [1.6.0-rc.14](https://github.com/janovix/watchlist-svc/compare/v1.6.0-rc.13...v1.6.0-rc.14) (2026-04-02)
 
 
