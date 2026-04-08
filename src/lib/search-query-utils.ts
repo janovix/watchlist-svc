@@ -13,6 +13,27 @@ import { createHash } from "crypto";
 import type { PrismaClient } from "@prisma/client";
 
 /**
+ * True when Grok PEP (pep_ai) should count as a list/detail "match".
+ * Aligns with watchlist screening UI: completed + probability &gt; 0 (not an error payload).
+ */
+export function computePepAiIndicatesMatch(
+	pepAiStatus: string,
+	pepAiResult: string | null,
+): boolean {
+	if (pepAiStatus !== "completed" || !pepAiResult) return false;
+	try {
+		const parsed = JSON.parse(pepAiResult) as {
+			probability?: number;
+			error?: unknown;
+		};
+		if (parsed && "error" in parsed && parsed.error != null) return false;
+		return typeof parsed.probability === "number" && parsed.probability > 0;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Generate deterministic cache key from query string.
  * Same query always generates same key (cross-org cache sharing).
  */

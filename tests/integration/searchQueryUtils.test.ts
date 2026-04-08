@@ -6,6 +6,7 @@ import {
 	writeCache,
 	checkAndUpdateQueryCompletion,
 	GROK_CACHE_TTL_SECONDS,
+	computePepAiIndicatesMatch,
 } from "../../src/lib/search-query-utils";
 import { createPrismaClient } from "../../src/lib/prisma";
 
@@ -338,6 +339,30 @@ describe("Search Query Utils", () => {
 				where: { id: queryId },
 			});
 			expect(updated?.status).toBe("completed");
+		});
+	});
+
+	describe("computePepAiIndicatesMatch", () => {
+		it("returns false when status is not completed", () => {
+			expect(computePepAiIndicatesMatch("pending", '{"probability":0.9}')).toBe(
+				false,
+			);
+		});
+		it("returns false when result is null", () => {
+			expect(computePepAiIndicatesMatch("completed", null)).toBe(false);
+		});
+		it("returns false when probability is zero", () => {
+			expect(computePepAiIndicatesMatch("completed", '{"probability":0}')).toBe(
+				false,
+			);
+		});
+		it("returns true when completed and probability is positive", () => {
+			expect(
+				computePepAiIndicatesMatch("completed", '{"probability":0.5}'),
+			).toBe(true);
+		});
+		it("returns false on invalid JSON", () => {
+			expect(computePepAiIndicatesMatch("completed", "not json")).toBe(false);
 		});
 	});
 });

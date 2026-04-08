@@ -32,6 +32,13 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 								id: z.string(),
 								organizationId: z.string(),
 								userId: z.string(),
+								source: z.string(),
+								userDisplay: z
+									.object({
+										name: z.string(),
+										image: z.string().nullable(),
+									})
+									.nullable(),
 								query: z.string(),
 								entityType: z.string(),
 								birthDate: z.string().nullable(),
@@ -168,12 +175,35 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 				? JSON.parse(searchQuery.adverseMediaResult)
 				: null;
 
+			let userDisplay: { name: string; image: string | null } | null = null;
+			if (searchQuery.userId) {
+				try {
+					const authService = c.env.AUTH_SERVICE;
+					if (authService) {
+						const members = await authService.getOrganizationMembers(
+							organization.id,
+						);
+						const m = members.find((x) => x.userId === searchQuery.userId);
+						if (m) {
+							userDisplay = { name: m.name, image: m.image ?? null };
+						}
+					}
+				} catch (err) {
+					console.warn(
+						"[QueryRead] Failed to fetch org members for userDisplay:",
+						err instanceof Error ? err.message : String(err),
+					);
+				}
+			}
+
 			return {
 				success: true,
 				result: {
 					id: searchQuery.id,
 					organizationId: searchQuery.organizationId,
 					userId: searchQuery.userId,
+					source: searchQuery.source,
+					userDisplay,
 					query: searchQuery.query,
 					entityType: searchQuery.entityType,
 					birthDate: searchQuery.birthDate,

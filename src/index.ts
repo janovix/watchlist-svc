@@ -5,7 +5,11 @@ import * as Sentry from "@sentry/cloudflare";
 import pkg from "../package.json";
 import { getOpenApiInfo, getScalarHtml, type AppMeta } from "./app-meta";
 import { openAPISpec } from "./openapi";
-import { authMiddleware, adminMiddleware } from "./middleware/auth";
+import {
+	authMiddleware,
+	adminMiddleware,
+	requireActiveOrganization,
+} from "./middleware/auth";
 import { corsMiddleware } from "./middleware/cors";
 import { HealthEndpoint } from "./endpoints/watchlist/health";
 import { ConfigEndpoint } from "./endpoints/watchlist/config";
@@ -236,9 +240,13 @@ app.get("/docsz", (c) => {
 // Apply auth middleware to protected routes
 // Pattern: Apply middleware to specific paths before registering endpoints
 app.use("/search", authMiddleware());
+app.use("/search", requireActiveOrganization());
 app.use("/search/ofac", authMiddleware());
+app.use("/search/ofac", requireActiveOrganization());
 app.use("/search/unsc", authMiddleware());
+app.use("/search/unsc", requireActiveOrganization());
 app.use("/search/sat69b", authMiddleware());
+app.use("/search/sat69b", requireActiveOrganization());
 app.use("/queries", authMiddleware());
 app.use("/queries/:queryId", authMiddleware());
 

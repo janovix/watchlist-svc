@@ -49,6 +49,14 @@ declare namespace Cloudflare {
 				orgId: string,
 				metric: string,
 			): Promise<{ allowed: boolean; [key: string]: unknown }>;
+			getOrganization(id: string): Promise<{
+				id: string;
+				name: string;
+				slug: string;
+				logo: string | null;
+				metadata: Record<string, unknown> | null;
+				status: string;
+			} | null>;
 			getSubscriptionStatus(organizationId: string): Promise<{
 				hasSubscription: boolean;
 				isEnterprise: boolean;

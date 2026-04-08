@@ -44,6 +44,8 @@ export interface AuthUser {
  */
 interface AuthSvcRpc {
 	getJwks(): Promise<{ keys: unknown[] }>;
+	/** Organization row subset (see auth-svc OrgBranding) — used to enforce archived-org read-only */
+	getOrganization?(id: string): Promise<{ status: string } | null>;
 }
 
 /**
@@ -343,6 +345,60 @@ export function getAuthUserOrNull(
  * app.use("/admin/*", authMiddleware());
  * app.use("/admin/*", adminMiddleware());
  */
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * After {@link authMiddleware}, blocks mutating requests when the JWT org is not
+ * `active` in auth-svc.
+ */
+export function requireActiveOrganization(): MiddlewareHandler<{
+	Bindings: AuthEnv & { ENVIRONMENT?: string };
+	Variables: {
+		user?: AuthUser;
+		token?: string;
+		tokenPayload?: AuthTokenPayload;
+		organization?: { id: string } | null;
+	};
+}> {
+	return async (c, next) => {
+		if (!MUTATING_METHODS.has(c.req.method)) {
+			return next();
+		}
+
+		const organization = c.get("organization");
+		if (!organization?.id) {
+			return next();
+		}
+
+		const auth = c.env.AUTH_SERVICE;
+		const getOrganization = auth?.getOrganization;
+		if (!auth || typeof getOrganization !== "function") {
+			return next();
+		}
+
+		try {
+			const org = await getOrganization.call(auth, organization.id);
+			const status = org?.status ?? "active";
+			if (status !== "active") {
+				return c.json(
+					{
+						success: false,
+						error: "organization_archived",
+						code: "ORGANIZATION_ARCHIVED",
+						message:
+							"This organization is archived or suspended. Restore it from account settings to make changes.",
+					},
+					403,
+				);
+			}
+		} catch (e) {
+			console.error("[requireActiveOrganization] getOrganization failed:", e);
+		}
+
+		return next();
+	};
+}
+
 export function adminMiddleware(): MiddlewareHandler<{
 	Bindings: AuthEnv & { ENVIRONMENT?: string };
 	Variables: {
