@@ -1,7 +1,13 @@
 /**
- * RPC interfaces for service bindings (Thread, Auth, AML).
+ * RPC interfaces for service bindings (Thread, Auth, AML, Flags).
  * Single source of truth for watchlist-svc and consumers.
  */
+
+export type {
+	EvaluationContext,
+	FlagValue,
+	FlagsSvcBinding,
+} from "./flags-rpc";
 
 export interface ThreadSvcBinding {
 	fetch(request: Request | string, init?: RequestInit): Promise<Response>;

@@ -74,6 +74,11 @@
 			"service": "aml-svc",
 			"entrypoint": "AmlSvcEntrypoint",
 		},
+		{
+			"binding": "FLAGS_SERVICE",
+			"service": "flags-svc-preview",
+			"entrypoint": "FlagsSvcEntrypoint",
+		},
 	],
 	"vars": {
 		"ENVIRONMENT": "preview",
