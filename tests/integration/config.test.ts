@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ConfigEndpoint } from "../../src/endpoints/watchlist/config";
+import { WATCHLIST_FEATURE_FLAG_KEYS } from "../../src/lib/watchlist-feature-flags";
 import type { AppContext } from "../../src/types";
 
 describe("GET /config", () => {
@@ -62,5 +63,61 @@ describe("ConfigEndpoint.handle()", () => {
 		expect(result.result.features.pepSearch).toBe(true);
 		expect(result.result.features.pepGrok).toBe(true);
 		expect(result.result.features.adverseMedia).toBe(false);
+	});
+
+	it("should use FLAGS_SERVICE evaluateFlags when binding is present", async () => {
+		const evaluateFlags = vi.fn().mockResolvedValue({
+			[WATCHLIST_FEATURE_FLAG_KEYS.pepSearch]: false,
+			[WATCHLIST_FEATURE_FLAG_KEYS.pepGrok]: true,
+			[WATCHLIST_FEATURE_FLAG_KEYS.adverseMedia]: false,
+		});
+		const endpoint = new (ConfigEndpoint as any)();
+		const mockContext = {
+			env: {
+				ENVIRONMENT: "production",
+				PEP_SEARCH_ENABLED: "true",
+				PEP_GROK_ENABLED: "true",
+				ADVERSE_MEDIA_ENABLED: "true",
+				FLAGS_SERVICE: { evaluateFlags },
+			},
+		} as unknown as AppContext;
+
+		const result = await endpoint.handle(mockContext);
+		expect(result.success).toBe(true);
+		expect(result.result.features.pepSearch).toBe(false);
+		expect(result.result.features.pepGrok).toBe(true);
+		expect(result.result.features.adverseMedia).toBe(false);
+		expect(evaluateFlags).toHaveBeenCalledWith(
+			[
+				WATCHLIST_FEATURE_FLAG_KEYS.pepSearch,
+				WATCHLIST_FEATURE_FLAG_KEYS.pepGrok,
+				WATCHLIST_FEATURE_FLAG_KEYS.adverseMedia,
+			],
+			{ environment: "production" },
+		);
+	});
+
+	it("should fall back to env defaults when FLAGS_SERVICE evaluateFlags throws", async () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+		const evaluateFlags = vi
+			.fn()
+			.mockRejectedValue(new Error("flags unavailable"));
+		const endpoint = new (ConfigEndpoint as any)();
+		const mockContext = {
+			env: {
+				ENVIRONMENT: "preview",
+				PEP_SEARCH_ENABLED: "false",
+				PEP_GROK_ENABLED: "true",
+				ADVERSE_MEDIA_ENABLED: "true",
+				FLAGS_SERVICE: { evaluateFlags },
+			},
+		} as unknown as AppContext;
+
+		const result = await endpoint.handle(mockContext);
+		expect(result.result.features.pepSearch).toBe(false);
+		expect(result.result.features.pepGrok).toBe(true);
+		expect(result.result.features.adverseMedia).toBe(true);
+		expect(warnSpy).toHaveBeenCalled();
+		warnSpy.mockRestore();
 	});
 });

@@ -213,13 +213,18 @@ export async function performSearch(
 				sat69bStatus: "running",
 				unStatus: "running",
 				pepOfficialStatus:
-					env.PEP_SEARCH_ENABLED !== "false" ? "pending" : "skipped",
+					String(env.PEP_SEARCH_ENABLED ?? "") !== "false"
+						? "pending"
+						: "skipped",
 				pepAiStatus:
-					entityType === "person" && env.PEP_GROK_ENABLED !== "false"
+					entityType === "person" &&
+					String(env.PEP_GROK_ENABLED ?? "") !== "false"
 						? "pending"
 						: "skipped",
 				adverseMediaStatus:
-					env.ADVERSE_MEDIA_ENABLED !== "false" ? "pending" : "skipped",
+					String(env.ADVERSE_MEDIA_ENABLED ?? "") !== "false"
+						? "pending"
+						: "skipped",
 			},
 		});
 		console.log(
@@ -815,7 +820,7 @@ export async function performSearch(
 		  }
 		| undefined = undefined;
 
-	const pepSearchEnabled = env.PEP_SEARCH_ENABLED !== "false";
+	const pepSearchEnabled = String(env.PEP_SEARCH_ENABLED ?? "") !== "false";
 
 	if (!pepSearchEnabled) {
 		console.log(`[SearchCore] PEP search disabled via PEP_SEARCH_ENABLED`);
@@ -829,7 +834,7 @@ export async function performSearch(
 		const pepSearchId = queryId;
 
 		// Check KV cache if enabled (still using query hash for cache key)
-		const cacheEnabled = env.PEP_CACHE_ENABLED === "true";
+		const cacheEnabled = String(env.PEP_CACHE_ENABLED ?? "") === "true";
 		let cachedPepResults: unknown = null;
 
 		if (cacheEnabled && env.PEP_CACHE) {
@@ -904,7 +909,7 @@ export async function performSearch(
 		  }
 		| undefined = undefined;
 
-	const pepGrokEnabled = env.PEP_GROK_ENABLED !== "false";
+	const pepGrokEnabled = String(env.PEP_GROK_ENABLED ?? "") !== "false";
 
 	if (!pepGrokEnabled) {
 		console.log(`[SearchCore] PEP Grok search disabled via PEP_GROK_ENABLED`);
@@ -918,7 +923,7 @@ export async function performSearch(
 			const pepAiSearchId = queryId; // Use queryId for unified SSE
 
 			// Check KV cache before triggering pep_grok thread
-			const cacheEnabled = env.PEP_CACHE_ENABLED === "true";
+			const cacheEnabled = String(env.PEP_CACHE_ENABLED ?? "") === "true";
 			let cachedPepAi: unknown = null;
 			if (cacheEnabled && env.PEP_CACHE) {
 				try {
@@ -1019,7 +1024,8 @@ export async function performSearch(
 		  }
 		| undefined = undefined;
 
-	const adverseMediaEnabled = env.ADVERSE_MEDIA_ENABLED !== "false";
+	const adverseMediaEnabled =
+		String(env.ADVERSE_MEDIA_ENABLED ?? "") !== "false";
 
 	if (!adverseMediaEnabled) {
 		console.log(
@@ -1035,7 +1041,7 @@ export async function performSearch(
 			const adverseMediaSearchId = queryId; // Use queryId for unified SSE
 
 			// Check KV cache before triggering adverse_media_grok thread
-			const cacheEnabled = env.PEP_CACHE_ENABLED === "true";
+			const cacheEnabled = String(env.PEP_CACHE_ENABLED ?? "") === "true";
 			let cachedAdverseMedia: unknown = null;
 			if (cacheEnabled && env.PEP_CACHE) {
 				try {

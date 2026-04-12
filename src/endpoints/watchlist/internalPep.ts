@@ -146,7 +146,7 @@ export class InternalPepResultsEndpoint extends OpenAPIRoute {
 		let cached = false;
 
 		// Store in KV cache if enabled
-		const cacheEnabled = c.env.PEP_CACHE_ENABLED === "true";
+		const cacheEnabled = String(c.env.PEP_CACHE_ENABLED ?? "") === "true";
 		if (cacheEnabled && c.env.PEP_CACHE) {
 			try {
 				const cacheKey = this.generateCacheKey(query);

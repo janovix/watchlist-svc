@@ -1,11 +1,9 @@
-# [1.7.0](https://github.com/janovix/watchlist-svc/compare/v1.6.0...v1.7.0) (2026-04-08)
+# [1.7.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.7.0-rc.1...v1.7.0-rc.2) (2026-04-10)
 
 
 ### Features
 
-* **auth:** implement requireActiveOrganization middleware to block mutating requests for inactive organizations ([86d885f](https://github.com/janovix/watchlist-svc/commit/86d885f5ed29861f76b3a3142549b5250d406956))
-* **queryList:** add computePepAiIndicatesMatch function and integrate into QueryListEndpoint ([f76eec1](https://github.com/janovix/watchlist-svc/commit/f76eec1e818b4d6a1e50d3acab0db17fdbc22c21))
-* **queryRead:** add source and userDisplay fields to QueryReadEndpoint response ([96967f2](https://github.com/janovix/watchlist-svc/commit/96967f2f6c94a729f8119082c6d59a1248196271))
+* **flags:** integrate FLAGS_SERVICE for feature flag evaluation in ConfigEndpoint and update related configurations ([9dede0c](https://github.com/janovix/watchlist-svc/commit/9dede0c8327717ead9294b11f27cac987744516c))
 
 # [1.7.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.6.0...v1.7.0-rc.1) (2026-04-08)
 
