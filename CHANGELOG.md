@@ -1,3 +1,10 @@
+# [1.8.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.7.0...v1.8.0-rc.1) (2026-04-12)
+
+
+### Features
+
+* **flags:** integrate FLAGS_SERVICE for feature flag evaluation in ConfigEndpoint and update related configurations ([9dede0c](https://github.com/janovix/watchlist-svc/commit/9dede0c8327717ead9294b11f27cac987744516c))
+
 # [1.7.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.7.0-rc.1...v1.7.0-rc.2) (2026-04-10)
 
 
