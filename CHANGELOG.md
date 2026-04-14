@@ -1,4 +1,4 @@
-# [1.8.0](https://github.com/janovix/watchlist-svc/compare/v1.7.0...v1.8.0) (2026-04-12)
+# [1.8.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.7.0...v1.8.0-rc.1) (2026-04-12)
 
 
 ### Features
