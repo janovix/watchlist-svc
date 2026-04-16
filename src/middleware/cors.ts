@@ -92,6 +92,7 @@ export function corsMiddleware(): MiddlewareHandler {
 				"Authorization",
 				"X-Requested-With",
 				"Accept",
+				"X-Environment",
 			],
 			allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
 			exposeHeaders: ["Content-Length", "X-Request-Id"],
