@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/janovix/watchlist-svc/compare/v1.8.0...v1.9.0) (2026-04-16)
+
+
+### Features
+
+* **search:** add environment column to search_query for data isolation and update related models and endpoints ([e496e0e](https://github.com/janovix/watchlist-svc/commit/e496e0eb57cf1131e0f5012bb2b8c1429f2d50fd))
+
 # [1.8.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.7.0...v1.8.0-rc.1) (2026-04-12)
 
 
