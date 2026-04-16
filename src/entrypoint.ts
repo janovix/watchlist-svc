@@ -16,6 +16,8 @@ export interface WatchlistSearchInput {
 	identifiers?: string[];
 	topK?: number;
 	threshold?: number;
+	/** Deployment environment for data isolation (defaults to "production") */
+	environment?: string;
 }
 
 export interface WatchlistSearchResult {
@@ -114,6 +116,7 @@ export class WatchlistEntrypoint extends WorkerEntrypoint<Bindings> {
 		const normalizedSource = input.source
 			? normalizeAmlSource(input.source)
 			: QUERY_SOURCE.AML;
+		const environment = input.environment || "production";
 		const result = await performSearch({
 			env: this.env,
 			executionCtx: this.ctx,
@@ -127,6 +130,7 @@ export class WatchlistEntrypoint extends WorkerEntrypoint<Bindings> {
 			identifiers: input.identifiers,
 			topK,
 			threshold,
+			environment,
 		});
 
 		return {

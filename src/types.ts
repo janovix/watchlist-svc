@@ -22,9 +22,11 @@ export type AppContext = Context<{
 		tokenPayload?: {
 			sub: string;
 			organizationId?: string | null;
+			environment?: string | null;
 			role?: string;
 			[key: string]: unknown;
 		};
+		environment?: string;
 	};
 }>;
 export type HandleArgs = [AppContext];

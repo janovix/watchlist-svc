@@ -122,9 +122,10 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 	};
 
 	public async handle(c: Context<{ Bindings: Bindings }>) {
-		// Read organizationId and userId from headers (set by aml-svc)
+		// Read organizationId, userId, and environment from headers (set by aml-svc)
 		const organizationId = c.req.header("X-Organization-Id");
 		const userId = c.req.header("X-User-Id");
+		const environment = c.req.header("X-Environment") || "production";
 
 		if (!organizationId) {
 			const error = new ApiException("X-Organization-Id header is required");
@@ -166,6 +167,7 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 			q,
 			organizationId,
 			userId,
+			environment,
 			entityType,
 			source,
 			topK,
@@ -199,6 +201,7 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 				identifiers,
 				topK,
 				threshold,
+				environment,
 			});
 
 			return Response.json({

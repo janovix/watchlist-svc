@@ -119,15 +119,18 @@ export class QueryListEndpoint extends OpenAPIRoute {
 			throw error;
 		}
 
+		const environment = c.get("environment") || "production";
 		const prisma = createPrismaClient(c.env.DB);
 
 		try {
-			// Build query filter
+			// Build query filter scoped to org + environment
 			const where: {
 				organizationId: string;
+				environment: string;
 				status?: string;
 			} = {
 				organizationId: organization.id,
+				environment,
 			};
 
 			if (status) {

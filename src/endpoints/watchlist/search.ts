@@ -237,6 +237,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 				identifiers: data.body.identifiers,
 				topK: data.body.topK,
 				threshold: data.body.threshold,
+				environment: c.get("environment") || "production",
 			});
 
 			return {

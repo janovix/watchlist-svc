@@ -28,6 +28,8 @@ export interface AuthTokenPayload {
 	role?: string;
 	/** Active organization ID for multi-tenant context */
 	organizationId?: string | null;
+	/** Deployment environment for data isolation (e.g. "production", "sandbox") */
+	environment?: string | null;
 }
 
 /**
@@ -176,6 +178,7 @@ export function authMiddleware(options?: {
 		token?: string;
 		tokenPayload?: AuthTokenPayload;
 		organization?: { id: string } | null;
+		environment?: string;
 	};
 }> {
 	const { optional = false } = options ?? {};
@@ -198,6 +201,7 @@ export function authMiddleware(options?: {
 			});
 			c.set("tokenPayload", mockPayload);
 			c.set("organization", { id: "test-org-id" });
+			c.set("environment", c.req.header("X-Environment") || "production");
 			return next();
 		}
 
@@ -250,6 +254,13 @@ export function authMiddleware(options?: {
 				? { id: payload.organizationId }
 				: null;
 			c.set("organization", organization);
+
+			// Resolve environment: JWT claim > X-Environment header > default
+			const environment =
+				(typeof payload.environment === "string" && payload.environment) ||
+				c.req.header("X-Environment") ||
+				"production";
+			c.set("environment", environment);
 
 			return next();
 		} catch (error) {
@@ -358,6 +369,7 @@ export function requireActiveOrganization(): MiddlewareHandler<{
 		token?: string;
 		tokenPayload?: AuthTokenPayload;
 		organization?: { id: string } | null;
+		environment?: string;
 	};
 }> {
 	return async (c, next) => {
@@ -406,6 +418,7 @@ export function adminMiddleware(): MiddlewareHandler<{
 		token?: string;
 		tokenPayload?: AuthTokenPayload;
 		organization?: { id: string } | null;
+		environment?: string;
 	};
 }> {
 	return async (c, next) => {

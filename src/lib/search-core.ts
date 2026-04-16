@@ -109,6 +109,8 @@ export interface SearchParams {
 	identifiers?: string[];
 	topK?: number;
 	threshold?: number;
+	/** Deployment environment for data isolation (defaults to "production") */
+	environment?: string;
 }
 
 export interface SearchResult {
@@ -188,6 +190,7 @@ export async function performSearch(
 		identifiers,
 		topK = 50,
 		threshold = 0.875,
+		environment = "production",
 	} = params;
 
 	// Generate query ID for persistent tracking and SSE subscription
@@ -202,6 +205,7 @@ export async function performSearch(
 			data: {
 				id: queryId,
 				organizationId,
+				environment,
 				userId,
 				query,
 				source,
@@ -228,7 +232,7 @@ export async function performSearch(
 			},
 		});
 		console.log(
-			`[SearchCore] Created SearchQuery record ${queryId} for org ${organizationId}`,
+			`[SearchCore] Created SearchQuery record ${queryId} for org ${organizationId} env ${environment}`,
 		);
 	} catch (err) {
 		console.error(

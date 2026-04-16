@@ -145,6 +145,7 @@ model UnscEntry {
 model SearchQuery {
   id                   String   @id
   organizationId       String   @map("organization_id")
+  environment          String   @default("production") @map("environment")
   userId               String   @map("user_id")
   query                String
   source               String   @default("manual") // 'manual' | 'aml-screening'
@@ -188,5 +189,6 @@ model SearchQuery {
   
   @@index([organizationId, createdAt(sort: Desc)], name: "idx_search_query_org_created")
   @@index([organizationId, status], name: "idx_search_query_org_status")
+  @@index([organizationId, environment], name: "idx_search_query_org_env")
   @@map("search_query")
 }

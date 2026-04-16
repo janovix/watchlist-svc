@@ -31,6 +31,7 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 							result: z.object({
 								id: z.string(),
 								organizationId: z.string(),
+								environment: z.string(),
 								userId: z.string(),
 								source: z.string(),
 								userDisplay: z
@@ -201,6 +202,7 @@ export class QueryReadEndpoint extends OpenAPIRoute {
 				result: {
 					id: searchQuery.id,
 					organizationId: searchQuery.organizationId,
+					environment: searchQuery.environment,
 					userId: searchQuery.userId,
 					source: searchQuery.source,
 					userDisplay,
