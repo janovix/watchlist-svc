@@ -1,3 +1,10 @@
+# [1.10.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.9.0...v1.10.0-rc.1) (2026-04-16)
+
+
+### Features
+
+* **cors:** add X-Environment header support in CORS middleware and corresponding tests ([e56cf4e](https://github.com/janovix/watchlist-svc/commit/e56cf4e6a650745ba103100f75ffc7d96b5a8b7d))
+
 # [1.9.0](https://github.com/janovix/watchlist-svc/compare/v1.8.0...v1.9.0) (2026-04-16)
 
 
