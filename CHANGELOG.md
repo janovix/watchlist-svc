@@ -1,3 +1,10 @@
+# [1.10.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.1...v1.10.0-rc.2) (2026-04-22)
+
+
+### Features
+
+* **e2e:** add E2E_API_KEY configuration to wrangler files and internal E2E route ([c8fe17f](https://github.com/janovix/watchlist-svc/commit/c8fe17fc4ba1d4097dcc748454afe0c63bdd4c67))
+
 # [1.10.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.9.0...v1.10.0-rc.1) (2026-04-16)
 
 
