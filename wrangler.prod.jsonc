@@ -92,5 +92,6 @@
 		// "R2_SECRET_ACCESS_KEY": "set-via-secret",
 		// "CLOUDFLARE_ACCOUNT_ID": "set-via-secret",
 		"R2_BUCKET_NAME": "watchlist-uploads",
+		"E2E_API_KEY": "",
 	},
 }

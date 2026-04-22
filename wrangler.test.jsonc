@@ -35,5 +35,6 @@
 	// Queue removed - now using thread-svc for ingestion
 	"vars": {
 		"ENVIRONMENT": "test",
+		"E2E_API_KEY": "",
 	},
 }

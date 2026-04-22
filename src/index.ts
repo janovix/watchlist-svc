@@ -28,6 +28,7 @@ import {
 	IngestionFailedEndpoint,
 } from "./endpoints/watchlist/ingestionUpload";
 import { uploadRoutes } from "./routes/upload";
+import { internalE2eRouter } from "./routes/internal-e2e";
 import {
 	InternalOfacTruncateEndpoint,
 	InternalOfacBatchEndpoint,
@@ -179,6 +180,8 @@ export type Bindings = Env & {
 	 * Set to "false" to skip the adverse_media_grok container lookup.
 	 */
 	ADVERSE_MEDIA_ENABLED?: string;
+	/** Shared secret for E2E org purge and internal test hooks */
+	E2E_API_KEY?: string;
 };
 
 // Start a Hono app
@@ -236,6 +239,8 @@ app.get("/", (c) => {
 app.get("/docsz", (c) => {
 	return c.html(getScalarHtml(appMeta));
 });
+
+app.route("/api/v1/internal/e2e", internalE2eRouter);
 
 // Apply auth middleware to protected routes
 // Pattern: Apply middleware to specific paths before registering endpoints
