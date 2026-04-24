@@ -150,6 +150,10 @@ model SearchQuery {
   query                String
   source               String   @default("manual") // 'manual' | 'aml-screening'
   entityType           String   @default("person") @map("entity_type") // 'person', 'entity', etc.
+  /** AML Core entity (client or beneficial controller UUID) when set by internal search */
+  entityId             String?  @map("entity_id")
+  /** 'client' | 'beneficial_controller' when entityId is set */
+  entityKind           String?  @map("entity_kind")
   birthDate            String?  @map("birth_date")
   countries            String? // JSON array
   status               String   @default("pending") // 'pending', 'completed', 'failed'
@@ -190,5 +194,6 @@ model SearchQuery {
   @@index([organizationId, createdAt(sort: Desc)], name: "idx_search_query_org_created")
   @@index([organizationId, status], name: "idx_search_query_org_status")
   @@index([organizationId, environment], name: "idx_search_query_org_env")
+  @@index([organizationId, entityId, createdAt(sort: Desc)], name: "idx_search_query_org_entity_created")
   @@map("search_query")
 }

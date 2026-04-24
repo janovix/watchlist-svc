@@ -26,7 +26,7 @@
 	"vectorize": [
 		{
 			"binding": "WATCHLIST_VECTORIZE",
-			"index_name": "watchlist-dev",
+			"index_name": "watchlist-m3-dev",
 		},
 	],
 	"ai": {

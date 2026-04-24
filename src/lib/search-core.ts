@@ -14,12 +14,16 @@ import { getCallbackUrl } from "./callback-utils";
 import {
 	normalizeIdentifier,
 	bestNameScore,
-	computeMetaScore,
+	computeMetaSignal,
 	computeHybridScore,
 	passesMatchFilter,
+	parseRfcBirthDate,
+	extractOfacRecordCountries,
+	extractUnscRecordCountries,
 } from "./matching-utils";
 import { createHash } from "crypto";
 import type { Bindings } from "../index";
+import { WATCHLIST_EMBEDDING_MODEL } from "./embedding-config";
 
 // Type definitions for search targets
 export type OfacTargetType = {
@@ -111,6 +115,9 @@ export interface SearchParams {
 	threshold?: number;
 	/** Deployment environment for data isolation (defaults to "production") */
 	environment?: string;
+	/** When set, links this query to an AML client or beneficial controller */
+	entityId?: string;
+	entityKind?: "client" | "beneficial_controller";
 }
 
 export interface SearchResult {
@@ -191,6 +198,8 @@ export async function performSearch(
 		topK = 50,
 		threshold = 0.875,
 		environment = "production",
+		entityId: entityIdParam,
+		entityKind: entityKindParam,
 	} = params;
 
 	// Generate query ID for persistent tracking and SSE subscription
@@ -199,6 +208,15 @@ export async function performSearch(
 
 	// Create SearchQuery record for audit trail and async result aggregation
 	const prisma = createPrismaClient(env.DB);
+
+	const entityId =
+		typeof entityIdParam === "string" && entityIdParam.trim() !== ""
+			? entityIdParam.trim()
+			: null;
+	const entityKind =
+		entityKindParam === "client" || entityKindParam === "beneficial_controller"
+			? entityKindParam
+			: null;
 
 	try {
 		await prisma.searchQuery.create({
@@ -210,6 +228,8 @@ export async function performSearch(
 				query,
 				source,
 				entityType,
+				entityId,
+				entityKind,
 				birthDate: birthDate ?? null,
 				countries: countries ? JSON.stringify(countries) : null,
 				status: "pending",
@@ -462,7 +482,7 @@ export async function performSearch(
 
 	// Step B: Vector Search
 	console.log("[SearchCore] Step B: Generating embedding for query");
-	const queryResponse = (await env.AI.run("@cf/baai/bge-base-en-v1.5", {
+	const queryResponse = (await env.AI.run(WATCHLIST_EMBEDDING_MODEL, {
 		text: [query],
 	})) as { data: number[][] };
 
@@ -708,7 +728,11 @@ export async function performSearch(
 
 		let nameScore = 0;
 		let metaScore = 0;
+		let metaMismatch = false;
 		let finalScore = 1.0;
+
+		const userProvidedDisambiguators =
+			Boolean(birthDate) || (countries && countries.length > 0);
 
 		// Identifier matches get score of 1.0
 		if (!candidate.identifierMatch) {
@@ -718,6 +742,12 @@ export async function performSearch(
 					primaryName: string;
 					aliases: string[] | null;
 					birthDate: string | null;
+					identifiers: Array<{
+						type?: string;
+						number?: string;
+						country?: string;
+					}> | null;
+					addresses: string[] | null;
 				};
 				nameScore = bestNameScore(query, target.primaryName, target.aliases);
 			} else if (candidate.dataset === "sat_69b") {
@@ -725,15 +755,47 @@ export async function performSearch(
 				nameScore = bestNameScore(query, target.taxpayerName, null);
 			}
 
-			// Compute meta score (only for datasets with birthDate)
-			if (candidate.dataset === "ofac_sdn" || candidate.dataset === "unsc") {
-				const target = candidate.target as { birthDate: string | null };
-				metaScore = computeMetaScore(
+			if (candidate.dataset === "ofac_sdn") {
+				const target = candidate.target as {
+					birthDate: string | null;
+					identifiers: Array<{
+						type?: string;
+						number?: string;
+						country?: string;
+					}> | null;
+					addresses: string[] | null;
+				};
+				const { score, mismatch } = computeMetaSignal(
 					birthDate,
 					countries,
 					target.birthDate,
-					null,
+					extractOfacRecordCountries(target),
 				);
+				metaScore = score;
+				metaMismatch = mismatch;
+			} else if (candidate.dataset === "unsc") {
+				const target = candidate.target as {
+					birthDate: string | null;
+					nationalities: string[] | null;
+				};
+				const { score, mismatch } = computeMetaSignal(
+					birthDate,
+					countries,
+					target.birthDate,
+					extractUnscRecordCountries(target.nationalities),
+				);
+				metaScore = score;
+				metaMismatch = mismatch;
+			} else if (candidate.dataset === "sat_69b") {
+				const target = candidate.target as { rfc: string };
+				const { score, mismatch } = computeMetaSignal(
+					birthDate,
+					countries,
+					parseRfcBirthDate(target.rfc),
+					["MX"],
+				);
+				metaScore = score;
+				metaMismatch = mismatch;
 			}
 
 			// Compute hybrid score
@@ -744,8 +806,16 @@ export async function performSearch(
 			);
 		}
 
+		const corroborated =
+			candidate.identifierMatch || metaScore > 0 || !userProvidedDisambiguators;
 		// Filter by threshold (or name-score override for exact/near-exact name matches)
-		if (!passesMatchFilter(finalScore, nameScore, threshold)) continue;
+		if (
+			!passesMatchFilter(finalScore, nameScore, threshold, {
+				corroborated,
+				mismatch: metaMismatch,
+			})
+		)
+			continue;
 
 		const match = {
 			target: candidate.target,

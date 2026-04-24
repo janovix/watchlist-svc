@@ -6,8 +6,10 @@ import {
 	jaroWinkler,
 	bestNameScore,
 	computeMetaScore,
+	computeMetaSignal,
 	computeHybridScore,
 	passesMatchFilter,
+	parseRfcBirthDate,
 } from "./matching-utils";
 
 describe("matching-utils", () => {
@@ -212,6 +214,33 @@ describe("matching-utils", () => {
 			const score2 = bestNameScore("José García", "José García", null);
 			expect(score2).toBe(1.0);
 		});
+
+		it("should allow subset query to match full legal name (Joaquin Guzman vs Chapo)", () => {
+			const s = bestNameScore(
+				"JOAQUIN GUZMAN",
+				"JOAQUIN ARCHIVALDO GUZMAN LOERA",
+				null,
+			);
+			expect(s).toBeGreaterThanOrEqual(0.9);
+		});
+
+		it("should not match a homonym with an extra paternal-style token (Guzman Perez vs Chapo)", () => {
+			const s = bestNameScore(
+				"JOAQUIN GUZMAN PEREZ",
+				"JOAQUIN ARCHIVALDO GUZMAN LOERA",
+				null,
+			);
+			expect(s).toBeLessThan(0.75);
+		});
+
+		it("should not treat different paternal surnames as a match (Carlos Lopez Morales)", () => {
+			const s = bestNameScore(
+				"CARLOS LOPEZ MORALES",
+				"GONZALEZ MORALES CARLOS",
+				null,
+			);
+			expect(s).toBeLessThan(0.75);
+		});
 	});
 
 	describe("computeMetaScore", () => {
@@ -224,17 +253,17 @@ describe("matching-utils", () => {
 		});
 
 		it("should return 0.5 for birthDate match only", () => {
-			const score = computeMetaScore("1980-01-15", ["MX"], "1980-01-15", [
-				"CO",
-			]);
+			const score = computeMetaScore(
+				"1980-01-15",
+				undefined,
+				"1980-01-15",
+				undefined,
+			);
 			expect(score).toBe(0.5);
 		});
 
 		it("should return 0.5 for countries overlap only", () => {
-			const score = computeMetaScore("1980-01-15", ["MX", "US"], "1985-03-20", [
-				"US",
-				"CO",
-			]);
+			const score = computeMetaScore(null, ["MX", "US"], null, ["US", "CO"]);
 			expect(score).toBe(0.5);
 		});
 
@@ -258,6 +287,24 @@ describe("matching-utils", () => {
 		it("should handle case-insensitive country matching", () => {
 			const score = computeMetaScore(null, ["mx"], null, ["MX"]);
 			expect(score).toBe(0.5);
+		});
+	});
+
+	describe("computeMetaSignal", () => {
+		it("returns mismatch when birth dates disagree", () => {
+			const r = computeMetaSignal("1962-03-03", ["MX"], "1958-07-12", ["MX"]);
+			expect(r.mismatch).toBe(true);
+			expect(r.score).toBe(0);
+		});
+	});
+
+	describe("parseRfcBirthDate", () => {
+		it("returns ISO date for 13-char natural person RFC (example: GOMC620303H45)", () => {
+			expect(parseRfcBirthDate("GOMC620303H45")).toBe("1962-03-03");
+		});
+
+		it("returns null for 12-char legal-entity style RFC", () => {
+			expect(parseRfcBirthDate("ABC850101XYZ1")).toBeNull();
 		});
 	});
 
@@ -309,28 +356,47 @@ describe("matching-utils", () => {
 
 	describe("passesMatchFilter", () => {
 		const threshold = 0.875;
+		const ok = { corroborated: true as const, mismatch: false as const };
 
 		it("returns true when hybrid >= threshold", () => {
-			expect(passesMatchFilter(0.9, 0.5, threshold)).toBe(true);
-			expect(passesMatchFilter(0.875, 0, threshold)).toBe(true);
-			expect(passesMatchFilter(1.0, 0, threshold)).toBe(true);
+			expect(passesMatchFilter(0.9, 0.5, threshold, ok)).toBe(true);
+			expect(passesMatchFilter(0.875, 0, threshold, ok)).toBe(true);
+			expect(passesMatchFilter(1.0, 0, threshold, ok)).toBe(true);
 		});
 
-		it("returns true when hybrid < threshold but name >= 0.9 and hybrid >= 0.7", () => {
-			expect(passesMatchFilter(0.78, 0.95, threshold)).toBe(true);
-			expect(passesMatchFilter(0.788, 1.0, threshold)).toBe(true); // Oseguera case
-			expect(passesMatchFilter(0.74, 0.91, threshold)).toBe(true); // Guzman case
-			expect(passesMatchFilter(0.7, 0.9, threshold)).toBe(true);
+		it("returns true when hybrid < threshold but name >= 0.9 and hybrid >= 0.7 and corroborated", () => {
+			expect(passesMatchFilter(0.78, 0.95, threshold, ok)).toBe(true);
+			expect(passesMatchFilter(0.788, 1.0, threshold, ok)).toBe(true); // Oseguera case
+			expect(passesMatchFilter(0.74, 0.91, threshold, ok)).toBe(true); // Guzman case
+			expect(passesMatchFilter(0.7, 0.9, threshold, ok)).toBe(true);
+		});
+
+		it("returns false on metadata mismatch even with high hybrid and name", () => {
+			expect(
+				passesMatchFilter(0.95, 1.0, threshold, {
+					corroborated: true,
+					mismatch: true,
+				}),
+			).toBe(false);
+		});
+
+		it("returns false when override would apply but not corroborated and user gave metadata", () => {
+			expect(
+				passesMatchFilter(0.75, 0.95, threshold, {
+					corroborated: false,
+					mismatch: false,
+				}),
+			).toBe(false);
 		});
 
 		it("returns false when hybrid < threshold and name < 0.9", () => {
-			expect(passesMatchFilter(0.78, 0.87, threshold)).toBe(false);
-			expect(passesMatchFilter(0.71, 0.87, threshold)).toBe(false); // CONSTRUCTORA CASTILLO case
+			expect(passesMatchFilter(0.78, 0.87, threshold, ok)).toBe(false);
+			expect(passesMatchFilter(0.71, 0.87, threshold, ok)).toBe(false); // CONSTRUCTORA CASTILLO case
 		});
 
 		it("returns false when hybrid < 0.7 even with name >= 0.9", () => {
-			expect(passesMatchFilter(0.65, 0.95, threshold)).toBe(false);
-			expect(passesMatchFilter(0.69, 1.0, threshold)).toBe(false);
+			expect(passesMatchFilter(0.65, 0.95, threshold, ok)).toBe(false);
+			expect(passesMatchFilter(0.69, 1.0, threshold, ok)).toBe(false);
 		});
 	});
 });

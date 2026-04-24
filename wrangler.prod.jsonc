@@ -30,7 +30,7 @@
 	"vectorize": [
 		{
 			"binding": "WATCHLIST_VECTORIZE",
-			"index_name": "watchlist",
+			"index_name": "watchlist-m3",
 		},
 	],
 	"ai": {

@@ -13,7 +13,7 @@ await applyD1Migrations(env.DB, env.MIGRATIONS);
 if (!("AI" in env) || !env.AI) {
 	env.AI = {
 		run: async () => ({
-			data: [new Array(768).fill(0.1)], // Mock embedding vector (768 dimensions for bge-base-en-v1.5)
+			data: [new Array(1024).fill(0.1)], // Mock embedding vector (1024 dimensions for bge-m3)
 		}),
 	} as unknown as typeof env.AI;
 }

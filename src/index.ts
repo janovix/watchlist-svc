@@ -63,6 +63,7 @@ import {
 } from "./endpoints/watchlist/internalGrokPep";
 import { InternalSearchEndpoint } from "./endpoints/watchlist/internalSearch";
 import { QueryListEndpoint } from "./endpoints/watchlist/queryList";
+import { QueryListByEntityEndpoint } from "./endpoints/watchlist/queryListByEntity";
 import { QueryReadEndpoint } from "./endpoints/watchlist/queryRead";
 import eventsRouter from "./endpoints/watchlist/events";
 import {
@@ -253,6 +254,7 @@ app.use("/search/unsc", requireActiveOrganization());
 app.use("/search/sat69b", authMiddleware());
 app.use("/search/sat69b", requireActiveOrganization());
 app.use("/queries", authMiddleware());
+app.use("/queries/by-entity", authMiddleware());
 app.use("/queries/:queryId", authMiddleware());
 
 // Admin routes require authentication + admin role
@@ -271,6 +273,8 @@ openapi.post("/search/unsc", SearchUnscEndpoint);
 openapi.post("/search/sat69b", SearchSat69bEndpoint);
 
 // Query management endpoints (authenticated)
+// Static path must be registered before /queries/:queryId
+openapi.get("/queries/by-entity", QueryListByEntityEndpoint);
 openapi.get("/queries", QueryListEndpoint);
 openapi.get("/queries/:queryId", QueryReadEndpoint);
 

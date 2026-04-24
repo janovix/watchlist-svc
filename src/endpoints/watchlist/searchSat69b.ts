@@ -8,8 +8,11 @@ import {
 	normalizeIdentifier,
 	bestNameScore,
 	computeHybridScore,
+	computeMetaSignal,
 	passesMatchFilter,
+	parseRfcBirthDate,
 } from "../../lib/matching-utils";
+import { WATCHLIST_EMBEDDING_MODEL } from "../../lib/embedding-config";
 
 // SAT 69-B phase schema
 export const sat69bPhase = z.object({
@@ -57,6 +60,8 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 			body: contentJson(
 				z.object({
 					q: z.string().min(1, "Query string is required"),
+					birthDate: z.string().optional(),
+					countries: z.array(z.string()).optional(),
 					rfc: z.string().optional(),
 					topK: z.number().int().min(1).max(100).optional().default(50),
 					threshold: z.number().min(0).max(1).optional().default(0.875),
@@ -211,7 +216,7 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 			// Step B: Vector search
 			console.log("[SearchSat69b] Step B: Vector search");
 
-			const queryResponse = (await c.env.AI.run("@cf/baai/bge-base-en-v1.5", {
+			const queryResponse = (await c.env.AI.run(WATCHLIST_EMBEDDING_MODEL, {
 				text: [data.body.q],
 			})) as { data: number[][] };
 
@@ -317,6 +322,10 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 				};
 			}> = [];
 
+			const userProvidedDisambiguators =
+				Boolean(data.body.birthDate) ||
+				(data.body.countries && data.body.countries.length > 0);
+
 			for (const [, candidate] of candidateMap) {
 				if (!candidate.target) continue;
 
@@ -326,15 +335,29 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 					null, // SAT 69-B doesn't have aliases
 				);
 
+				const { score: metaScore, mismatch: metaMismatch } = computeMetaSignal(
+					data.body.birthDate,
+					data.body.countries,
+					parseRfcBirthDate(candidate.target.rfc),
+					["MX"],
+				);
+
 				const hybridScore = computeHybridScore(
 					candidate.vectorScore,
 					nameScore,
-					0, // SAT 69-B doesn't have birth date
+					metaScore,
 				);
 
+				const corroborated =
+					candidate.identifierMatch ||
+					metaScore > 0 ||
+					!userProvidedDisambiguators;
 				const accept =
 					candidate.identifierMatch ||
-					passesMatchFilter(hybridScore, nameScore, data.body.threshold);
+					passesMatchFilter(hybridScore, nameScore, data.body.threshold, {
+						corroborated,
+						mismatch: metaMismatch,
+					});
 				if (accept) {
 					matches.push({
 						target: candidate.target,
@@ -342,7 +365,7 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 						breakdown: {
 							vectorScore: candidate.vectorScore,
 							nameScore,
-							metaScore: 0,
+							metaScore,
 							identifierMatch: candidate.identifierMatch,
 						},
 					});
