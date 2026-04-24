@@ -1,3 +1,10 @@
+# [1.10.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.2...v1.10.0-rc.3) (2026-04-24)
+
+
+### Features
+
+* **search:** update wrangler configurations for new watchlist-m3 index and add entity_id and entity_kind to search queries ([96c982f](https://github.com/janovix/watchlist-svc/commit/96c982f8229a307e73a63ea8cf0ac31b9c285500))
+
 # [1.10.0-rc.2](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.1...v1.10.0-rc.2) (2026-04-22)
 
 
