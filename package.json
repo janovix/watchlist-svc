@@ -77,7 +77,7 @@
 		"schema": "npx chanfana",
 		"seedLocalDb": "wrangler d1 migrations apply DB --local",
 		"release": "semantic-release",
-		"typecheck": "prisma generate && tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
+		"typecheck": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
 		"vitest": "vitest --config tests/vitest.config.mts",
 		"vitest:coverage": "vitest run --coverage --config tests/vitest.config.mts",
 		"test": "vitest --config tests/vitest.config.mts --run",
