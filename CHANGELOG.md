@@ -1,3 +1,10 @@
+# [1.10.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.3...v1.10.0-rc.4) (2026-04-28)
+
+
+### Features
+
+* **cors:** allow preflight requests with x-e2e-turnstile-bypass header in CORS middleware and add corresponding tests ([321c824](https://github.com/janovix/watchlist-svc/commit/321c8241f5173afaf224aea45b736a46cdb08a22))
+
 # [1.10.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.2...v1.10.0-rc.3) (2026-04-24)
 
 
