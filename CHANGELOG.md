@@ -1,3 +1,10 @@
+# [1.10.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.4...v1.10.0-rc.5) (2026-05-08)
+
+
+### Features
+
+* **schemas:** introduce shared Zod schemas for watchlist endpoints and refactor existing endpoints to utilize these schemas ([a530356](https://github.com/janovix/watchlist-svc/commit/a530356c901b0bba1406f86da23f3dd8b911d1ae))
+
 # [1.10.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.3...v1.10.0-rc.4) (2026-04-28)
 
 
