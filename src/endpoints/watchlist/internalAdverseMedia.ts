@@ -10,13 +10,18 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
-import { createPrismaClient } from "../../lib/prisma";
-import { QUERY_SOURCE } from "../../lib/query-source";
 import {
-	generateCacheKey,
-	writeCache,
-	checkAndUpdateQueryCompletion,
-} from "../../lib/search-query-utils";
+	runWatchlistContainerFailurePipeline,
+	runWatchlistContainerSuccessPipeline,
+} from "../../lib/container-callback-pipeline";
+import { broadcastPepEvent } from "../../lib/pep-events-broadcast";
+import { createPrismaClient } from "../../lib/prisma";
+import { generateCacheKey } from "../../lib/search-query-utils";
+import {
+	isGlobalCacheEnabled,
+	resolveSearchQueryFlagEnvironment,
+} from "../../lib/watchlist-cache";
+import { containerProgressPayloadSchema } from "./schemas";
 
 // =============================================================================
 // Schemas
@@ -94,115 +99,59 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 			`[InternalAdverseMedia] Received results for search ${search_id} (query: ${query}, entity: ${entity_type}, risk: ${risk_level})`,
 		);
 
-		// Store in KV cache (cross-org cache, entity-type specific)
-		if (c.env.PEP_CACHE) {
-			const cacheKey = generateCacheKey("adverse_media", query, entity_type);
-			const cacheData = { risk_level, findings, sources };
-			await writeCache(c.env.PEP_CACHE, cacheKey, cacheData);
-		}
+		const prismaForFlags = createPrismaClient(c.env.DB);
+		const flagEnv = await resolveSearchQueryFlagEnvironment(
+			prismaForFlags,
+			search_id,
+		);
+		const cacheOn = await isGlobalCacheEnabled(c.env, { environment: flagEnv });
+		const cacheKey = generateCacheKey("adverse_media", query, entity_type);
 
-		// Persist to D1 search_query table (org-scoped audit trail)
-		const prisma = createPrismaClient(c.env.DB);
-		try {
-			const searchQuery = await prisma.searchQuery.update({
-				where: { id: search_id },
-				data: {
-					adverseMediaStatus: "completed",
-					adverseMediaResult: JSON.stringify({
-						risk_level,
-						findings,
-						sources,
-					}),
-					adverseMediaHasRisk: risk_level !== "none",
-					adverseMediaRiskLevel: risk_level !== "none" ? risk_level : null,
-				},
-			});
-
-			console.log(
-				`[InternalAdverseMedia] Persisted adverse media result to search_query ${search_id}`,
-			);
-
-			// Check if all search types completed
-			await checkAndUpdateQueryCompletion(prisma, search_id);
-
-			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
-				try {
-					await c.env.AML_SERVICE.processScreeningCallback({
-						queryId: search_id,
-						type: "adverse_media",
-						status: "completed",
-						matched: risk_level === "high" || risk_level === "medium",
-					});
-					console.log(
-						`[InternalAdverseMedia] AML callback sent for query ${search_id}`,
-					);
-				} catch (callbackError) {
-					console.error(
-						`[InternalAdverseMedia] Failed to send AML callback:`,
-						callbackError,
-					);
-					// Don't fail the whole request if callback fails
-				}
-			}
-		} catch (persistError) {
-			console.error(
-				`[InternalAdverseMedia] Failed to persist to D1:`,
-				persistError,
-			);
-			// Don't fail the whole request if D1 persistence fails
-		}
-
-		// Broadcast results via SSE to connected clients
-		let broadcastSent = 0;
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-
-				const response = await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "adverse_media_results",
-						payload: {
-							search_id,
-							query,
+		const { broadcastSent } = await runWatchlistContainerSuccessPipeline({
+			env: c.env,
+			searchId: search_id,
+			logPrefix: "[InternalAdverseMedia]",
+			cacheWrite:
+				cacheOn && c.env.PEP_CACHE
+					? {
+							kv: c.env.PEP_CACHE,
+							key: cacheKey,
+							value: { risk_level, findings, sources },
+						}
+					: undefined,
+			persist: async (prisma) => {
+				const row = await prisma.searchQuery.update({
+					where: { id: search_id },
+					data: {
+						adverseMediaStatus: "completed",
+						adverseMediaResult: JSON.stringify({
 							risk_level,
 							findings,
 							sources,
-							status: "completed",
-							completed_at: new Date().toISOString(),
-						},
-					}),
+						}),
+						adverseMediaHasRisk: risk_level !== "none",
+						adverseMediaRiskLevel: risk_level !== "none" ? risk_level : null,
+					},
 				});
-
-				if (response.ok) {
-					const broadcastResult = (await response.json()) as {
-						sent: number;
-					};
-					broadcastSent = broadcastResult.sent;
-					console.log(
-						`[InternalAdverseMedia] Broadcast sent to ${broadcastSent} clients for search ${search_id}`,
-					);
-				} else {
-					console.error(
-						`[InternalAdverseMedia] Broadcast failed: ${response.status}`,
-						await response.text(),
-					);
-				}
-			} catch (error) {
-				console.error(
-					`[InternalAdverseMedia] Failed to broadcast results:`,
-					error,
-				);
-				// Don't fail the whole request if broadcast fails
-			}
-		} else {
-			console.warn(
-				`[InternalAdverseMedia] PEP_EVENTS_DO binding not configured`,
-			);
-		}
+				return { source: row.source };
+			},
+			aml: {
+				type: "adverse_media",
+				matched: risk_level === "high" || risk_level === "medium",
+			},
+			broadcast: {
+				event: "adverse_media_results",
+				payload: {
+					search_id,
+					query,
+					risk_level,
+					findings,
+					sources,
+					status: "completed",
+					completed_at: new Date().toISOString(),
+				},
+			},
+		});
 
 		return Response.json({
 			success: true,
@@ -210,20 +159,6 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 		});
 	}
 }
-
-// =============================================================================
-// Progress payload schema (shared shape for progress events)
-// =============================================================================
-
-const progressPayloadSchema = z.object({
-	search_id: z.string().describe("Search ID for tracking"),
-	phase: z
-		.string()
-		.optional()
-		.describe("Phase identifier e.g. searching, thinking"),
-	message: z.string().optional().describe("Human-readable progress message"),
-	progress: z.number().min(0).max(1).optional().describe("Progress 0-1"),
-});
 
 // =============================================================================
 // POST /internal/adverse-media/progress - Progress updates from container
@@ -244,7 +179,7 @@ export class InternalAdverseMediaProgressEndpoint extends OpenAPIRoute {
 			body: {
 				content: {
 					"application/json": {
-						schema: progressPayloadSchema,
+						schema: containerProgressPayloadSchema,
 					},
 				},
 			},
@@ -284,7 +219,7 @@ export class InternalAdverseMediaProgressEndpoint extends OpenAPIRoute {
 				{ status: 400 },
 			);
 		}
-		const parsed = progressPayloadSchema.safeParse(body);
+		const parsed = containerProgressPayloadSchema.safeParse(body);
 		if (!parsed.success) {
 			return Response.json(
 				{
@@ -297,30 +232,12 @@ export class InternalAdverseMediaProgressEndpoint extends OpenAPIRoute {
 		}
 		const { search_id, phase, message, progress } = parsed.data;
 
-		let sent = 0;
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-				const response = await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "adverse_media_progress",
-						payload: { phase, message, progress },
-					}),
-				});
-				if (response.ok) {
-					const result = (await response.json()) as { sent: number };
-					sent = result.sent;
-				}
-			} catch (error) {
-				console.error(
-					`[InternalAdverseMedia] Progress broadcast failed:`,
-					error,
-				);
-			}
-		}
+		const { sent } = await broadcastPepEvent(
+			c.env,
+			search_id,
+			"adverse_media_progress",
+			{ phase, message, progress },
+		);
 
 		return Response.json({ success: true, sent });
 	}
@@ -373,89 +290,31 @@ export class InternalAdverseMediaFailedEndpoint extends OpenAPIRoute {
 
 		console.log(`[InternalAdverseMedia] Search ${search_id} failed: ${error}`);
 
-		// Persist failure to D1
-		const prisma = createPrismaClient(c.env.DB);
-		try {
-			const searchQuery = await prisma.searchQuery.update({
-				where: { id: search_id },
-				data: {
-					adverseMediaStatus: "failed",
-					adverseMediaResult: JSON.stringify({ error }),
-				},
-			});
-
-			console.log(
-				`[InternalAdverseMedia] Persisted failure status to search_query ${search_id}`,
-			);
-
-			// Check if all search types completed
-			await checkAndUpdateQueryCompletion(prisma, search_id);
-
-			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
-				try {
-					await c.env.AML_SERVICE.processScreeningCallback({
-						queryId: search_id,
-						type: "adverse_media",
-						status: "failed",
-						matched: false,
-					});
-					console.log(
-						`[InternalAdverseMedia] AML callback sent for failed query ${search_id}`,
-					);
-				} catch (callbackError) {
-					console.error(
-						`[InternalAdverseMedia] Failed to send AML callback:`,
-						callbackError,
-					);
-					// Don't fail the whole request if callback fails
-				}
-			}
-		} catch (persistError) {
-			console.error(
-				`[InternalAdverseMedia] Failed to persist failure to D1:`,
-				persistError,
-			);
-			// Don't fail if D1 update fails (row might not exist)
-		}
-
-		// Broadcast failure via SSE
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-
-				const response = await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "adverse_media_error",
-						payload: {
-							search_id,
-							status: "failed",
-							error,
-							failed_at: new Date().toISOString(),
-						},
-					}),
+		await runWatchlistContainerFailurePipeline({
+			env: c.env,
+			searchId: search_id,
+			logPrefix: "[InternalAdverseMedia]",
+			persist: async (prisma) => {
+				const row = await prisma.searchQuery.update({
+					where: { id: search_id },
+					data: {
+						adverseMediaStatus: "failed",
+						adverseMediaResult: JSON.stringify({ error }),
+					},
 				});
-
-				if (response.ok) {
-					console.log(
-						`[InternalAdverseMedia] Failure broadcast for search ${search_id}`,
-					);
-				} else {
-					console.error(
-						`[InternalAdverseMedia] Broadcast failed: ${response.status}`,
-						await response.text(),
-					);
-				}
-			} catch (broadcastError) {
-				console.error(
-					`[InternalAdverseMedia] Failed to broadcast error:`,
-					broadcastError,
-				);
-			}
-		}
+				return { source: row.source };
+			},
+			aml: { type: "adverse_media" },
+			broadcast: {
+				event: "adverse_media_error",
+				payload: {
+					search_id,
+					status: "failed",
+					error,
+					failed_at: new Date().toISOString(),
+				},
+			},
+		});
 
 		return Response.json({
 			success: true,

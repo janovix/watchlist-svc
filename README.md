@@ -61,6 +61,13 @@ Watchlist ingestion and search service using Hono + Chanfana + D1 + Vectorize.
 
 - `GROK_API_KEY` - API key for Grok API (used for PEP search fallback)
 
+### Cross-org cache (flags-svc)
+
+- **`watchlist-global-cache`** (boolean flag in **flags-svc**, default `true`) — When enabled, watchlist-svc reads/writes shared KV entries for (a) **L1** hybrid sync results (~1h TTL) and (b) existing **L2** Grok payloads (PEP AI, adverse media, legacy PEP list cache). Evaluated via the `FLAGS_SERVICE` binding.
+- **`CACHE_ENABLED`** — **Fallback only**: used when `FLAGS_SERVICE` is missing or `isFlagEnabled` fails (e.g. some local setups). Set to `"true"` to force cache behavior without flags-svc. Production control should remain the `watchlist-global-cache` flag.
+
+See also: `src/lib/watchlist-cache.ts` (`isGlobalCacheEnabled`).
+
 - `AUTH_SERVICE` - Service binding to auth-svc for JWT validation
 - `AUTH_SERVICE_URL` - URL for auth-svc JWKS endpoint
 - `AUTH_JWKS_CACHE_TTL` - Cache TTL for JWKS (default: 3600 seconds)

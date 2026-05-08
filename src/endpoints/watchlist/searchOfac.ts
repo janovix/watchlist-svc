@@ -13,6 +13,7 @@ import {
 	extractOfacRecordCountries,
 } from "../../lib/matching-utils";
 import { WATCHLIST_EMBEDDING_MODEL } from "../../lib/embedding-config";
+import { toOfacTarget } from "../../lib/target-mappers";
 
 // Identifier schema
 export const identifierSchema = z.object({
@@ -175,22 +176,7 @@ export class SearchOfacEndpoint extends OpenAPIRoute {
 					});
 
 					for (const record of ofacRecords) {
-						const target = {
-							id: record.id,
-							partyType: record.partyType,
-							primaryName: record.primaryName,
-							aliases: record.aliases ? JSON.parse(record.aliases) : null,
-							birthDate: record.birthDate,
-							birthPlace: record.birthPlace,
-							addresses: record.addresses ? JSON.parse(record.addresses) : null,
-							identifiers: record.identifiers
-								? JSON.parse(record.identifiers)
-								: null,
-							remarks: record.remarks,
-							sourceList: record.sourceList,
-							createdAt: record.createdAt.toISOString(),
-							updatedAt: record.updatedAt.toISOString(),
-						};
+						const target = toOfacTarget(record);
 
 						candidateMap.set(record.id, {
 							target,
@@ -260,22 +246,7 @@ export class SearchOfacEndpoint extends OpenAPIRoute {
 				for (const record of ofacRecords) {
 					const candidate = candidateMap.get(record.id);
 					if (candidate) {
-						candidate.target = {
-							id: record.id,
-							partyType: record.partyType,
-							primaryName: record.primaryName,
-							aliases: record.aliases ? JSON.parse(record.aliases) : null,
-							birthDate: record.birthDate,
-							birthPlace: record.birthPlace,
-							addresses: record.addresses ? JSON.parse(record.addresses) : null,
-							identifiers: record.identifiers
-								? JSON.parse(record.identifiers)
-								: null,
-							remarks: record.remarks,
-							sourceList: record.sourceList,
-							createdAt: record.createdAt.toISOString(),
-							updatedAt: record.updatedAt.toISOString(),
-						};
+						candidate.target = toOfacTarget(record);
 					}
 				}
 			}

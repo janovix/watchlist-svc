@@ -1,7 +1,13 @@
-import { SELF } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { env, SELF } from "cloudflare:test";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { Bindings } from "../../src/index";
+import { disableAsyncSearchSideEffects } from "./_helpers";
 
 describe("Search API Tests", () => {
+	beforeEach(() => {
+		disableAsyncSearchSideEffects(env as unknown as Bindings);
+	});
+
 	describe("POST /search - Validation", () => {
 		it("should return error when query is missing", async () => {
 			const response = await SELF.fetch("http://local.test/search", {
@@ -70,9 +76,34 @@ describe("Search API Tests", () => {
 		// due to how Chanfana/Hono handles unregistered routes with authMiddleware.
 	});
 
-	// Note: Tests that perform actual searches with result validation are skipped
-	// because AI and Vectorize bindings are not available in the test environment.
-	// The endpoint properly returns 503 when bindings are missing. Full search
-	// functionality (including identifier matching, vector search, and hybrid scoring)
-	// is tested in production-like environments with real bindings.
+	describe("POST /search — mocked AI / Vectorize (apply-migrations)", () => {
+		it("returns 200 with empty dataset buckets for a valid query", async () => {
+			const response = await SELF.fetch("http://local.test/search", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					q: "Integration Search Smoke Alpha",
+					entityType: "person",
+					topK: 5,
+					threshold: 0.875,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+			const data = (await response.json()) as {
+				success: boolean;
+				result: {
+					queryId: string;
+					ofac: { count: number };
+					unsc: { count: number };
+					sat69b: { count: number };
+				};
+			};
+			expect(data.success).toBe(true);
+			expect(typeof data.result.queryId).toBe("string");
+			expect(data.result.ofac.count).toBe(0);
+			expect(data.result.unsc.count).toBe(0);
+			expect(data.result.sat69b.count).toBe(0);
+		});
+	});
 });

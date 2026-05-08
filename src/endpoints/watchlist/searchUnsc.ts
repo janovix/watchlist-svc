@@ -13,6 +13,7 @@ import {
 	extractUnscRecordCountries,
 } from "../../lib/matching-utils";
 import { WATCHLIST_EMBEDDING_MODEL } from "../../lib/embedding-config";
+import { toUnscTarget } from "../../lib/target-mappers";
 
 // Identifier schema
 export const unscIdentifierSchema = z.object({
@@ -177,31 +178,7 @@ export class SearchUnscEndpoint extends OpenAPIRoute {
 					});
 
 					for (const record of unscRecords) {
-						const target = {
-							id: record.id,
-							partyType: record.partyType,
-							primaryName: record.primaryName,
-							aliases: record.aliases ? JSON.parse(record.aliases) : null,
-							birthDate: record.birthDate,
-							birthPlace: record.birthPlace,
-							gender: record.gender,
-							nationalities: record.nationalities
-								? JSON.parse(record.nationalities)
-								: null,
-							addresses: record.addresses ? JSON.parse(record.addresses) : null,
-							identifiers: record.identifiers
-								? JSON.parse(record.identifiers)
-								: null,
-							designations: record.designations
-								? JSON.parse(record.designations)
-								: null,
-							remarks: record.remarks,
-							unListType: record.unListType,
-							referenceNumber: record.referenceNumber,
-							listedOn: record.listedOn,
-							createdAt: record.createdAt.toISOString(),
-							updatedAt: record.updatedAt.toISOString(),
-						};
+						const target = toUnscTarget(record);
 
 						candidateMap.set(record.id, {
 							target,
@@ -271,31 +248,7 @@ export class SearchUnscEndpoint extends OpenAPIRoute {
 				for (const record of unscRecords) {
 					const candidate = candidateMap.get(record.id);
 					if (candidate) {
-						candidate.target = {
-							id: record.id,
-							partyType: record.partyType,
-							primaryName: record.primaryName,
-							aliases: record.aliases ? JSON.parse(record.aliases) : null,
-							birthDate: record.birthDate,
-							birthPlace: record.birthPlace,
-							gender: record.gender,
-							nationalities: record.nationalities
-								? JSON.parse(record.nationalities)
-								: null,
-							addresses: record.addresses ? JSON.parse(record.addresses) : null,
-							identifiers: record.identifiers
-								? JSON.parse(record.identifiers)
-								: null,
-							designations: record.designations
-								? JSON.parse(record.designations)
-								: null,
-							remarks: record.remarks,
-							unListType: record.unListType,
-							referenceNumber: record.referenceNumber,
-							listedOn: record.listedOn,
-							createdAt: record.createdAt.toISOString(),
-							updatedAt: record.updatedAt.toISOString(),
-						};
+						candidate.target = toUnscTarget(record);
 					}
 				}
 			}

@@ -2,6 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InternalSat69bCompleteEndpoint } from "../../src/endpoints/watchlist/internalSat69b";
 import { createPrismaClient } from "../../src/lib/prisma";
+import { localSelfUrl, seedIngestionRun } from "./_helpers";
 
 /**
  * Internal SAT 69-B Endpoint Tests
@@ -29,13 +30,9 @@ describe("Internal SAT 69-B Endpoints", () => {
 		});
 		await prisma.watchlistIngestionRun.deleteMany({});
 
-		// Create a test ingestion run for callbacks to reference
-		const run = await prisma.watchlistIngestionRun.create({
-			data: {
-				sourceUrl: "r2://test/sat_69b.csv",
-				sourceType: "sat_69b_csv",
-				status: "running",
-			},
+		const run = await seedIngestionRun(prisma, {
+			sourceUrl: "r2://test/sat_69b.csv",
+			sourceType: "sat_69b_csv",
 		});
 		testRunId = run.id;
 	});
@@ -64,7 +61,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 			});
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/truncate",
+				localSelfUrl("/internal/sat69b/truncate"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -87,7 +84,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 
 		it("should update run status to inserting phase", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/truncate",
+				localSelfUrl("/internal/sat69b/truncate"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -108,7 +105,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 
 		it("should handle truncate when table is already empty", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/truncate",
+				localSelfUrl("/internal/sat69b/truncate"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -171,7 +168,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/batch",
+				localSelfUrl("/internal/sat69b/batch"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -204,7 +201,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 
 		it("should handle empty batch gracefully", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/batch",
+				localSelfUrl("/internal/sat69b/batch"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -242,7 +239,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 			});
 
 			// Send first batch
-			await SELF.fetch("http://local.test/internal/sat69b/batch", {
+			await SELF.fetch(localSelfUrl("/internal/sat69b/batch"), {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -254,7 +251,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 			});
 
 			// Send second batch
-			await SELF.fetch("http://local.test/internal/sat69b/batch", {
+			await SELF.fetch(localSelfUrl("/internal/sat69b/batch"), {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -280,7 +277,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 	describe("POST /internal/sat69b/complete", () => {
 		it("should mark run as completed with stats", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/complete",
+				localSelfUrl("/internal/sat69b/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -317,7 +314,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 			const errors = Array.from({ length: 150 }, (_, i) => `Error ${i}`);
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/complete",
+				localSelfUrl("/internal/sat69b/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -343,7 +340,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 			const nonExistentRunId = 99999;
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/complete",
+				localSelfUrl("/internal/sat69b/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -363,7 +360,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 
 		it("should skip vectorization when skip_vectorization is true", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/complete",
+				localSelfUrl("/internal/sat69b/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -388,7 +385,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 
 		it("should skip vectorization when total_records is 0", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/complete",
+				localSelfUrl("/internal/sat69b/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -413,7 +410,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 
 		it("should skip vectorization when THREAD_SVC is not configured", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/complete",
+				localSelfUrl("/internal/sat69b/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -489,7 +486,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 	describe("POST /internal/sat69b/failed", () => {
 		it("should mark run as failed with error message", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/failed",
+				localSelfUrl("/internal/sat69b/failed"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -518,7 +515,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 			const longError = "x".repeat(2000);
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/failed",
+				localSelfUrl("/internal/sat69b/failed"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -541,7 +538,7 @@ describe("Internal SAT 69-B Endpoints", () => {
 			const nonExistentRunId = 99999;
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/sat69b/failed",
+				localSelfUrl("/internal/sat69b/failed"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },

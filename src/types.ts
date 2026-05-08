@@ -2,15 +2,6 @@ import type { Context } from "hono";
 import type { Bindings } from "./index";
 
 /**
- * Original CSV ingestion job (used by queue-consumer.ts)
- */
-export interface IngestionJob {
-	runId: number;
-	csvUrl: string;
-	reindexAll: boolean;
-}
-
-/**
  * Extended context with organization info from auth middleware
  */
 export type AppContext = Context<{
@@ -29,4 +20,3 @@ export type AppContext = Context<{
 		environment?: string;
 	};
 }>;
-export type HandleArgs = [AppContext];

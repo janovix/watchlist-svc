@@ -7,12 +7,13 @@ declare namespace Cloudflare {
 		durableNamespaces: "PepEventsDO";
 	}
 	interface Env {
+		/** TODO(janovix): currently only referenced by integration tests — kept warm pending product decision */
 		WATCHLIST_KV: KVNamespace;
 		PEP_CACHE: KVNamespace;
 		ENVIRONMENT: "dev";
 		TRUSTED_ORIGINS: "*.janovix.workers.dev,http://localhost:*";
 		AUTH_JWKS_CACHE_TTL: "3600";
-		PEP_CACHE_ENABLED: "false";
+		CACHE_ENABLED: "false";
 		PEP_SEARCH_ENABLED: "false";
 		PEP_GROK_ENABLED: "true";
 		ADVERSE_MEDIA_ENABLED: "true";
@@ -35,7 +36,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "ENVIRONMENT" | "TRUSTED_ORIGINS" | "AUTH_JWKS_CACHE_TTL" | "PEP_CACHE_ENABLED" | "PEP_SEARCH_ENABLED" | "PEP_GROK_ENABLED" | "ADVERSE_MEDIA_ENABLED" | "R2_BUCKET_NAME" | "GROK_API_KEY">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "ENVIRONMENT" | "TRUSTED_ORIGINS" | "AUTH_JWKS_CACHE_TTL" | "CACHE_ENABLED" | "PEP_SEARCH_ENABLED" | "PEP_GROK_ENABLED" | "ADVERSE_MEDIA_ENABLED" | "R2_BUCKET_NAME" | "GROK_API_KEY">> {}
 }
 
 // Begin runtime types

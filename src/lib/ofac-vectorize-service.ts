@@ -6,6 +6,10 @@
  */
 
 import type { OfacSdnEntry } from "@prisma/client";
+import {
+	appendAliasesFromJson,
+	appendIdentifierNumbersFromJson,
+} from "./vectorize-text-helpers";
 
 /**
  * Compose the text representation for semantic search embedding.
@@ -15,36 +19,8 @@ import type { OfacSdnEntry } from "@prisma/client";
  */
 export function composeOfacVectorText(entry: OfacSdnEntry): string {
 	const parts: string[] = [entry.primaryName];
-
-	// Add aliases
-	if (entry.aliases) {
-		try {
-			const aliases = JSON.parse(entry.aliases) as string[];
-			if (aliases.length > 0) {
-				parts.push(...aliases);
-			}
-		} catch {
-			// Invalid JSON, skip aliases
-		}
-	}
-
-	// Add identifiers with ID: prefix
-	if (entry.identifiers) {
-		try {
-			const identifiers = JSON.parse(entry.identifiers) as Array<{
-				type?: string;
-				number?: string;
-			}>;
-			for (const identifier of identifiers) {
-				if (identifier.number) {
-					parts.push(`ID:${identifier.number}`);
-				}
-			}
-		} catch {
-			// Invalid JSON, skip identifiers
-		}
-	}
-
+	appendAliasesFromJson(parts, entry.aliases);
+	appendIdentifierNumbersFromJson(parts, entry.identifiers);
 	return parts.join(" ");
 }
 

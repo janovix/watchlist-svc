@@ -83,7 +83,7 @@
 		"ENVIRONMENT": "production",
 		"TRUSTED_ORIGINS": "*.janovix.com",
 		"AUTH_JWKS_CACHE_TTL": "3600",
-		"PEP_CACHE_ENABLED": "false",
+		"CACHE_ENABLED": "false",
 		"PEP_SEARCH_ENABLED": "false",
 		"PEP_GROK_ENABLED": "true",
 		"ADVERSE_MEDIA_ENABLED": "true",

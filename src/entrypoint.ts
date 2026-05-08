@@ -1,6 +1,5 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { performSearch } from "./lib/search-core";
-import { createPrismaClient } from "./lib/prisma";
 import { normalizeAmlSource, QUERY_SOURCE } from "./lib/query-source";
 import type { Bindings } from "./index";
 
@@ -145,42 +144,5 @@ export class WatchlistEntrypoint extends WorkerEntrypoint<Bindings> {
 			unscCount: result.unsc.count,
 			sat69bCount: result.sat69b.count,
 		};
-	}
-
-	/**
-	 * List stored search queries for a linked AML entity (newest first).
-	 */
-	async listByEntity(
-		organizationId: string,
-		entityId: string,
-		options?: { limit?: number; offset?: number },
-	) {
-		if (typeof organizationId !== "string" || !organizationId.trim()) {
-			throw new Error("listByEntity: organizationId is required");
-		}
-		if (typeof entityId !== "string" || !entityId.trim()) {
-			throw new Error("listByEntity: entityId is required");
-		}
-		const take = Math.min(200, Math.max(1, Math.floor(options?.limit ?? 50)));
-		const skip = Math.max(0, Math.floor(options?.offset ?? 0));
-		const prisma = createPrismaClient(this.env.DB);
-		const [rows, total] = await Promise.all([
-			prisma.searchQuery.findMany({
-				where: {
-					organizationId: organizationId.trim(),
-					entityId: entityId.trim(),
-				},
-				orderBy: { createdAt: "desc" },
-				take,
-				skip,
-			}),
-			prisma.searchQuery.count({
-				where: {
-					organizationId: organizationId.trim(),
-					entityId: entityId.trim(),
-				},
-			}),
-		]);
-		return { data: rows, total, limit: take, offset: skip };
 	}
 }

@@ -2,8 +2,6 @@ import { ApiException } from "chanfana";
 import type { MiddlewareHandler } from "hono";
 import * as jose from "jose";
 
-import type { AppContext } from "../types";
-
 /**
  * JWT payload structure from Better Auth
  */
@@ -316,32 +314,6 @@ export function authMiddleware(options?: {
 			throw apiError;
 		}
 	};
-}
-
-/**
- * Helper to get the authenticated user from context
- * Throws ApiException if user is not authenticated (compatible with chanfana)
- */
-export function getAuthUser(
-	c: AppContext & { get: (key: "user") => AuthUser | undefined },
-): AuthUser {
-	const user = c.get("user");
-	if (!user) {
-		const error = new ApiException("User not authenticated");
-		error.status = 401;
-		error.code = 401;
-		throw error;
-	}
-	return user;
-}
-
-/**
- * Helper to get the authenticated user from context, or null if not authenticated
- */
-export function getAuthUserOrNull(
-	c: AppContext & { get: (key: "user") => AuthUser | undefined },
-): AuthUser | null {
-	return c.get("user") ?? null;
 }
 
 /**

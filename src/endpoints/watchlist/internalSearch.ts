@@ -14,9 +14,7 @@ import { contentJson } from "chanfana";
 import { performSearch } from "../../lib/search-core";
 import { normalizeAmlSource, QUERY_SOURCE } from "../../lib/query-source";
 import type { Bindings } from "../../index";
-import { ofacMatch } from "./searchOfac";
-import { unscMatch } from "./searchUnsc";
-import { sat69bMatch } from "./searchSat69b";
+import { hybridWatchlistSearchResultSchema } from "./schemas";
 
 export class InternalSearchEndpoint extends OpenAPIRoute {
 	schema = {
@@ -53,44 +51,7 @@ export class InternalSearchEndpoint extends OpenAPIRoute {
 				description: "Search results with hybrid scoring, separated by dataset",
 				...contentJson({
 					success: Boolean,
-					result: z.object({
-						queryId: z
-							.string()
-							.describe("Persistent query ID for result aggregation"),
-						ofac: z.object({
-							matches: z.array(ofacMatch),
-							count: z.number(),
-						}),
-						unsc: z.object({
-							matches: z.array(unscMatch),
-							count: z.number(),
-						}),
-						sat69b: z.object({
-							matches: z.array(sat69bMatch),
-							count: z.number(),
-						}),
-						pepSearch: z
-							.object({
-								searchId: z.string(),
-								status: z.enum(["completed", "pending"]),
-								results: z.any().nullable(),
-							})
-							.optional(),
-						pepAiSearch: z
-							.object({
-								searchId: z.string(),
-								status: z.enum(["completed", "pending", "skipped"]),
-								result: z.any().nullable(),
-							})
-							.optional(),
-						adverseMediaSearch: z
-							.object({
-								searchId: z.string(),
-								status: z.enum(["completed", "pending"]),
-								result: z.any().nullable(),
-							})
-							.optional(),
-					}),
+					result: hybridWatchlistSearchResultSchema,
 				}),
 			},
 			"400": {

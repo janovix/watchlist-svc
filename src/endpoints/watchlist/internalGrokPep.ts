@@ -10,13 +10,18 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
-import { createPrismaClient } from "../../lib/prisma";
-import { QUERY_SOURCE } from "../../lib/query-source";
 import {
-	generateCacheKey,
-	writeCache,
-	checkAndUpdateQueryCompletion,
-} from "../../lib/search-query-utils";
+	runWatchlistContainerFailurePipeline,
+	runWatchlistContainerSuccessPipeline,
+} from "../../lib/container-callback-pipeline";
+import { broadcastPepEvent } from "../../lib/pep-events-broadcast";
+import { createPrismaClient } from "../../lib/prisma";
+import { generateCacheKey } from "../../lib/search-query-utils";
+import {
+	isGlobalCacheEnabled,
+	resolveSearchQueryFlagEnvironment,
+} from "../../lib/watchlist-cache";
+import { containerProgressPayloadSchema } from "./schemas";
 
 // =============================================================================
 // Schemas
@@ -36,6 +41,9 @@ const grokPepResultSchema = z.object({
 		})
 		.describe("Bilingual summary"),
 	sources: z.array(z.string()).describe("Source URLs or domains"),
+	entity_type: z.enum(["person", "organization"]).optional(),
+	birthdate: z.string().optional(),
+	country: z.string().optional(),
 });
 
 export type GrokPepResult = z.infer<typeof grokPepResultSchema>;
@@ -82,108 +90,72 @@ export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 
 	async handle(c: { env: Bindings; req: Request }) {
 		const body = await c.req.json();
-		const { search_id, query, probability, summary, sources } =
-			body as GrokPepResult;
+		const {
+			search_id,
+			query,
+			probability,
+			summary,
+			sources,
+			entity_type,
+			birthdate,
+			country,
+		} = body as GrokPepResult;
 
 		console.log(
 			`[InternalGrokPep] Received results for search ${search_id} (query: ${query}, probability: ${probability})`,
 		);
 
-		// Store in KV cache (cross-org cache for latency reduction)
-		if (c.env.PEP_CACHE) {
-			const cacheKey = generateCacheKey("pep_ai", query);
-			const cacheData = { probability, summary, sources };
-			await writeCache(c.env.PEP_CACHE, cacheKey, cacheData);
-		}
+		const prismaForFlags = createPrismaClient(c.env.DB);
+		const flagEnv = await resolveSearchQueryFlagEnvironment(
+			prismaForFlags,
+			search_id,
+		);
+		const cacheOn = await isGlobalCacheEnabled(c.env, { environment: flagEnv });
+		const pepSuffix = [entity_type ?? "person", birthdate, country]
+			.filter(Boolean)
+			.join(":");
+		const cacheKey = generateCacheKey(
+			"pep_ai",
+			query,
+			pepSuffix.length > 0 ? pepSuffix : undefined,
+		);
 
-		// Persist to D1 search_query table (org-scoped audit trail)
-		const prisma = createPrismaClient(c.env.DB);
-		try {
-			const searchQuery = await prisma.searchQuery.update({
-				where: { id: search_id },
-				data: {
-					pepAiStatus: "completed",
-					pepAiResult: JSON.stringify({ probability, summary, sources }),
-				},
-			});
-
-			console.log(
-				`[InternalGrokPep] Persisted PEP AI result to search_query ${search_id}`,
-			);
-
-			// Check if all search types completed
-			await checkAndUpdateQueryCompletion(prisma, search_id);
-
-			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
-				try {
-					await c.env.AML_SERVICE.processScreeningCallback({
-						queryId: search_id,
-						type: "pep_ai",
-						status: "completed",
-						matched: probability >= 0.7,
-					});
-					console.log(
-						`[InternalGrokPep] AML callback sent for query ${search_id}`,
-					);
-				} catch (callbackError) {
-					console.error(
-						`[InternalGrokPep] Failed to send AML callback:`,
-						callbackError,
-					);
-					// Don't fail the whole request if callback fails
-				}
-			}
-		} catch (persistError) {
-			console.error(`[InternalGrokPep] Failed to persist to D1:`, persistError);
-			// Don't fail the whole request if D1 persistence fails
-		}
-
-		// Broadcast results via SSE to connected clients
-		let broadcastSent = 0;
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-
-				const response = await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "pep_grok_results",
-						payload: {
-							search_id,
-							query,
-							probability,
-							summary,
-							sources,
-							status: "completed",
-							completed_at: new Date().toISOString(),
-						},
-					}),
+		const { broadcastSent } = await runWatchlistContainerSuccessPipeline({
+			env: c.env,
+			searchId: search_id,
+			logPrefix: "[InternalGrokPep]",
+			cacheWrite:
+				cacheOn && c.env.PEP_CACHE
+					? {
+							kv: c.env.PEP_CACHE,
+							key: cacheKey,
+							value: { probability, summary, sources },
+						}
+					: undefined,
+			persist: async (prisma) => {
+				const row = await prisma.searchQuery.update({
+					where: { id: search_id },
+					data: {
+						pepAiStatus: "completed",
+						pepAiResult: JSON.stringify({ probability, summary, sources }),
+					},
 				});
-
-				if (response.ok) {
-					const broadcastResult = (await response.json()) as {
-						sent: number;
-					};
-					broadcastSent = broadcastResult.sent;
-					console.log(
-						`[InternalGrokPep] Broadcast sent to ${broadcastSent} clients for search ${search_id}`,
-					);
-				} else {
-					console.error(
-						`[InternalGrokPep] Broadcast failed: ${response.status}`,
-						await response.text(),
-					);
-				}
-			} catch (error) {
-				console.error(`[InternalGrokPep] Failed to broadcast results:`, error);
-				// Don't fail the whole request if broadcast fails
-			}
-		} else {
-			console.warn(`[InternalGrokPep] PEP_EVENTS_DO binding not configured`);
-		}
+				return { source: row.source };
+			},
+			aml: { type: "pep_ai", matched: probability >= 0.7 },
+			broadcast: {
+				event: "pep_grok_results",
+				payload: {
+					search_id,
+					query,
+					probability,
+					summary,
+					sources,
+					status: "completed",
+					completed_at: new Date().toISOString(),
+				},
+			},
+		});
 
 		return Response.json({
 			success: true,
@@ -191,20 +163,6 @@ export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 		});
 	}
 }
-
-// =============================================================================
-// Progress payload schema (shared shape for progress events)
-// =============================================================================
-
-const progressPayloadSchema = z.object({
-	search_id: z.string().describe("Search ID for tracking"),
-	phase: z
-		.string()
-		.optional()
-		.describe("Phase identifier e.g. searching, thinking"),
-	message: z.string().optional().describe("Human-readable progress message"),
-	progress: z.number().min(0).max(1).optional().describe("Progress 0-1"),
-});
 
 // =============================================================================
 // POST /internal/grok-pep/progress - Progress updates from container
@@ -225,7 +183,7 @@ export class InternalGrokPepProgressEndpoint extends OpenAPIRoute {
 			body: {
 				content: {
 					"application/json": {
-						schema: progressPayloadSchema,
+						schema: containerProgressPayloadSchema,
 					},
 				},
 			},
@@ -258,7 +216,7 @@ export class InternalGrokPepProgressEndpoint extends OpenAPIRoute {
 		}
 		const body = await c.req.json();
 		const { search_id, phase, message, progress } = body as z.infer<
-			typeof progressPayloadSchema
+			typeof containerProgressPayloadSchema
 		>;
 
 		if (!search_id) {
@@ -268,27 +226,16 @@ export class InternalGrokPepProgressEndpoint extends OpenAPIRoute {
 			);
 		}
 
-		let sent = 0;
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-				const response = await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "pep_grok_progress",
-						payload: { phase, message, progress },
-					}),
-				});
-				if (response.ok) {
-					const result = (await response.json()) as { sent: number };
-					sent = result.sent;
-				}
-			} catch (error) {
-				console.error(`[InternalGrokPep] Progress broadcast failed:`, error);
-			}
-		}
+		const { sent } = await broadcastPepEvent(
+			c.env,
+			search_id,
+			"pep_grok_progress",
+			{
+				phase,
+				message,
+				progress,
+			},
+		);
 
 		return Response.json({ success: true, sent });
 	}
@@ -341,82 +288,31 @@ export class InternalGrokPepFailedEndpoint extends OpenAPIRoute {
 
 		console.log(`[InternalGrokPep] Search ${search_id} failed: ${error}`);
 
-		// Persist failure to D1
-		const prisma = createPrismaClient(c.env.DB);
-		try {
-			const searchQuery = await prisma.searchQuery.update({
-				where: { id: search_id },
-				data: {
-					pepAiStatus: "failed",
-					pepAiResult: JSON.stringify({ error }),
-				},
-			});
-
-			console.log(
-				`[InternalGrokPep] Persisted failure status to search_query ${search_id}`,
-			);
-
-			// Check if all search types completed
-			await checkAndUpdateQueryCompletion(prisma, search_id);
-
-			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
-				try {
-					await c.env.AML_SERVICE.processScreeningCallback({
-						queryId: search_id,
-						type: "pep_ai",
-						status: "failed",
-						matched: false,
-					});
-					console.log(
-						`[InternalGrokPep] AML callback sent for failed query ${search_id}`,
-					);
-				} catch (callbackError) {
-					console.error(
-						`[InternalGrokPep] Failed to send AML callback:`,
-						callbackError,
-					);
-					// Don't fail the whole request if callback fails
-				}
-			}
-		} catch (persistError) {
-			console.error(
-				`[InternalGrokPep] Failed to persist failure to D1:`,
-				persistError,
-			);
-			// Don't fail if D1 update fails (row might not exist)
-		}
-
-		// Broadcast failure via SSE
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-
-				await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "pep_grok_error",
-						payload: {
-							search_id,
-							status: "failed",
-							error,
-							failed_at: new Date().toISOString(),
-						},
-					}),
+		await runWatchlistContainerFailurePipeline({
+			env: c.env,
+			searchId: search_id,
+			logPrefix: "[InternalGrokPep]",
+			persist: async (prisma) => {
+				const row = await prisma.searchQuery.update({
+					where: { id: search_id },
+					data: {
+						pepAiStatus: "failed",
+						pepAiResult: JSON.stringify({ error }),
+					},
 				});
-
-				console.log(
-					`[InternalGrokPep] Failure broadcast for search ${search_id}`,
-				);
-			} catch (broadcastError) {
-				console.error(
-					`[InternalGrokPep] Failed to broadcast error:`,
-					broadcastError,
-				);
-			}
-		}
+				return { source: row.source };
+			},
+			aml: { type: "pep_ai" },
+			broadcast: {
+				event: "pep_grok_error",
+				payload: {
+					search_id,
+					status: "failed",
+					error,
+					failed_at: new Date().toISOString(),
+				},
+			},
+		});
 
 		return Response.json({
 			success: true,

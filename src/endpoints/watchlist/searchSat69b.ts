@@ -13,6 +13,7 @@ import {
 	parseRfcBirthDate,
 } from "../../lib/matching-utils";
 import { WATCHLIST_EMBEDDING_MODEL } from "../../lib/embedding-config";
+import { toSat69bTarget } from "../../lib/target-mappers";
 
 // SAT 69-B phase schema
 export const sat69bPhase = z.object({
@@ -170,38 +171,7 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 					});
 
 					for (const record of sat69bRecords) {
-						const target = {
-							id: record.id,
-							rfc: record.rfc,
-							taxpayerName: record.taxpayerName,
-							taxpayerStatus: record.taxpayerStatus,
-							presumptionPhase: {
-								satNotice: record.presumptionSatNotice,
-								satDate: record.presumptionSatDate,
-								dofNotice: record.presumptionDofNotice,
-								dofDate: record.presumptionDofDate,
-							},
-							rebuttalPhase: {
-								satNotice: record.rebuttalSatNotice,
-								satDate: record.rebuttalSatDate,
-								dofNotice: record.rebuttalDofNotice,
-								dofDate: record.rebuttalDofDate,
-							},
-							definitivePhase: {
-								satNotice: record.definitiveSatNotice,
-								satDate: record.definitiveSatDate,
-								dofNotice: record.definitiveDofNotice,
-								dofDate: record.definitiveDofDate,
-							},
-							favorablePhase: {
-								satNotice: record.favorableSatNotice,
-								satDate: record.favorableSatDate,
-								dofNotice: record.favorableDofNotice,
-								dofDate: record.favorableDofDate,
-							},
-							createdAt: record.createdAt.toISOString(),
-							updatedAt: record.updatedAt.toISOString(),
-						};
+						const target = toSat69bTarget(record);
 
 						candidateMap.set(record.id, {
 							target,
@@ -271,38 +241,7 @@ export class SearchSat69bEndpoint extends OpenAPIRoute {
 				for (const record of sat69bRecords) {
 					const candidate = candidateMap.get(record.id);
 					if (candidate) {
-						candidate.target = {
-							id: record.id,
-							rfc: record.rfc,
-							taxpayerName: record.taxpayerName,
-							taxpayerStatus: record.taxpayerStatus,
-							presumptionPhase: {
-								satNotice: record.presumptionSatNotice,
-								satDate: record.presumptionSatDate,
-								dofNotice: record.presumptionDofNotice,
-								dofDate: record.presumptionDofDate,
-							},
-							rebuttalPhase: {
-								satNotice: record.rebuttalSatNotice,
-								satDate: record.rebuttalSatDate,
-								dofNotice: record.rebuttalDofNotice,
-								dofDate: record.rebuttalDofDate,
-							},
-							definitivePhase: {
-								satNotice: record.definitiveSatNotice,
-								satDate: record.definitiveSatDate,
-								dofNotice: record.definitiveDofNotice,
-								dofDate: record.definitiveDofDate,
-							},
-							favorablePhase: {
-								satNotice: record.favorableSatNotice,
-								satDate: record.favorableSatDate,
-								dofNotice: record.favorableDofNotice,
-								dofDate: record.favorableDofDate,
-							},
-							createdAt: record.createdAt.toISOString(),
-							updatedAt: record.updatedAt.toISOString(),
-						};
+						candidate.target = toSat69bTarget(record);
 					}
 				}
 			}

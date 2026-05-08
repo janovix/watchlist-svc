@@ -1,5 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it, beforeEach } from "vitest";
+import { clearPepCache, localSelfUrl } from "./_helpers";
 
 /**
  * Internal Adverse Media Endpoint Tests
@@ -9,18 +10,7 @@ import { describe, expect, it, beforeEach } from "vitest";
  */
 describe("Internal Adverse Media Endpoints", () => {
 	beforeEach(async () => {
-		// Clear KV cache if exists
-		const pepCache = (env as { PEP_CACHE?: KVNamespace }).PEP_CACHE;
-		if (pepCache) {
-			try {
-				const keys = await pepCache.list();
-				for (const key of keys.keys) {
-					await pepCache.delete(key.name);
-				}
-			} catch {
-				// Ignore if KV not configured
-			}
-		}
+		await clearPepCache(env);
 	});
 
 	// =========================================================================
@@ -41,7 +31,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/results",
+				localSelfUrl("/internal/adverse-media/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -76,7 +66,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/results",
+				localSelfUrl("/internal/adverse-media/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -103,7 +93,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/results",
+				localSelfUrl("/internal/adverse-media/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -128,7 +118,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/results",
+				localSelfUrl("/internal/adverse-media/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -157,7 +147,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/results",
+				localSelfUrl("/internal/adverse-media/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -182,7 +172,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/results",
+				localSelfUrl("/internal/adverse-media/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -206,7 +196,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/progress",
+				localSelfUrl("/internal/adverse-media/progress"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -232,7 +222,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/progress",
+				localSelfUrl("/internal/adverse-media/progress"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -252,7 +242,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/progress",
+				localSelfUrl("/internal/adverse-media/progress"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -275,7 +265,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/failed",
+				localSelfUrl("/internal/adverse-media/failed"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -295,7 +285,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/failed",
+				localSelfUrl("/internal/adverse-media/failed"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -313,7 +303,7 @@ describe("Internal Adverse Media Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/adverse-media/failed",
+				localSelfUrl("/internal/adverse-media/failed"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },

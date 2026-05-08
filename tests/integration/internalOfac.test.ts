@@ -2,6 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InternalOfacCompleteEndpoint } from "../../src/endpoints/watchlist/internalOfac";
 import { createPrismaClient } from "../../src/lib/prisma";
+import { localSelfUrl, seedIngestionRun } from "./_helpers";
 
 /**
  * Internal OFAC Endpoint Tests
@@ -26,13 +27,9 @@ describe("Internal OFAC Endpoints", () => {
 		await prisma.ofacSdnEntry.deleteMany({});
 		await prisma.watchlistIngestionRun.deleteMany({});
 
-		// Create a test ingestion run for callbacks to reference
-		const run = await prisma.watchlistIngestionRun.create({
-			data: {
-				sourceUrl: "r2://test/sdn_advanced.xml",
-				sourceType: "sdn_xml",
-				status: "running",
-			},
+		const run = await seedIngestionRun(prisma, {
+			sourceUrl: "r2://test/sdn_advanced.xml",
+			sourceType: "sdn_xml",
 		});
 		testRunId = run.id;
 	});
@@ -61,7 +58,7 @@ describe("Internal OFAC Endpoints", () => {
 			});
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/truncate",
+				localSelfUrl("/internal/ofac/truncate"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -84,7 +81,7 @@ describe("Internal OFAC Endpoints", () => {
 
 		it("should update run status to inserting phase", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/truncate",
+				localSelfUrl("/internal/ofac/truncate"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -105,7 +102,7 @@ describe("Internal OFAC Endpoints", () => {
 
 		it("should handle truncate when table is already empty", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/truncate",
+				localSelfUrl("/internal/ofac/truncate"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -161,19 +158,16 @@ describe("Internal OFAC Endpoints", () => {
 				},
 			];
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: 3,
-						records,
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/ofac/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: 3,
+					records,
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -197,19 +191,16 @@ describe("Internal OFAC Endpoints", () => {
 		});
 
 		it("should handle empty batch", async () => {
-			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: 1,
-						records: [],
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/ofac/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: 1,
+					records: [],
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -242,7 +233,7 @@ describe("Internal OFAC Endpoints", () => {
 			});
 
 			// Send first batch
-			await SELF.fetch("http://local.test/internal/ofac/batch", {
+			await SELF.fetch(localSelfUrl("/internal/ofac/batch"), {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -254,7 +245,7 @@ describe("Internal OFAC Endpoints", () => {
 			});
 
 			// Send second batch
-			await SELF.fetch("http://local.test/internal/ofac/batch", {
+			await SELF.fetch(localSelfUrl("/internal/ofac/batch"), {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -306,19 +297,16 @@ describe("Internal OFAC Endpoints", () => {
 				},
 			];
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: 1,
-						records,
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/ofac/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: 1,
+					records,
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -365,19 +353,16 @@ describe("Internal OFAC Endpoints", () => {
 				},
 			];
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: 1,
-						records,
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/ofac/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: 1,
+					records,
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -412,19 +397,16 @@ describe("Internal OFAC Endpoints", () => {
 				source_list: "SDN List",
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: undefined, // No total_batches provided
-						records: [record],
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/ofac/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: undefined, // No total_batches provided
+					records: [record],
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -448,7 +430,7 @@ describe("Internal OFAC Endpoints", () => {
 	describe("POST /internal/ofac/complete", () => {
 		it("should mark run as completed with stats", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/complete",
+				localSelfUrl("/internal/ofac/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -485,7 +467,7 @@ describe("Internal OFAC Endpoints", () => {
 			const errors = Array.from({ length: 150 }, (_, i) => `Error ${i}`);
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/complete",
+				localSelfUrl("/internal/ofac/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -511,7 +493,7 @@ describe("Internal OFAC Endpoints", () => {
 			const nonExistentRunId = 99999;
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/complete",
+				localSelfUrl("/internal/ofac/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -531,7 +513,7 @@ describe("Internal OFAC Endpoints", () => {
 
 		it("should skip vectorization when skip_vectorization is true", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/complete",
+				localSelfUrl("/internal/ofac/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -556,7 +538,7 @@ describe("Internal OFAC Endpoints", () => {
 
 		it("should skip vectorization when total_records is 0", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/complete",
+				localSelfUrl("/internal/ofac/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -581,7 +563,7 @@ describe("Internal OFAC Endpoints", () => {
 
 		it("should skip vectorization when THREAD_SVC is not configured", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/complete",
+				localSelfUrl("/internal/ofac/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -656,17 +638,14 @@ describe("Internal OFAC Endpoints", () => {
 	// =========================================================================
 	describe("POST /internal/ofac/failed", () => {
 		it("should mark run as failed with error message", async () => {
-			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						error: "Parse error: malformed XML at line 42",
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/ofac/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					error: "Parse error: malformed XML at line 42",
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{ success: boolean }>();
@@ -685,17 +664,14 @@ describe("Internal OFAC Endpoints", () => {
 		it("should truncate long error messages to 1000 chars", async () => {
 			const longError = "x".repeat(2000);
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						error: longError,
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/ofac/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					error: longError,
+				}),
+			});
 
 			expect(response.status).toBe(200);
 
@@ -708,17 +684,14 @@ describe("Internal OFAC Endpoints", () => {
 		it("should handle failure when run_id does not exist", async () => {
 			const nonExistentRunId = 99999;
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/ofac/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: nonExistentRunId,
-						error: "Test error",
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/ofac/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: nonExistentRunId,
+					error: "Test error",
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{ success: boolean }>();

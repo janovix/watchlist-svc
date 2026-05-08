@@ -80,6 +80,7 @@ import type {
 	AuthServiceBinding,
 	ThreadSvcBinding,
 } from "./types/service-bindings";
+import { installVitestPoolBindings } from "./install-test-bindings";
 
 // Export Durable Objects
 export { PepEventsDO } from "./durable-objects/pep-events";
@@ -161,7 +162,7 @@ export type Bindings = Env & {
 	/**
 	 * Enable/disable PEP cache (default: "false").
 	 */
-	PEP_CACHE_ENABLED?: string;
+	CACHE_ENABLED?: string;
 	/**
 	 * PEP Events Durable Object for SSE streaming.
 	 */
@@ -187,6 +188,12 @@ export type Bindings = Env & {
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Bindings }>();
+
+// Test pool: ensure AI / Vectorize stubs exist inside worker isolates (see module docstring).
+app.use("*", (c, next) => {
+	installVitestPoolBindings(c.env);
+	return next();
+});
 
 // CORS middleware using TRUSTED_ORIGINS environment variable
 app.use("*", corsMiddleware());

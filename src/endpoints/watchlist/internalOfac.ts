@@ -17,21 +17,11 @@ import {
 	normalizeIdentifier,
 	normalizeIdentifierType,
 } from "../../lib/matching-utils";
+import { identityDocumentSchema } from "./schemas";
 
 // =============================================================================
 // Schemas
 // =============================================================================
-
-/**
- * Identity document schema for OFAC records
- */
-const identityDocumentSchema = z.object({
-	type: z.string(),
-	number: z.string(),
-	country: z.string().nullable().optional(),
-	issue_date: z.string().nullable().optional(),
-	expiration_date: z.string().nullable().optional(),
-});
 
 /**
  * OFAC record schema matching the container output

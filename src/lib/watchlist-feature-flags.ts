@@ -6,4 +6,6 @@ export const WATCHLIST_FEATURE_FLAG_KEYS = {
 	pepSearch: "watchlist-pep-search",
 	pepGrok: "watchlist-pep-grok",
 	adverseMedia: "watchlist-adverse-media",
+	/** KV cache for hybrid sync results + Grok PEP / adverse media payloads */
+	globalCache: "watchlist-global-cache",
 } as const;

@@ -1,7 +1,10 @@
+import { env } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
+import type { Bindings } from "../../src/index";
 import {
 	getDefaultSettings,
 	extractBrowserHints,
+	getResolvedSettings,
 	type ResolvedSettings,
 } from "../../src/lib/auth-settings";
 
@@ -68,6 +71,48 @@ describe("auth-settings", () => {
 				"x-timezone": undefined,
 				"x-preferred-theme": undefined,
 			});
+		});
+	});
+
+	describe("getResolvedSettings", () => {
+		it("returns settings from a plain-object AUTH_SERVICE stub (no ServiceStub)", async () => {
+			const authStub = {
+				getResolvedSettings: async () => ({
+					success: true,
+					data: {
+						theme: "dark" as const,
+						timezone: "America/Mexico_City",
+						language: "es" as const,
+						dateFormat: "DD/MM/YYYY" as const,
+						avatarUrl: null as string | null,
+						paymentMethods: [] as Array<unknown>,
+						sources: {
+							theme: "user" as const,
+							timezone: "organization" as const,
+							language: "browser" as const,
+							dateFormat: "default" as const,
+						},
+					},
+				}),
+			};
+
+			const merged = {
+				...(env as unknown as Bindings),
+				AUTH_SERVICE: authStub as unknown as Bindings["AUTH_SERVICE"],
+			};
+
+			const resolved = await getResolvedSettings(
+				merged,
+				"user-1",
+				"org-1",
+				extractBrowserHints(
+					new Headers({ "Accept-Language": "es-MX", "X-Timezone": "UTC" }),
+				),
+			);
+
+			expect(resolved?.theme).toBe("dark");
+			expect(resolved?.language).toBe("es");
+			expect(resolved?.timezone).toBe("America/Mexico_City");
 		});
 	});
 });

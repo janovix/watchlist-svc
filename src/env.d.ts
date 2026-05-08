@@ -5,6 +5,7 @@
 declare namespace Cloudflare {
 	interface Env {
 		DB: D1Database;
+		/** TODO(janovix): currently only referenced by integration tests — kept warm pending product decision */
 		WATCHLIST_KV: KVNamespace;
 		WATCHLIST_VECTORIZE: VectorizeIndex;
 		AI?: {
@@ -106,7 +107,7 @@ declare namespace Cloudflare {
 		/**
 		 * Enable/disable PEP cache (default: "false").
 		 */
-		PEP_CACHE_ENABLED?: string;
+		CACHE_ENABLED?: string;
 		/**
 		 * PEP Events Durable Object for SSE streaming.
 		 */

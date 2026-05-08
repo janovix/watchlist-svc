@@ -1,7 +1,13 @@
-import { SELF } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { env, SELF } from "cloudflare:test";
+import { beforeEach, describe, expect, it } from "vitest";
+import type { Bindings } from "../../src/index";
+import { disableAsyncSearchSideEffects } from "./_helpers";
 
 describe("OFAC Search Endpoint", () => {
+	beforeEach(() => {
+		disableAsyncSearchSideEffects(env as unknown as Bindings);
+	});
+
 	describe("POST /search/ofac - Validation", () => {
 		it("should require query parameter", async () => {
 			const response = await SELF.fetch("http://local.test/search/ofac", {
@@ -57,8 +63,26 @@ describe("OFAC Search Endpoint", () => {
 		// due to how Chanfana/Hono handles unregistered routes with authMiddleware.
 	});
 
-	// Note: Tests that perform actual searches (with AI/Vectorize bindings) are skipped
-	// in the test environment because these bindings are not available and cause timeouts.
-	// The endpoint logic for identifier matching and vector search is thoroughly tested
-	// in production-like environments with real bindings.
+	describe("POST /search/ofac — mocked AI / Vectorize", () => {
+		it("returns 200 with empty matches when Vectorize returns no hits", async () => {
+			const response = await SELF.fetch("http://local.test/search/ofac", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					q: "Integration OFAC Smoke Beta",
+					topK: 10,
+					threshold: 0.875,
+				}),
+			});
+
+			expect(response.status).toBe(200);
+			const data = (await response.json()) as {
+				success: boolean;
+				result: { matches: unknown[]; count: number };
+			};
+			expect(data.success).toBe(true);
+			expect(data.result.count).toBe(0);
+			expect(Array.isArray(data.result.matches)).toBe(true);
+		});
+	});
 });

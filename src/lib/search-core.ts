@@ -9,8 +9,15 @@ import {
 	generateCacheKey,
 	readCache,
 } from "./search-query-utils";
+import {
+	generateSyncCacheKey,
+	isGlobalCacheEnabled,
+	readSyncCache,
+	writeSyncCache,
+} from "./watchlist-cache";
 import { parseVectorId } from "./ofac-vectorize-service";
 import { getCallbackUrl } from "./callback-utils";
+import { QUERY_SOURCE } from "./query-source";
 import {
 	normalizeIdentifier,
 	bestNameScore,
@@ -21,84 +28,28 @@ import {
 	extractOfacRecordCountries,
 	extractUnscRecordCountries,
 } from "./matching-utils";
-import { createHash } from "crypto";
 import type { Bindings } from "../index";
 import { WATCHLIST_EMBEDDING_MODEL } from "./embedding-config";
+import {
+	type OfacTargetType,
+	type Sat69bTargetType,
+	type UnscTargetType,
+	toOfacTarget,
+	toSat69bTarget,
+	toUnscTarget,
+} from "./target-mappers";
+import {
+	type EmbeddingsAdapter,
+	type VectorIndexAdapter,
+	defaultEmbeddings,
+	defaultVectorIndex,
+} from "./search-vectorize";
 
-// Type definitions for search targets
-export type OfacTargetType = {
-	id: string;
-	partyType: string;
-	primaryName: string;
-	aliases: string[] | null;
-	birthDate: string | null;
-	birthPlace: string | null;
-	addresses: string[] | null;
-	identifiers: Array<{
-		type?: string;
-		number?: string;
-		country?: string;
-		issueDate?: string;
-		expirationDate?: string;
-	}> | null;
-	remarks: string | null;
-	sourceList: string;
-	createdAt: string;
-	updatedAt: string;
-};
-
-export type UnscTargetType = {
-	id: string;
-	partyType: string;
-	primaryName: string;
-	aliases: string[] | null;
-	birthDate: string | null;
-	birthPlace: string | null;
-	gender: string | null;
-	nationalities: string[] | null;
-	addresses: string[] | null;
-	identifiers: Array<{ type?: string; number?: string }> | null;
-	designations: string[] | null;
-	remarks: string | null;
-	unListType: string;
-	referenceNumber: string | null;
-	listedOn: string | null;
-	createdAt: string;
-	updatedAt: string;
-};
-
-export type Sat69bTargetType = {
-	id: string;
-	rfc: string;
-	taxpayerName: string;
-	taxpayerStatus: string;
-	presumptionPhase: {
-		satNotice: string | null;
-		satDate: string | null;
-		dofNotice: string | null;
-		dofDate: string | null;
-	} | null;
-	rebuttalPhase: {
-		satNotice: string | null;
-		satDate: string | null;
-		dofNotice: string | null;
-		dofDate: string | null;
-	} | null;
-	definitivePhase: {
-		satNotice: string | null;
-		satDate: string | null;
-		dofNotice: string | null;
-		dofDate: string | null;
-	} | null;
-	favorablePhase: {
-		satNotice: string | null;
-		satDate: string | null;
-		dofNotice: string | null;
-		dofDate: string | null;
-	} | null;
-	createdAt: string;
-	updatedAt: string;
-};
+export type {
+	OfacTargetType,
+	Sat69bTargetType,
+	UnscTargetType,
+} from "./target-mappers";
 
 export interface SearchParams {
 	env: Bindings;
@@ -118,6 +69,11 @@ export interface SearchParams {
 	/** When set, links this query to an AML client or beneficial controller */
 	entityId?: string;
 	entityKind?: "client" | "beneficial_controller";
+	/** Optional test/prod injection for embeddings + Vectorize (defaults to env bindings). */
+	adapters?: {
+		embeddings?: EmbeddingsAdapter;
+		vectorIndex?: VectorIndexAdapter;
+	};
 }
 
 export interface SearchResult {
@@ -262,435 +218,7 @@ export async function performSearch(
 		// Don't fail the whole search if query creation fails
 	}
 
-	// Check required bindings
-	if (!env.AI) {
-		console.error("[SearchCore] AI binding not available");
-		const error = new ApiException(
-			"AI binding not available. Please ensure Workers AI is enabled for your account.",
-		);
-		error.status = 503;
-		error.code = 503;
-		throw error;
-	}
-
-	if (!env.WATCHLIST_VECTORIZE) {
-		console.error("[SearchCore] WATCHLIST_VECTORIZE not available");
-		const error = new ApiException(
-			"Vectorize index not available. Please ensure WATCHLIST_VECTORIZE is configured.",
-		);
-		error.status = 503;
-		error.code = 503;
-		throw error;
-	}
-
-	const candidateMap = new Map<
-		string,
-		{
-			target: unknown;
-			vectorScore: number;
-			identifierMatch: boolean;
-			dataset: string;
-		}
-	>();
-
-	// Step A: Exact Identifier Matching
-	if (identifiers && identifiers.length > 0) {
-		console.log(
-			"[SearchCore] Step A: Exact identifier lookup for",
-			identifiers.length,
-			"identifiers",
-		);
-
-		const normalizedIdentifiers = identifiers
-			.map((id) => normalizeIdentifier(id))
-			.filter((id) => id.length > 0);
-
-		if (normalizedIdentifiers.length > 0) {
-			try {
-				// Query watchlist_identifier table
-				const db = env.DB;
-				const placeholders = normalizedIdentifiers.map(() => "?").join(", ");
-				const identifierMatches = await db
-					.prepare(
-						`SELECT DISTINCT dataset, record_id FROM watchlist_identifier WHERE identifier_norm IN (${placeholders})`,
-					)
-					.bind(...normalizedIdentifiers)
-					.all();
-
-				console.log(
-					"[SearchCore] Found",
-					identifierMatches.results?.length || 0,
-					"identifier matches",
-				);
-
-				if (identifierMatches.results && identifierMatches.results.length > 0) {
-					// Group by dataset
-					const ofacIds: string[] = [];
-					const sat69bIds: string[] = [];
-					const unscIds: string[] = [];
-
-					for (const row of identifierMatches.results) {
-						const dataset = (row as { dataset: string }).dataset;
-						const recordId = (row as { record_id: string }).record_id;
-
-						if (dataset === "ofac_sdn") {
-							ofacIds.push(recordId);
-						} else if (dataset === "sat_69b") {
-							sat69bIds.push(recordId);
-						} else if (dataset === "unsc") {
-							unscIds.push(recordId);
-						}
-					}
-
-					// Fetch OFAC records
-					if (ofacIds.length > 0) {
-						const ofacRecords = await prisma.ofacSdnEntry.findMany({
-							where: { id: { in: ofacIds } },
-						});
-
-						for (const record of ofacRecords) {
-							const target = {
-								id: record.id,
-								partyType: record.partyType,
-								primaryName: record.primaryName,
-								aliases: record.aliases ? JSON.parse(record.aliases) : null,
-								birthDate: record.birthDate,
-								birthPlace: record.birthPlace,
-								addresses: record.addresses
-									? JSON.parse(record.addresses)
-									: null,
-								identifiers: record.identifiers
-									? JSON.parse(record.identifiers)
-									: null,
-								remarks: record.remarks,
-								sourceList: record.sourceList,
-								createdAt: record.createdAt.toISOString(),
-								updatedAt: record.updatedAt.toISOString(),
-							};
-
-							candidateMap.set(record.id, {
-								target,
-								vectorScore: 0,
-								identifierMatch: true,
-								dataset: "ofac_sdn",
-							});
-						}
-					}
-
-					// Fetch SAT 69-B records
-					if (sat69bIds.length > 0) {
-						const sat69bRecords = await prisma.sat69bEntry.findMany({
-							where: { id: { in: sat69bIds } },
-						});
-
-						for (const record of sat69bRecords) {
-							const target = {
-								id: record.id,
-								rfc: record.rfc,
-								taxpayerName: record.taxpayerName,
-								taxpayerStatus: record.taxpayerStatus,
-								presumptionPhase: {
-									satNotice: record.presumptionSatNotice,
-									satDate: record.presumptionSatDate,
-									dofNotice: record.presumptionDofNotice,
-									dofDate: record.presumptionDofDate,
-								},
-								rebuttalPhase: {
-									satNotice: record.rebuttalSatNotice,
-									satDate: record.rebuttalSatDate,
-									dofNotice: record.rebuttalDofNotice,
-									dofDate: record.rebuttalDofDate,
-								},
-								definitivePhase: {
-									satNotice: record.definitiveSatNotice,
-									satDate: record.definitiveSatDate,
-									dofNotice: record.definitiveDofNotice,
-									dofDate: record.definitiveDofDate,
-								},
-								favorablePhase: {
-									satNotice: record.favorableSatNotice,
-									satDate: record.favorableSatDate,
-									dofNotice: record.favorableDofNotice,
-									dofDate: record.favorableDofDate,
-								},
-								createdAt: record.createdAt.toISOString(),
-								updatedAt: record.updatedAt.toISOString(),
-							};
-
-							candidateMap.set(record.id, {
-								target,
-								vectorScore: 0,
-								identifierMatch: true,
-								dataset: "sat_69b",
-							});
-						}
-					}
-
-					// Fetch UNSC records
-					if (unscIds.length > 0) {
-						const unscRecords = await prisma.unscEntry.findMany({
-							where: { id: { in: unscIds } },
-						});
-
-						for (const record of unscRecords) {
-							const target = {
-								id: record.id,
-								partyType: record.partyType,
-								primaryName: record.primaryName,
-								aliases: record.aliases ? JSON.parse(record.aliases) : null,
-								birthDate: record.birthDate,
-								birthPlace: record.birthPlace,
-								gender: record.gender,
-								nationalities: record.nationalities
-									? JSON.parse(record.nationalities)
-									: null,
-								addresses: record.addresses
-									? JSON.parse(record.addresses)
-									: null,
-								identifiers: record.identifiers
-									? JSON.parse(record.identifiers)
-									: null,
-								designations: record.designations
-									? JSON.parse(record.designations)
-									: null,
-								remarks: record.remarks,
-								unListType: record.unListType,
-								referenceNumber: record.referenceNumber,
-								listedOn: record.listedOn,
-								createdAt: record.createdAt.toISOString(),
-								updatedAt: record.updatedAt.toISOString(),
-							};
-
-							candidateMap.set(record.id, {
-								target,
-								vectorScore: 0,
-								identifierMatch: true,
-								dataset: "unsc",
-							});
-						}
-					}
-				}
-			} catch (identifierError) {
-				console.error(
-					"[SearchCore] Error in identifier lookup:",
-					identifierError,
-				);
-				// Continue with vector search even if identifier lookup fails
-			}
-		}
-	}
-
-	// Step B: Vector Search
-	console.log("[SearchCore] Step B: Generating embedding for query");
-	const queryResponse = (await env.AI.run(WATCHLIST_EMBEDDING_MODEL, {
-		text: [query],
-	})) as { data: number[][] };
-
-	if (
-		!queryResponse ||
-		!Array.isArray(queryResponse.data) ||
-		queryResponse.data.length === 0
-	) {
-		console.error("[SearchCore] Failed to generate query embedding");
-		const error = new ApiException("Failed to generate query embedding");
-		error.status = 500;
-		error.code = 500;
-		throw error;
-	}
-
-	const embedding = queryResponse.data[0] as number[];
-	console.log("[SearchCore] Embedding generated", {
-		embeddingLength: embedding.length,
-	});
-
-	// Build Vectorize query with optional filters
-	const vectorizeOptions: {
-		topK: number;
-		returnMetadata: true;
-		filter?: VectorizeVectorMetadataFilter;
-	} = {
-		topK,
-		returnMetadata: true,
-	};
-
-	console.log("[SearchCore] Querying Vectorize");
-	const vectorizeResults = await env.WATCHLIST_VECTORIZE.query(
-		embedding,
-		vectorizeOptions,
-	);
-
-	console.log("[SearchCore] Vectorize query completed", {
-		vectorizeMatchesCount: vectorizeResults.matches.length,
-	});
-
-	// Step C: Rehydrate from D1
-	console.log("[SearchCore] Step C: Rehydrating records from D1");
-
-	const ofacIdsToFetch: string[] = [];
-	const sat69bIdsToFetch: string[] = [];
-	const unscIdsToFetch: string[] = [];
-
-	for (const match of vectorizeResults.matches) {
-		const metadata = match.metadata as {
-			recordId?: string;
-			dataset?: string;
-		} | null;
-
-		let recordId: string;
-		let dataset: string;
-
-		if (metadata?.recordId) {
-			recordId = metadata.recordId;
-			dataset = metadata.dataset || "csv";
-		} else {
-			// Fallback: parse vector ID
-			const parsed = parseVectorId(match.id);
-			recordId = parsed.id;
-			dataset = parsed.dataset;
-		}
-
-		// Skip if already in candidates (from identifier match)
-		if (candidateMap.has(recordId)) {
-			// Update vector score
-			const existing = candidateMap.get(recordId)!;
-			existing.vectorScore = match.score || 0;
-			continue;
-		}
-
-		// Queue for fetching
-		if (dataset === "ofac_sdn") {
-			ofacIdsToFetch.push(recordId);
-		} else if (dataset === "sat_69b") {
-			sat69bIdsToFetch.push(recordId);
-		} else if (dataset === "unsc") {
-			unscIdsToFetch.push(recordId);
-		}
-
-		// Store preliminary entry with vector score
-		candidateMap.set(recordId, {
-			target: null, // Will be populated below
-			vectorScore: match.score || 0,
-			identifierMatch: false,
-			dataset,
-		});
-	}
-
-	// Fetch OFAC records
-	if (ofacIdsToFetch.length > 0) {
-		const ofacRecords = await prisma.ofacSdnEntry.findMany({
-			where: { id: { in: ofacIdsToFetch } },
-		});
-
-		for (const record of ofacRecords) {
-			const candidate = candidateMap.get(record.id);
-			if (candidate) {
-				candidate.target = {
-					id: record.id,
-					partyType: record.partyType,
-					primaryName: record.primaryName,
-					aliases: record.aliases ? JSON.parse(record.aliases) : null,
-					birthDate: record.birthDate,
-					birthPlace: record.birthPlace,
-					addresses: record.addresses ? JSON.parse(record.addresses) : null,
-					identifiers: record.identifiers
-						? JSON.parse(record.identifiers)
-						: null,
-					remarks: record.remarks,
-					sourceList: record.sourceList,
-					createdAt: record.createdAt.toISOString(),
-					updatedAt: record.updatedAt.toISOString(),
-				};
-			}
-		}
-	}
-
-	// Fetch SAT 69-B records
-	if (sat69bIdsToFetch.length > 0) {
-		const sat69bRecords = await prisma.sat69bEntry.findMany({
-			where: { id: { in: sat69bIdsToFetch } },
-		});
-
-		for (const record of sat69bRecords) {
-			const candidate = candidateMap.get(record.id);
-			if (candidate) {
-				candidate.target = {
-					id: record.id,
-					rfc: record.rfc,
-					taxpayerName: record.taxpayerName,
-					taxpayerStatus: record.taxpayerStatus,
-					presumptionPhase: {
-						satNotice: record.presumptionSatNotice,
-						satDate: record.presumptionSatDate,
-						dofNotice: record.presumptionDofNotice,
-						dofDate: record.presumptionDofDate,
-					},
-					rebuttalPhase: {
-						satNotice: record.rebuttalSatNotice,
-						satDate: record.rebuttalSatDate,
-						dofNotice: record.rebuttalDofNotice,
-						dofDate: record.rebuttalDofDate,
-					},
-					definitivePhase: {
-						satNotice: record.definitiveSatNotice,
-						satDate: record.definitiveSatDate,
-						dofNotice: record.definitiveDofNotice,
-						dofDate: record.definitiveDofDate,
-					},
-					favorablePhase: {
-						satNotice: record.favorableSatNotice,
-						satDate: record.favorableSatDate,
-						dofNotice: record.favorableDofNotice,
-						dofDate: record.favorableDofDate,
-					},
-					createdAt: record.createdAt.toISOString(),
-					updatedAt: record.updatedAt.toISOString(),
-				};
-			}
-		}
-	}
-
-	// Fetch UNSC records
-	if (unscIdsToFetch.length > 0) {
-		const unscRecords = await prisma.unscEntry.findMany({
-			where: { id: { in: unscIdsToFetch } },
-		});
-
-		for (const record of unscRecords) {
-			const candidate = candidateMap.get(record.id);
-			if (candidate) {
-				candidate.target = {
-					id: record.id,
-					partyType: record.partyType,
-					primaryName: record.primaryName,
-					aliases: record.aliases ? JSON.parse(record.aliases) : null,
-					birthDate: record.birthDate,
-					birthPlace: record.birthPlace,
-					gender: record.gender,
-					nationalities: record.nationalities
-						? JSON.parse(record.nationalities)
-						: null,
-					addresses: record.addresses ? JSON.parse(record.addresses) : null,
-					identifiers: record.identifiers
-						? JSON.parse(record.identifiers)
-						: null,
-					designations: record.designations
-						? JSON.parse(record.designations)
-						: null,
-					remarks: record.remarks,
-					unListType: record.unListType,
-					referenceNumber: record.referenceNumber,
-					listedOn: record.listedOn,
-					createdAt: record.createdAt.toISOString(),
-					updatedAt: record.updatedAt.toISOString(),
-				};
-			}
-		}
-	}
-
-	// Step D: Hybrid Scoring
-	console.log("[SearchCore] Step D: Computing hybrid scores");
-
-	const ofacMatches: Array<{
+	type OfacMatchRow = {
 		target: OfacTargetType;
 		score: number;
 		breakdown: {
@@ -699,9 +227,8 @@ export async function performSearch(
 			metaScore: number;
 			identifierMatch: boolean;
 		};
-	}> = [];
-
-	const unscMatches: Array<{
+	};
+	type UnscMatchRow = {
 		target: UnscTargetType;
 		score: number;
 		breakdown: {
@@ -710,9 +237,8 @@ export async function performSearch(
 			metaScore: number;
 			identifierMatch: boolean;
 		};
-	}> = [];
-
-	const sat69bMatches: Array<{
+	};
+	type Sat69bMatchRow = {
 		target: Sat69bTargetType;
 		score: number;
 		breakdown: {
@@ -721,134 +247,476 @@ export async function performSearch(
 			metaScore: number;
 			identifierMatch: boolean;
 		};
-	}> = [];
+	};
 
-	for (const [_recordId, candidate] of candidateMap.entries()) {
-		if (!candidate.target) continue;
+	let ofacMatches: OfacMatchRow[] = [];
+	let unscMatches: UnscMatchRow[] = [];
+	let sat69bMatches: Sat69bMatchRow[] = [];
 
-		let nameScore = 0;
-		let metaScore = 0;
-		let metaMismatch = false;
-		let finalScore = 1.0;
+	const globalCacheEnabled = await isGlobalCacheEnabled(env, { environment });
+	let syncCacheKey: string | undefined;
+	let usedL1SyncCache = false;
 
-		const userProvidedDisambiguators =
-			Boolean(birthDate) || (countries && countries.length > 0);
-
-		// Identifier matches get score of 1.0
-		if (!candidate.identifierMatch) {
-			// Compute name score based on dataset
-			if (candidate.dataset === "ofac_sdn" || candidate.dataset === "unsc") {
-				const target = candidate.target as {
-					primaryName: string;
-					aliases: string[] | null;
-					birthDate: string | null;
-					identifiers: Array<{
-						type?: string;
-						number?: string;
-						country?: string;
-					}> | null;
-					addresses: string[] | null;
-				};
-				nameScore = bestNameScore(query, target.primaryName, target.aliases);
-			} else if (candidate.dataset === "sat_69b") {
-				const target = candidate.target as { taxpayerName: string };
-				nameScore = bestNameScore(query, target.taxpayerName, null);
-			}
-
-			if (candidate.dataset === "ofac_sdn") {
-				const target = candidate.target as {
-					birthDate: string | null;
-					identifiers: Array<{
-						type?: string;
-						number?: string;
-						country?: string;
-					}> | null;
-					addresses: string[] | null;
-				};
-				const { score, mismatch } = computeMetaSignal(
-					birthDate,
-					countries,
-					target.birthDate,
-					extractOfacRecordCountries(target),
-				);
-				metaScore = score;
-				metaMismatch = mismatch;
-			} else if (candidate.dataset === "unsc") {
-				const target = candidate.target as {
-					birthDate: string | null;
-					nationalities: string[] | null;
-				};
-				const { score, mismatch } = computeMetaSignal(
-					birthDate,
-					countries,
-					target.birthDate,
-					extractUnscRecordCountries(target.nationalities),
-				);
-				metaScore = score;
-				metaMismatch = mismatch;
-			} else if (candidate.dataset === "sat_69b") {
-				const target = candidate.target as { rfc: string };
-				const { score, mismatch } = computeMetaSignal(
-					birthDate,
-					countries,
-					parseRfcBirthDate(target.rfc),
-					["MX"],
-				);
-				metaScore = score;
-				metaMismatch = mismatch;
-			}
-
-			// Compute hybrid score
-			finalScore = computeHybridScore(
-				candidate.vectorScore,
-				nameScore,
-				metaScore,
-			);
-		}
-
-		const corroborated =
-			candidate.identifierMatch || metaScore > 0 || !userProvidedDisambiguators;
-		// Filter by threshold (or name-score override for exact/near-exact name matches)
+	if (globalCacheEnabled && env.PEP_CACHE) {
+		syncCacheKey = generateSyncCacheKey({
+			query,
+			entityType,
+			birthDate: birthDate ?? null,
+			countries: countries ?? null,
+			identifiers: identifiers ?? null,
+			topK,
+			threshold,
+			environment,
+		});
+		const cachedSync = await readSyncCache<{
+			v: 1;
+			ofac: OfacMatchRow[];
+			unsc: UnscMatchRow[];
+			sat69b: Sat69bMatchRow[];
+		}>(env.PEP_CACHE, syncCacheKey);
 		if (
-			!passesMatchFilter(finalScore, nameScore, threshold, {
-				corroborated,
-				mismatch: metaMismatch,
-			})
-		)
-			continue;
-
-		const match = {
-			target: candidate.target,
-			score: finalScore,
-			breakdown: {
-				vectorScore: candidate.vectorScore,
-				nameScore,
-				metaScore,
-				identifierMatch: candidate.identifierMatch,
-			},
-		};
-
-		// Add to appropriate array with type assertion
-		if (candidate.dataset === "ofac_sdn") {
-			ofacMatches.push(match as (typeof ofacMatches)[number]);
-		} else if (candidate.dataset === "unsc") {
-			unscMatches.push(match as (typeof unscMatches)[number]);
-		} else if (candidate.dataset === "sat_69b") {
-			sat69bMatches.push(match as (typeof sat69bMatches)[number]);
+			cachedSync?.v === 1 &&
+			Array.isArray(cachedSync.ofac) &&
+			Array.isArray(cachedSync.unsc) &&
+			Array.isArray(cachedSync.sat69b)
+		) {
+			usedL1SyncCache = true;
+			ofacMatches = cachedSync.ofac;
+			unscMatches = cachedSync.unsc;
+			sat69bMatches = cachedSync.sat69b;
+			console.log("[SearchCore] L1 sync cache hit", { key: syncCacheKey });
 		}
 	}
 
-	// Sort each dataset by score descending
-	ofacMatches.sort((a, b) => b.score - a.score);
-	unscMatches.sort((a, b) => b.score - a.score);
-	sat69bMatches.sort((a, b) => b.score - a.score);
+	if (!usedL1SyncCache) {
+		const embeddingsAdapter: EmbeddingsAdapter =
+			params.adapters?.embeddings ?? defaultEmbeddings(env);
+		const vectorIndexAdapter: VectorIndexAdapter =
+			params.adapters?.vectorIndex ?? defaultVectorIndex(env);
 
-	console.log("[SearchCore] Search completed successfully", {
-		totalCandidates: candidateMap.size,
-		ofacCount: ofacMatches.length,
-		unscCount: unscMatches.length,
-		sat69bCount: sat69bMatches.length,
-	});
+		// Check required bindings when not injected (tests may supply adapters only).
+		if (!params.adapters?.embeddings && !env.AI) {
+			console.error("[SearchCore] AI binding not available");
+			const error = new ApiException(
+				"AI binding not available. Please ensure Workers AI is enabled for your account.",
+			);
+			error.status = 503;
+			error.code = 503;
+			throw error;
+		}
+
+		if (!params.adapters?.vectorIndex && !env.WATCHLIST_VECTORIZE) {
+			console.error("[SearchCore] WATCHLIST_VECTORIZE not available");
+			const error = new ApiException(
+				"Vectorize index not available. Please ensure WATCHLIST_VECTORIZE is configured.",
+			);
+			error.status = 503;
+			error.code = 503;
+			throw error;
+		}
+
+		const candidateMap = new Map<
+			string,
+			{
+				target: unknown;
+				vectorScore: number;
+				identifierMatch: boolean;
+				dataset: string;
+			}
+		>();
+
+		// Step A: Exact Identifier Matching
+		if (identifiers && identifiers.length > 0) {
+			console.log(
+				"[SearchCore] Step A: Exact identifier lookup for",
+				identifiers.length,
+				"identifiers",
+			);
+
+			const normalizedIdentifiers = identifiers
+				.map((id) => normalizeIdentifier(id))
+				.filter((id) => id.length > 0);
+
+			if (normalizedIdentifiers.length > 0) {
+				try {
+					// Query watchlist_identifier table
+					const db = env.DB;
+					const placeholders = normalizedIdentifiers.map(() => "?").join(", ");
+					const identifierMatches = await db
+						.prepare(
+							`SELECT DISTINCT dataset, record_id FROM watchlist_identifier WHERE identifier_norm IN (${placeholders})`,
+						)
+						.bind(...normalizedIdentifiers)
+						.all();
+
+					console.log(
+						"[SearchCore] Found",
+						identifierMatches.results?.length || 0,
+						"identifier matches",
+					);
+
+					if (
+						identifierMatches.results &&
+						identifierMatches.results.length > 0
+					) {
+						// Group by dataset
+						const ofacIds: string[] = [];
+						const sat69bIds: string[] = [];
+						const unscIds: string[] = [];
+
+						for (const row of identifierMatches.results) {
+							const dataset = (row as { dataset: string }).dataset;
+							const recordId = (row as { record_id: string }).record_id;
+
+							if (dataset === "ofac_sdn") {
+								ofacIds.push(recordId);
+							} else if (dataset === "sat_69b") {
+								sat69bIds.push(recordId);
+							} else if (dataset === "unsc") {
+								unscIds.push(recordId);
+							}
+						}
+
+						// Fetch OFAC records
+						if (ofacIds.length > 0) {
+							const ofacRecords = await prisma.ofacSdnEntry.findMany({
+								where: { id: { in: ofacIds } },
+							});
+
+							for (const record of ofacRecords) {
+								const target = toOfacTarget(record);
+
+								candidateMap.set(record.id, {
+									target,
+									vectorScore: 0,
+									identifierMatch: true,
+									dataset: "ofac_sdn",
+								});
+							}
+						}
+
+						// Fetch SAT 69-B records
+						if (sat69bIds.length > 0) {
+							const sat69bRecords = await prisma.sat69bEntry.findMany({
+								where: { id: { in: sat69bIds } },
+							});
+
+							for (const record of sat69bRecords) {
+								const target = toSat69bTarget(record);
+
+								candidateMap.set(record.id, {
+									target,
+									vectorScore: 0,
+									identifierMatch: true,
+									dataset: "sat_69b",
+								});
+							}
+						}
+
+						// Fetch UNSC records
+						if (unscIds.length > 0) {
+							const unscRecords = await prisma.unscEntry.findMany({
+								where: { id: { in: unscIds } },
+							});
+
+							for (const record of unscRecords) {
+								const target = toUnscTarget(record);
+
+								candidateMap.set(record.id, {
+									target,
+									vectorScore: 0,
+									identifierMatch: true,
+									dataset: "unsc",
+								});
+							}
+						}
+					}
+				} catch (identifierError) {
+					console.error(
+						"[SearchCore] Error in identifier lookup:",
+						identifierError,
+					);
+					// Continue with vector search even if identifier lookup fails
+				}
+			}
+		}
+
+		// Step B: Vector Search
+		console.log("[SearchCore] Step B: Generating embedding for query");
+		const embedding = await embeddingsAdapter.embed(
+			query,
+			WATCHLIST_EMBEDDING_MODEL,
+		);
+
+		if (!embedding || embedding.length === 0) {
+			console.error("[SearchCore] Failed to generate query embedding");
+			const error = new ApiException("Failed to generate query embedding");
+			error.status = 500;
+			error.code = 500;
+			throw error;
+		}
+		console.log("[SearchCore] Embedding generated", {
+			embeddingLength: embedding.length,
+		});
+
+		// Build Vectorize query with optional filters
+		const vectorizeOptions: {
+			topK: number;
+			returnMetadata: true;
+			filter?: VectorizeVectorMetadataFilter;
+		} = {
+			topK,
+			returnMetadata: true,
+		};
+
+		console.log("[SearchCore] Querying Vectorize");
+		const vectorizeResults = await vectorIndexAdapter.query(
+			embedding,
+			vectorizeOptions,
+		);
+
+		console.log("[SearchCore] Vectorize query completed", {
+			vectorizeMatchesCount: vectorizeResults.matches.length,
+		});
+
+		// Step C: Rehydrate from D1
+		console.log("[SearchCore] Step C: Rehydrating records from D1");
+
+		const ofacIdsToFetch: string[] = [];
+		const sat69bIdsToFetch: string[] = [];
+		const unscIdsToFetch: string[] = [];
+
+		for (const match of vectorizeResults.matches) {
+			const metadata = match.metadata as {
+				recordId?: string;
+				dataset?: string;
+			} | null;
+
+			let recordId: string;
+			let dataset: string;
+
+			if (metadata?.recordId) {
+				recordId = metadata.recordId;
+				dataset = metadata.dataset || "csv";
+			} else {
+				// Fallback: parse vector ID
+				const parsed = parseVectorId(match.id);
+				recordId = parsed.id;
+				dataset = parsed.dataset;
+			}
+
+			// Skip if already in candidates (from identifier match)
+			if (candidateMap.has(recordId)) {
+				// Update vector score
+				const existing = candidateMap.get(recordId)!;
+				existing.vectorScore = match.score || 0;
+				continue;
+			}
+
+			// Queue for fetching
+			if (dataset === "ofac_sdn") {
+				ofacIdsToFetch.push(recordId);
+			} else if (dataset === "sat_69b") {
+				sat69bIdsToFetch.push(recordId);
+			} else if (dataset === "unsc") {
+				unscIdsToFetch.push(recordId);
+			}
+
+			// Store preliminary entry with vector score
+			candidateMap.set(recordId, {
+				target: null, // Will be populated below
+				vectorScore: match.score || 0,
+				identifierMatch: false,
+				dataset,
+			});
+		}
+
+		// Fetch OFAC records
+		if (ofacIdsToFetch.length > 0) {
+			const ofacRecords = await prisma.ofacSdnEntry.findMany({
+				where: { id: { in: ofacIdsToFetch } },
+			});
+
+			for (const record of ofacRecords) {
+				const candidate = candidateMap.get(record.id);
+				if (candidate) {
+					candidate.target = toOfacTarget(record);
+				}
+			}
+		}
+
+		// Fetch SAT 69-B records
+		if (sat69bIdsToFetch.length > 0) {
+			const sat69bRecords = await prisma.sat69bEntry.findMany({
+				where: { id: { in: sat69bIdsToFetch } },
+			});
+
+			for (const record of sat69bRecords) {
+				const candidate = candidateMap.get(record.id);
+				if (candidate) {
+					candidate.target = toSat69bTarget(record);
+				}
+			}
+		}
+
+		// Fetch UNSC records
+		if (unscIdsToFetch.length > 0) {
+			const unscRecords = await prisma.unscEntry.findMany({
+				where: { id: { in: unscIdsToFetch } },
+			});
+
+			for (const record of unscRecords) {
+				const candidate = candidateMap.get(record.id);
+				if (candidate) {
+					candidate.target = toUnscTarget(record);
+				}
+			}
+		}
+
+		// Step D: Hybrid Scoring
+		console.log("[SearchCore] Step D: Computing hybrid scores");
+
+		for (const [_recordId, candidate] of candidateMap.entries()) {
+			if (!candidate.target) continue;
+
+			let nameScore = 0;
+			let metaScore = 0;
+			let metaMismatch = false;
+			let finalScore = 1.0;
+
+			const userProvidedDisambiguators =
+				Boolean(birthDate) || (countries && countries.length > 0);
+
+			// Identifier matches get score of 1.0
+			if (!candidate.identifierMatch) {
+				// Compute name score based on dataset
+				if (candidate.dataset === "ofac_sdn" || candidate.dataset === "unsc") {
+					const target = candidate.target as {
+						primaryName: string;
+						aliases: string[] | null;
+						birthDate: string | null;
+						identifiers: Array<{
+							type?: string;
+							number?: string;
+							country?: string;
+						}> | null;
+						addresses: string[] | null;
+					};
+					nameScore = bestNameScore(query, target.primaryName, target.aliases);
+				} else if (candidate.dataset === "sat_69b") {
+					const target = candidate.target as { taxpayerName: string };
+					nameScore = bestNameScore(query, target.taxpayerName, null);
+				}
+
+				if (candidate.dataset === "ofac_sdn") {
+					const target = candidate.target as {
+						birthDate: string | null;
+						identifiers: Array<{
+							type?: string;
+							number?: string;
+							country?: string;
+						}> | null;
+						addresses: string[] | null;
+					};
+					const { score, mismatch } = computeMetaSignal(
+						birthDate,
+						countries,
+						target.birthDate,
+						extractOfacRecordCountries(target),
+					);
+					metaScore = score;
+					metaMismatch = mismatch;
+				} else if (candidate.dataset === "unsc") {
+					const target = candidate.target as {
+						birthDate: string | null;
+						nationalities: string[] | null;
+					};
+					const { score, mismatch } = computeMetaSignal(
+						birthDate,
+						countries,
+						target.birthDate,
+						extractUnscRecordCountries(target.nationalities),
+					);
+					metaScore = score;
+					metaMismatch = mismatch;
+				} else if (candidate.dataset === "sat_69b") {
+					const target = candidate.target as { rfc: string };
+					const { score, mismatch } = computeMetaSignal(
+						birthDate,
+						countries,
+						parseRfcBirthDate(target.rfc),
+						["MX"],
+					);
+					metaScore = score;
+					metaMismatch = mismatch;
+				}
+
+				// Compute hybrid score
+				finalScore = computeHybridScore(
+					candidate.vectorScore,
+					nameScore,
+					metaScore,
+				);
+			}
+
+			const corroborated =
+				candidate.identifierMatch ||
+				metaScore > 0 ||
+				!userProvidedDisambiguators;
+			// Filter by threshold (or name-score override for exact/near-exact name matches)
+			if (
+				!passesMatchFilter(finalScore, nameScore, threshold, {
+					corroborated,
+					mismatch: metaMismatch,
+				})
+			)
+				continue;
+
+			const match = {
+				target: candidate.target,
+				score: finalScore,
+				breakdown: {
+					vectorScore: candidate.vectorScore,
+					nameScore,
+					metaScore,
+					identifierMatch: candidate.identifierMatch,
+				},
+			};
+
+			// Add to appropriate array with type assertion
+			if (candidate.dataset === "ofac_sdn") {
+				ofacMatches.push(match as (typeof ofacMatches)[number]);
+			} else if (candidate.dataset === "unsc") {
+				unscMatches.push(match as (typeof unscMatches)[number]);
+			} else if (candidate.dataset === "sat_69b") {
+				sat69bMatches.push(match as (typeof sat69bMatches)[number]);
+			}
+		}
+
+		// Sort each dataset by score descending
+		ofacMatches.sort((a, b) => b.score - a.score);
+		unscMatches.sort((a, b) => b.score - a.score);
+		sat69bMatches.sort((a, b) => b.score - a.score);
+
+		console.log("[SearchCore] Search completed successfully", {
+			totalCandidates: candidateMap.size,
+			ofacCount: ofacMatches.length,
+			unscCount: unscMatches.length,
+			sat69bCount: sat69bMatches.length,
+		});
+	} // end !usedL1SyncCache
+
+	if (!usedL1SyncCache && globalCacheEnabled && env.PEP_CACHE && syncCacheKey) {
+		const payload = {
+			v: 1 as const,
+			ofac: ofacMatches,
+			unsc: unscMatches,
+			sat69b: sat69bMatches,
+		};
+		executionCtx.waitUntil(
+			writeSyncCache(env.PEP_CACHE, syncCacheKey, payload),
+		);
+	}
 
 	// Persist sync results to SearchQuery for audit trail
 	try {
@@ -907,13 +775,11 @@ export async function performSearch(
 		// Use queryId directly instead of hash-based search ID
 		const pepSearchId = queryId;
 
-		// Check KV cache if enabled (still using query hash for cache key)
-		const cacheEnabled = String(env.PEP_CACHE_ENABLED ?? "") === "true";
 		let cachedPepResults: unknown = null;
 
-		if (cacheEnabled && env.PEP_CACHE) {
+		if (globalCacheEnabled && env.PEP_CACHE) {
 			try {
-				const cacheKey = generatePepCacheKey(query);
+				const cacheKey = generateCacheKey("pep_search", query);
 				const cached = await env.PEP_CACHE.get(cacheKey, "json");
 				if (cached) {
 					cachedPepResults = cached;
@@ -996,10 +862,8 @@ export async function performSearch(
 		try {
 			const pepAiSearchId = queryId; // Use queryId for unified SSE
 
-			// Check KV cache before triggering pep_grok thread
-			const cacheEnabled = String(env.PEP_CACHE_ENABLED ?? "") === "true";
 			let cachedPepAi: unknown = null;
-			if (cacheEnabled && env.PEP_CACHE) {
+			if (globalCacheEnabled && env.PEP_CACHE) {
 				try {
 					const pepCacheSuffix = [entityType, birthDate, countries?.[0]]
 						.filter(Boolean)
@@ -1025,6 +889,27 @@ export async function performSearch(
 							},
 						});
 						await checkAndUpdateQueryCompletion(prisma, queryId);
+						if (source === QUERY_SOURCE.AML && env.AML_SERVICE) {
+							const prob = (cachedPepAi as { probability?: number })
+								.probability;
+							const matched =
+								typeof prob === "number" &&
+								Number.isFinite(prob) &&
+								prob >= 0.7;
+							executionCtx.waitUntil(
+								env.AML_SERVICE.processScreeningCallback({
+									queryId,
+									type: "pep_ai",
+									status: "completed",
+									matched,
+								}).catch((err) =>
+									console.error(
+										"[SearchCore] AML callback (pep_ai cache) failed:",
+										err,
+									),
+								),
+							);
+						}
 					}
 				} catch (error) {
 					console.warn(`[SearchCore] Failed to check PEP Grok cache:`, error);
@@ -1114,10 +999,8 @@ export async function performSearch(
 		try {
 			const adverseMediaSearchId = queryId; // Use queryId for unified SSE
 
-			// Check KV cache before triggering adverse_media_grok thread
-			const cacheEnabled = String(env.PEP_CACHE_ENABLED ?? "") === "true";
 			let cachedAdverseMedia: unknown = null;
-			if (cacheEnabled && env.PEP_CACHE) {
+			if (globalCacheEnabled && env.PEP_CACHE) {
 				try {
 					const cacheKey = generateCacheKey("adverse_media", query, entityType);
 					cachedAdverseMedia = await readCache(env.PEP_CACHE, cacheKey);
@@ -1130,14 +1013,37 @@ export async function performSearch(
 							status: "completed",
 							result: cachedAdverseMedia,
 						};
+						const rl =
+							(cachedAdverseMedia as { risk_level?: string }).risk_level ??
+							"none";
+						const adverseMediaHasRisk = rl !== "none";
+						const adverseMediaRiskLevel = adverseMediaHasRisk ? rl : null;
 						await prisma.searchQuery.update({
 							where: { id: queryId },
 							data: {
 								adverseMediaStatus: "completed",
 								adverseMediaResult: JSON.stringify(cachedAdverseMedia),
+								adverseMediaHasRisk,
+								adverseMediaRiskLevel,
 							},
 						});
 						await checkAndUpdateQueryCompletion(prisma, queryId);
+						if (source === QUERY_SOURCE.AML && env.AML_SERVICE) {
+							const matched = rl === "high" || rl === "medium";
+							executionCtx.waitUntil(
+								env.AML_SERVICE.processScreeningCallback({
+									queryId,
+									type: "adverse_media",
+									status: "completed",
+									matched,
+								}).catch((err) =>
+									console.error(
+										"[SearchCore] AML callback (adverse_media cache) failed:",
+										err,
+									),
+								),
+							);
+						}
 					}
 				} catch (error) {
 					console.warn(
@@ -1223,13 +1129,4 @@ export async function performSearch(
 		pepAiSearch,
 		adverseMediaSearch,
 	};
-}
-
-/**
- * Generate PEP cache key from query (for KV cache)
- */
-function generatePepCacheKey(query: string): string {
-	const normalized = query.toLowerCase().trim();
-	const hash = createHash("sha256").update(normalized).digest("hex");
-	return `pep_search:${hash}`;
 }
