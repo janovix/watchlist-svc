@@ -54,6 +54,8 @@ export default defineWorkersConfig({
 						GROK_API_KEY: "test-grok-api-key",
 						ENVIRONMENT: "test",
 						E2E_API_KEY: "test-e2e-key",
+						RESEARCH_PROVIDER: "grok",
+						AI_GATEWAY_URL: "http://localhost",
 					},
 					durableObjects: {
 						PEP_EVENTS_DO: "PepEventsDO",

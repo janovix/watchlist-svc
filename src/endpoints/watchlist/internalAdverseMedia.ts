@@ -1,70 +1,36 @@
 /**
- * Internal Adverse Media endpoints for container callbacks.
- *
- * These endpoints are called by the adverse_media_grok container to deliver search results
- * and broadcast them to clients via SSE (Server-Sent Events).
- *
- * These are INTERNAL endpoints - not exposed to public API.
+ * Legacy HTTP paths for adverse-media callbacks (`/internal/adverse-media/*`).
+ * Handlers delegate to {@link completeAdverseMediaResearch} / {@link failAdverseMediaResearch}.
  */
 
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
 import {
-	runWatchlistContainerFailurePipeline,
-	runWatchlistContainerSuccessPipeline,
-} from "../../lib/container-callback-pipeline";
+	completeAdverseMediaResearch,
+	failAdverseMediaResearch,
+} from "../../lib/research-results";
 import { broadcastPepEvent } from "../../lib/pep-events-broadcast";
-import { createPrismaClient } from "../../lib/prisma";
-import { generateCacheKey } from "../../lib/search-query-utils";
-import {
-	isGlobalCacheEnabled,
-	resolveSearchQueryFlagEnvironment,
-} from "../../lib/watchlist-cache";
 import { containerProgressPayloadSchema } from "./schemas";
 
-// =============================================================================
-// Schemas
-// =============================================================================
-
-/**
- * Adverse Media result schema
- */
 const adverseMediaResultSchema = z.object({
-	search_id: z.string().describe("Search ID for tracking"),
-	query: z.string().describe("Person/organization name searched"),
-	entity_type: z
-		.enum(["person", "organization"])
-		.describe("Entity type searched"),
-	risk_level: z
-		.enum(["none", "low", "medium", "high"])
-		.describe("Risk level assessment"),
-	findings: z
-		.object({
-			es: z.string().describe("Findings summary in Spanish"),
-			en: z.string().describe("Findings summary in English"),
-		})
-		.describe("Bilingual findings"),
-	sources: z.array(z.string()).describe("Source URLs or domains"),
+	search_id: z.string(),
+	query: z.string(),
+	entity_type: z.enum(["person", "organization"]),
+	risk_level: z.enum(["none", "low", "medium", "high"]),
+	findings: z.object({
+		es: z.string(),
+		en: z.string(),
+	}),
+	sources: z.array(z.string()),
 });
 
 export type AdverseMediaResult = z.infer<typeof adverseMediaResultSchema>;
 
-// =============================================================================
-// POST /internal/adverse-media/results - Receive search results from container
-// =============================================================================
-
-/**
- * POST /internal/adverse-media/results
- * Receives adverse media search results from adverse_media_grok container
- */
 export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 	schema = {
 		tags: ["Internal"],
-		summary: "Receive Adverse Media results (internal)",
-		description:
-			"Called by adverse_media_grok container with adverse media search results. " +
-			"Results are broadcast via SSE to connected clients.",
+		summary: "Receive adverse media results (internal)",
 		security: [],
 		request: {
 			body: {
@@ -77,7 +43,7 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 		},
 		responses: {
 			"200": {
-				description: "Results received and broadcast successfully",
+				description: "Results received",
 				content: {
 					"application/json": {
 						schema: z.object({
@@ -91,66 +57,20 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 	};
 
 	async handle(c: { env: Bindings; req: Request }) {
-		const body = await c.req.json();
-		const { search_id, query, entity_type, risk_level, findings, sources } =
-			body as AdverseMediaResult;
+		const body = adverseMediaResultSchema.parse(await c.req.json());
 
 		console.log(
-			`[InternalAdverseMedia] Received results for search ${search_id} (query: ${query}, entity: ${entity_type}, risk: ${risk_level})`,
+			`[InternalAdverseMedia] Received results for search ${body.search_id} (query: ${body.query}, entity: ${body.entity_type}, risk: ${body.risk_level})`,
 		);
 
-		const prismaForFlags = createPrismaClient(c.env.DB);
-		const flagEnv = await resolveSearchQueryFlagEnvironment(
-			prismaForFlags,
-			search_id,
-		);
-		const cacheOn = await isGlobalCacheEnabled(c.env, { environment: flagEnv });
-		const cacheKey = generateCacheKey("adverse_media", query, entity_type);
-
-		const { broadcastSent } = await runWatchlistContainerSuccessPipeline({
-			env: c.env,
-			searchId: search_id,
+		const { broadcastSent } = await completeAdverseMediaResearch(c.env, {
+			searchId: body.search_id,
+			query: body.query,
+			entityType: body.entity_type,
+			risk_level: body.risk_level,
+			findings: body.findings,
+			sources: body.sources,
 			logPrefix: "[InternalAdverseMedia]",
-			cacheWrite:
-				cacheOn && c.env.PEP_CACHE
-					? {
-							kv: c.env.PEP_CACHE,
-							key: cacheKey,
-							value: { risk_level, findings, sources },
-						}
-					: undefined,
-			persist: async (prisma) => {
-				const row = await prisma.searchQuery.update({
-					where: { id: search_id },
-					data: {
-						adverseMediaStatus: "completed",
-						adverseMediaResult: JSON.stringify({
-							risk_level,
-							findings,
-							sources,
-						}),
-						adverseMediaHasRisk: risk_level !== "none",
-						adverseMediaRiskLevel: risk_level !== "none" ? risk_level : null,
-					},
-				});
-				return { source: row.source };
-			},
-			aml: {
-				type: "adverse_media",
-				matched: risk_level === "high" || risk_level === "medium",
-			},
-			broadcast: {
-				event: "adverse_media_results",
-				payload: {
-					search_id,
-					query,
-					risk_level,
-					findings,
-					sources,
-					status: "completed",
-					completed_at: new Date().toISOString(),
-				},
-			},
 		});
 
 		return Response.json({
@@ -160,20 +80,10 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 	}
 }
 
-// =============================================================================
-// POST /internal/adverse-media/progress - Progress updates from container
-// =============================================================================
-
-/**
- * POST /internal/adverse-media/progress
- * Called by adverse_media_grok container during execution to stream progress to SSE clients.
- */
 export class InternalAdverseMediaProgressEndpoint extends OpenAPIRoute {
 	schema = {
 		tags: ["Internal"],
 		summary: "Adverse Media progress (internal)",
-		description:
-			"Called by adverse_media_grok container to broadcast progress (e.g. Searching websites..., Thinking...).",
 		security: [],
 		request: {
 			body: {
@@ -243,28 +153,18 @@ export class InternalAdverseMediaProgressEndpoint extends OpenAPIRoute {
 	}
 }
 
-// =============================================================================
-// POST /internal/adverse-media/failed - Mark search as failed
-// =============================================================================
-
-/**
- * POST /internal/adverse-media/failed
- * Called by container when search fails
- */
 export class InternalAdverseMediaFailedEndpoint extends OpenAPIRoute {
 	schema = {
 		tags: ["Internal"],
 		summary: "Mark Adverse Media search as failed (internal)",
-		description:
-			"Called by adverse_media_grok container when search fails. Broadcasts error to SSE clients.",
 		security: [],
 		request: {
 			body: {
 				content: {
 					"application/json": {
 						schema: z.object({
-							search_id: z.string().describe("Search ID"),
-							error: z.string().describe("Error message"),
+							search_id: z.string(),
+							error: z.string(),
 						}),
 					},
 				},
@@ -290,30 +190,10 @@ export class InternalAdverseMediaFailedEndpoint extends OpenAPIRoute {
 
 		console.log(`[InternalAdverseMedia] Search ${search_id} failed: ${error}`);
 
-		await runWatchlistContainerFailurePipeline({
-			env: c.env,
+		await failAdverseMediaResearch(c.env, {
 			searchId: search_id,
+			error,
 			logPrefix: "[InternalAdverseMedia]",
-			persist: async (prisma) => {
-				const row = await prisma.searchQuery.update({
-					where: { id: search_id },
-					data: {
-						adverseMediaStatus: "failed",
-						adverseMediaResult: JSON.stringify({ error }),
-					},
-				});
-				return { source: row.source };
-			},
-			aml: { type: "adverse_media" },
-			broadcast: {
-				event: "adverse_media_error",
-				payload: {
-					search_id,
-					status: "failed",
-					error,
-					failed_at: new Date().toISOString(),
-				},
-			},
 		});
 
 		return Response.json({

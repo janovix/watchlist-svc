@@ -19,6 +19,11 @@ declare namespace Cloudflare {
 		ADVERSE_MEDIA_ENABLED: "true";
 		R2_BUCKET_NAME: "watchlist-uploads-dev";
 		GROK_API_KEY: string;
+		GEMINI_API_KEY?: string;
+		AI_GATEWAY_URL: string;
+		GEMINI_MODEL: string;
+		RESEARCH_PROVIDER: string;
+		RESEARCH_SHADOW: string;
 		PEP_EVENTS_DO: DurableObjectNamespace<import("./src/index").PepEventsDO>;
 		WATCHLIST_UPLOADS_BUCKET: R2Bucket;
 		DB: D1Database;
@@ -36,7 +41,24 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "ENVIRONMENT" | "TRUSTED_ORIGINS" | "AUTH_JWKS_CACHE_TTL" | "CACHE_ENABLED" | "PEP_SEARCH_ENABLED" | "PEP_GROK_ENABLED" | "ADVERSE_MEDIA_ENABLED" | "R2_BUCKET_NAME" | "GROK_API_KEY">> {}
+	interface ProcessEnv extends StringifyValues<
+		Pick<
+			Cloudflare.Env,
+			| "ENVIRONMENT"
+			| "TRUSTED_ORIGINS"
+			| "AUTH_JWKS_CACHE_TTL"
+			| "CACHE_ENABLED"
+			| "PEP_SEARCH_ENABLED"
+			| "PEP_GROK_ENABLED"
+			| "ADVERSE_MEDIA_ENABLED"
+			| "R2_BUCKET_NAME"
+			| "GROK_API_KEY"
+			| "AI_GATEWAY_URL"
+			| "GEMINI_MODEL"
+			| "RESEARCH_PROVIDER"
+			| "RESEARCH_SHADOW"
+		>
+	> {}
 }
 
 // Begin runtime types

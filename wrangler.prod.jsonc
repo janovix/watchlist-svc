@@ -93,5 +93,9 @@
 		// "CLOUDFLARE_ACCOUNT_ID": "set-via-secret",
 		"R2_BUCKET_NAME": "watchlist-uploads",
 		"E2E_API_KEY": "",
+		"RESEARCH_PROVIDER": "gemini",
+		"AI_GATEWAY_URL": "",
+		"GEMINI_MODEL": "gemini-2.5-flash",
+		"RESEARCH_SHADOW": "false",
 	},
 }

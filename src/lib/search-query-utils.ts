@@ -2,15 +2,59 @@
  * Shared utilities for search query persistence and caching.
  *
  * Two-layer storage:
- * - Layer 1: KV cache (cross-org, 72h TTL) for reduced latency
+ * - Layer 1: KV cache (TTL varies by risk; see research cache helpers)
  * - Layer 2: D1 search_query table (org-scoped, permanent) for audit trail
  */
 
-/** TTL for PEP / adverse media KV cache: 72 hours (seconds). */
-export const GROK_CACHE_TTL_SECONDS = 259200;
-
 import { createHash } from "crypto";
 import type { PrismaClient } from "@prisma/client";
+
+/** @deprecated Use {@link RESEARCH_CACHE_TTL_SECONDS_NEGATIVE} or TTL helpers. */
+export const GROK_CACHE_TTL_SECONDS = 259200;
+
+/** KV TTL for low-risk / negative PEP + adverse-media cache (30 days, seconds). */
+export const RESEARCH_CACHE_TTL_SECONDS_NEGATIVE = 30 * 24 * 60 * 60;
+
+/** KV TTL when a hit or elevated risk is present (7 days, seconds). */
+export const RESEARCH_CACHE_TTL_SECONDS_POSITIVE = 7 * 24 * 60 * 60;
+
+export type PepAiCachePayload = {
+	probability: number;
+	summary: { es: string; en: string };
+	sources: string[];
+};
+
+export type AdverseMediaCachePayload = {
+	risk_level: string;
+	findings: { es: string; en: string };
+	sources: string[];
+};
+
+/**
+ * PEP AI: long TTL when probability is low; shorter when elevated.
+ */
+export function getPepAiResearchCacheTtlSeconds(
+	payload: PepAiCachePayload,
+): number {
+	const p = payload.probability;
+	if (typeof p !== "number" || !Number.isFinite(p) || p < 0.3) {
+		return RESEARCH_CACHE_TTL_SECONDS_NEGATIVE;
+	}
+	return RESEARCH_CACHE_TTL_SECONDS_POSITIVE;
+}
+
+/**
+ * Adverse media: long TTL when risk is none; shorter otherwise.
+ */
+export function getAdverseMediaResearchCacheTtlSeconds(
+	payload: AdverseMediaCachePayload,
+): number {
+	const rl = payload.risk_level;
+	if (rl === "none" || rl === undefined) {
+		return RESEARCH_CACHE_TTL_SECONDS_NEGATIVE;
+	}
+	return RESEARCH_CACHE_TTL_SECONDS_POSITIVE;
+}
 
 /**
  * True when Grok PEP (pep_ai) should count as a list/detail "match".
@@ -66,18 +110,19 @@ export async function readCache<T = unknown>(
 }
 
 /**
- * Write to KV cache with 72h TTL.
+ * Write to KV cache with configurable TTL (defaults to negative-result window).
  */
 export async function writeCache(
 	kv: KVNamespace,
 	key: string,
 	value: unknown,
+	ttlSeconds: number = RESEARCH_CACHE_TTL_SECONDS_NEGATIVE,
 ): Promise<void> {
 	try {
 		await kv.put(key, JSON.stringify(value), {
-			expirationTtl: GROK_CACHE_TTL_SECONDS, // 72 hours
+			expirationTtl: ttlSeconds,
 		});
-		console.log(`[Cache] Wrote to KV (key: ${key}, TTL: 72h)`);
+		console.log(`[Cache] Wrote to KV (key: ${key}, TTL: ${ttlSeconds}s)`);
 	} catch (error) {
 		console.error(`[Cache] Failed to write to KV (key: ${key}):`, error);
 		// Don't throw - cache failures shouldn't break the flow
