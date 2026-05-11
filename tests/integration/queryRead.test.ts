@@ -1,8 +1,9 @@
 import { SELF, env } from "cloudflare:test";
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { QueryReadEndpoint } from "../../src/endpoints/watchlist/queryRead";
 import { createPrismaClient } from "../../src/lib/prisma";
 import type { AppContext } from "../../src/types";
+import type { Bindings } from "../../src";
 
 /**
  * Query Read Endpoint Tests
@@ -69,6 +70,10 @@ describe("QueryReadEndpoint.handle()", () => {
 	beforeEach(() => {
 		prisma = createPrismaClient((env as any).DB);
 		endpoint = new (QueryReadEndpoint as any)();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
 	it("should return 403 when organization context missing", async () => {
@@ -393,5 +398,126 @@ describe("QueryReadEndpoint.handle()", () => {
 		expect(response.result.countries).toEqual(["US"]);
 		expect(response.result.ofacResult?.matches).toEqual(ofacMatchData);
 		expect(response.result.ofacResult?.count).toBe(1);
+	});
+
+	it("should populate userDisplay from AUTH_SERVICE organization members", async () => {
+		const queryId = "test-query-user-display-" + Date.now();
+		const orgId = "org-user-display-" + Date.now();
+
+		await prisma.searchQuery.create({
+			data: {
+				id: queryId,
+				organizationId: orgId,
+				userId: "user-display-1",
+				query: "test",
+				entityType: "person",
+				status: "completed",
+				ofacStatus: "completed",
+				sat69bStatus: "completed",
+				unStatus: "completed",
+				pepOfficialStatus: "completed",
+				pepAiStatus: "completed",
+				adverseMediaStatus: "completed",
+			},
+		});
+
+		const mockContext = {
+			env: {
+				...(env as unknown as Bindings),
+				AUTH_SERVICE: {
+					getOrganizationMembers: vi.fn(async () => [
+						{
+							userId: "user-display-1",
+							name: "Display User",
+							image: "https://example.com/u.png",
+						},
+					]),
+				} as unknown as Bindings["AUTH_SERVICE"],
+			},
+			req: { json: async () => ({}) },
+			get: (key: string) => (key === "organization" ? { id: orgId } : null),
+		} as unknown as AppContext;
+
+		(endpoint.getValidatedData as any) = async () => ({
+			params: { queryId },
+			query: {},
+		});
+
+		const response = await endpoint.handle(mockContext);
+		expect(response.result.userDisplay).toEqual({
+			name: "Display User",
+			image: "https://example.com/u.png",
+		});
+	});
+
+	it("should ignore AUTH_SERVICE member lookup failures", async () => {
+		const queryId = "test-query-user-display-fail-" + Date.now();
+		const orgId = "org-user-display-fail-" + Date.now();
+
+		await prisma.searchQuery.create({
+			data: {
+				id: queryId,
+				organizationId: orgId,
+				userId: "user-display-fail",
+				query: "test",
+				entityType: "person",
+				status: "completed",
+				ofacStatus: "completed",
+				sat69bStatus: "completed",
+				unStatus: "completed",
+				pepOfficialStatus: "completed",
+				pepAiStatus: "completed",
+				adverseMediaStatus: "completed",
+			},
+		});
+
+		const mockContext = {
+			env: {
+				...(env as unknown as Bindings),
+				AUTH_SERVICE: {
+					getOrganizationMembers: vi.fn(async () => {
+						throw new Error("members down");
+					}),
+				} as unknown as Bindings["AUTH_SERVICE"],
+			},
+			req: { json: async () => ({}) },
+			get: (key: string) => (key === "organization" ? { id: orgId } : null),
+		} as unknown as AppContext;
+
+		(endpoint.getValidatedData as any) = async () => ({
+			params: { queryId },
+			query: {},
+		});
+
+		const response = await endpoint.handle(mockContext);
+		expect(response.result.userDisplay).toBeNull();
+	});
+
+	it("should wrap unexpected database errors as 500 ApiException", async () => {
+		const db = env.DB as D1Database;
+		const originalPrepare = db.prepare.bind(db);
+		vi.spyOn(db, "prepare").mockImplementation((query: string) => {
+			if (query.includes("search_query")) {
+				throw new Error("query read down");
+			}
+			return originalPrepare(query);
+		});
+
+		const mockContext = {
+			env: env as any,
+			req: { json: async () => ({}) },
+			get: (key: string) =>
+				key === "organization" ? { id: "org-db-error" } : null,
+		} as unknown as AppContext;
+
+		(endpoint.getValidatedData as any) = async () => ({
+			params: { queryId: "test-query-db-error" },
+			query: {},
+		});
+
+		await expect(endpoint.handle(mockContext)).rejects.toMatchObject({
+			status: 500,
+			message: "query read down",
+		});
 	});
 });

@@ -35,6 +35,9 @@
 	// Queue removed - now using thread-svc for ingestion
 	"vars": {
 		"ENVIRONMENT": "test",
-		"E2E_API_KEY": "",
+		"RESEARCH_PROVIDER": "grok",
+		"AI_GATEWAY_URL": "",
+		"GEMINI_MODEL": "gemini-2.5-flash",
+		"RESEARCH_SHADOW": "false",
 	},
 }

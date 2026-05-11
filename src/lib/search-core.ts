@@ -44,6 +44,23 @@ import {
 	defaultEmbeddings,
 	defaultVectorIndex,
 } from "./search-vectorize";
+import {
+	runGeminiAdverseMediaResearch,
+	runGeminiPepResearch,
+} from "./gemini-research";
+import {
+	completeAdverseMediaResearch,
+	completePepAiResearch,
+	failAdverseMediaResearch,
+	failPepAiResearch,
+} from "./research-results";
+import {
+	researchShadowSample,
+	resolveResearchProvider,
+	resolveResearchShadowEnabled,
+} from "./research-provider";
+import { logResearchShadowMetric } from "./research-shadow";
+import { broadcastPepEvent } from "./pep-events-broadcast";
 
 export type {
 	OfacTargetType,
@@ -838,8 +855,10 @@ export async function performSearch(
 		}
 	}
 
+	const researchProvider = await resolveResearchProvider(env, organizationId);
+
 	// ===================================================================
-	// Grok PEP AI Search (Person-only, Fire-and-Forget)
+	// PEP AI web research (Gemini + Search Grounding or legacy Grok containers)
 	// ===================================================================
 	let pepAiSearch:
 		| {
@@ -852,13 +871,13 @@ export async function performSearch(
 	const pepGrokEnabled = String(env.PEP_GROK_ENABLED ?? "") !== "false";
 
 	if (!pepGrokEnabled) {
-		console.log(`[SearchCore] PEP Grok search disabled via PEP_GROK_ENABLED`);
+		console.log(`[SearchCore] PEP AI search disabled via PEP_GROK_ENABLED`);
 		pepAiSearch = {
 			searchId: queryId,
 			status: "disabled",
 			result: null,
 		};
-	} else if (entityType === "person" && env.THREAD_SVC) {
+	} else if (entityType === "person") {
 		try {
 			const pepAiSearchId = queryId; // Use queryId for unified SSE
 
@@ -875,7 +894,7 @@ export async function performSearch(
 					);
 					cachedPepAi = await readCache(env.PEP_CACHE, cacheKey);
 					if (cachedPepAi) {
-						console.log(`[SearchCore] PEP Grok cache hit for query "${query}"`);
+						console.log(`[SearchCore] PEP AI cache hit for query "${query}"`);
 						pepAiSearch = {
 							searchId: pepAiSearchId,
 							status: "completed",
@@ -912,46 +931,122 @@ export async function performSearch(
 						}
 					}
 				} catch (error) {
-					console.warn(`[SearchCore] Failed to check PEP Grok cache:`, error);
+					console.warn(`[SearchCore] Failed to check PEP AI cache:`, error);
 				}
 			}
 
 			if (!cachedPepAi) {
-				const baseUrl = getCallbackUrl(env.ENVIRONMENT);
-				const callbackUrl = baseUrl + "/internal/grok-pep";
-				const progressCallbackUrl = baseUrl + "/internal/grok-pep/progress";
-
-				const threadPayload = {
-					task_type: "pep_grok",
-					job_params: {
-						query: query,
-						callback_url: callbackUrl,
-						progress_callback_url: progressCallbackUrl,
-						search_id: pepAiSearchId,
-						birthdate: birthDate,
-						country: countries?.[0],
-					},
-					metadata: {
-						source: "watchlist-svc",
-						triggered_by: "search",
-						needs_grok_key: true,
-						...(env.GROK_API_KEY && {
-							env: { GROK_API_KEY: env.GROK_API_KEY },
-						}),
-					},
-				};
-
-				try {
-					await env.THREAD_SVC.createThread(threadPayload);
+				if (researchProvider === "gemini") {
 					pepAiSearch = {
 						searchId: pepAiSearchId,
 						status: "pending",
 						result: null,
 					};
-				} catch (threadError) {
-					console.error(
-						`[SearchCore] Error creating Grok PEP thread:`,
-						threadError,
+					executionCtx.waitUntil(
+						(async () => {
+							const t0 = Date.now();
+							try {
+								void broadcastPepEvent(
+									env,
+									pepAiSearchId,
+									"pep_grok_progress",
+									{
+										phase: "searching",
+										message: "Researching PEP status (Gemini)...",
+										progress: 0.2,
+									},
+								);
+								const geminiResult = await runGeminiPepResearch(env, {
+									query,
+									birthdate: birthDate,
+									country: countries?.[0],
+								});
+								await completePepAiResearch(env, {
+									searchId: pepAiSearchId,
+									query,
+									entityType,
+									birthdate: birthDate,
+									country: countries?.[0],
+									probability: geminiResult.probability,
+									summary: geminiResult.summary,
+									sources: geminiResult.sources,
+									logPrefix: "[SearchCore/Gemini PEP]",
+								});
+								const shadowOn = await resolveResearchShadowEnabled(
+									env,
+									organizationId,
+								);
+								if (shadowOn && researchShadowSample(pepAiSearchId)) {
+									logResearchShadowMetric({
+										kind: "watchlist_research_shadow_sample",
+										search_id: pepAiSearchId,
+										organization_id: organizationId,
+										research_kind: "pep_ai",
+										provider: "gemini",
+										latency_ms: Date.now() - t0,
+										summary: {
+											probability: geminiResult.probability,
+											source_count: geminiResult.sources.length,
+										},
+									});
+								}
+							} catch (err) {
+								const msg = err instanceof Error ? err.message : String(err);
+								console.error("[SearchCore] Gemini PEP research failed:", err);
+								await failPepAiResearch(env, {
+									searchId: pepAiSearchId,
+									error: msg,
+									logPrefix: "[SearchCore/Gemini PEP]",
+								});
+							}
+						})(),
+					);
+				} else if (env.THREAD_SVC) {
+					const baseUrl = getCallbackUrl(env.ENVIRONMENT);
+					const callbackUrl = baseUrl + "/internal/grok-pep";
+					const progressCallbackUrl = baseUrl + "/internal/grok-pep/progress";
+
+					const threadPayload = {
+						task_type: "pep_grok",
+						job_params: {
+							query: query,
+							callback_url: callbackUrl,
+							progress_callback_url: progressCallbackUrl,
+							search_id: pepAiSearchId,
+							birthdate: birthDate,
+							country: countries?.[0],
+						},
+						metadata: {
+							source: "watchlist-svc",
+							triggered_by: "search",
+							needs_grok_key: true,
+							...(env.GROK_API_KEY && {
+								env: { GROK_API_KEY: env.GROK_API_KEY },
+							}),
+						},
+					};
+
+					try {
+						await env.THREAD_SVC.createThread(threadPayload);
+						pepAiSearch = {
+							searchId: pepAiSearchId,
+							status: "pending",
+							result: null,
+						};
+					} catch (threadError) {
+						console.error(
+							`[SearchCore] Error creating Grok PEP thread:`,
+							threadError,
+						);
+						pepAiSearch = {
+							searchId: pepAiSearchId,
+							status: "failed",
+							result: null,
+						};
+					}
+				} else {
+					console.warn(
+						"[SearchCore] PEP AI skipped: provider=grok but THREAD_SVC missing",
 					);
 					pepAiSearch = {
 						searchId: pepAiSearchId,
@@ -961,8 +1056,8 @@ export async function performSearch(
 				}
 			}
 		} catch (error) {
-			console.error(`[SearchCore] Failed to trigger Grok PEP search:`, error);
-			// Don't fail the whole search if Grok PEP fails
+			console.error(`[SearchCore] Failed to trigger PEP AI search:`, error);
+			// Don't fail the whole search if PEP AI fails
 		}
 	} else if (entityType !== "person") {
 		pepAiSearch = {
@@ -973,7 +1068,7 @@ export async function performSearch(
 	}
 
 	// ===================================================================
-	// Adverse Media Grok Search (Fire-and-Forget)
+	// Adverse media web research (Gemini + Search Grounding or legacy Grok containers)
 	// ===================================================================
 	let adverseMediaSearch:
 		| {
@@ -995,7 +1090,7 @@ export async function performSearch(
 			status: "disabled",
 			result: null,
 		};
-	} else if (env.THREAD_SVC) {
+	} else {
 		try {
 			const adverseMediaSearchId = queryId; // Use queryId for unified SSE
 
@@ -1054,43 +1149,118 @@ export async function performSearch(
 			}
 
 			if (!cachedAdverseMedia) {
-				const baseUrl = getCallbackUrl(env.ENVIRONMENT);
-				const callbackUrl = baseUrl + "/internal/adverse-media";
-				const progressCallbackUrl =
-					baseUrl + "/internal/adverse-media/progress";
-
-				const threadPayload = {
-					task_type: "adverse_media_grok",
-					job_params: {
-						query: query,
-						callback_url: callbackUrl,
-						progress_callback_url: progressCallbackUrl,
-						search_id: adverseMediaSearchId,
-						entity_type: entityType,
-						birthdate: birthDate,
-						country: countries?.[0],
-					},
-					metadata: {
-						source: "watchlist-svc",
-						triggered_by: "search",
-						needs_grok_key: true,
-						...(env.GROK_API_KEY && {
-							env: { GROK_API_KEY: env.GROK_API_KEY },
-						}),
-					},
-				};
-
-				try {
-					await env.THREAD_SVC.createThread(threadPayload);
+				if (researchProvider === "gemini") {
 					adverseMediaSearch = {
 						searchId: adverseMediaSearchId,
 						status: "pending",
 						result: null,
 					};
-				} catch (threadError) {
-					console.error(
-						`[SearchCore] Error creating adverse media thread:`,
-						threadError,
+					executionCtx.waitUntil(
+						(async () => {
+							const t0 = Date.now();
+							try {
+								void broadcastPepEvent(
+									env,
+									adverseMediaSearchId,
+									"adverse_media_progress",
+									{
+										phase: "searching",
+										message: "Searching adverse media (Gemini)...",
+										progress: 0.2,
+									},
+								);
+								const geminiResult = await runGeminiAdverseMediaResearch(env, {
+									query,
+									entityType,
+									birthdate: birthDate,
+									country: countries?.[0],
+								});
+								await completeAdverseMediaResearch(env, {
+									searchId: adverseMediaSearchId,
+									query,
+									entityType,
+									risk_level: geminiResult.risk_level,
+									findings: geminiResult.findings,
+									sources: geminiResult.sources,
+									logPrefix: "[SearchCore/Gemini adverse]",
+								});
+								const shadowOn = await resolveResearchShadowEnabled(
+									env,
+									organizationId,
+								);
+								if (shadowOn && researchShadowSample(adverseMediaSearchId)) {
+									logResearchShadowMetric({
+										kind: "watchlist_research_shadow_sample",
+										search_id: adverseMediaSearchId,
+										organization_id: organizationId,
+										research_kind: "adverse_media",
+										provider: "gemini",
+										latency_ms: Date.now() - t0,
+										summary: {
+											risk_level: geminiResult.risk_level,
+											source_count: geminiResult.sources.length,
+										},
+									});
+								}
+							} catch (err) {
+								const msg = err instanceof Error ? err.message : String(err);
+								console.error("[SearchCore] Gemini adverse media failed:", err);
+								await failAdverseMediaResearch(env, {
+									searchId: adverseMediaSearchId,
+									error: msg,
+									logPrefix: "[SearchCore/Gemini adverse]",
+								});
+							}
+						})(),
+					);
+				} else if (env.THREAD_SVC) {
+					const baseUrl = getCallbackUrl(env.ENVIRONMENT);
+					const callbackUrl = baseUrl + "/internal/adverse-media";
+					const progressCallbackUrl =
+						baseUrl + "/internal/adverse-media/progress";
+
+					const threadPayload = {
+						task_type: "adverse_media_grok",
+						job_params: {
+							query: query,
+							callback_url: callbackUrl,
+							progress_callback_url: progressCallbackUrl,
+							search_id: adverseMediaSearchId,
+							entity_type: entityType,
+							birthdate: birthDate,
+							country: countries?.[0],
+						},
+						metadata: {
+							source: "watchlist-svc",
+							triggered_by: "search",
+							needs_grok_key: true,
+							...(env.GROK_API_KEY && {
+								env: { GROK_API_KEY: env.GROK_API_KEY },
+							}),
+						},
+					};
+
+					try {
+						await env.THREAD_SVC.createThread(threadPayload);
+						adverseMediaSearch = {
+							searchId: adverseMediaSearchId,
+							status: "pending",
+							result: null,
+						};
+					} catch (threadError) {
+						console.error(
+							`[SearchCore] Error creating adverse media thread:`,
+							threadError,
+						);
+						adverseMediaSearch = {
+							searchId: adverseMediaSearchId,
+							status: "failed",
+							result: null,
+						};
+					}
+				} else {
+					console.warn(
+						"[SearchCore] Adverse media failed: provider=grok but THREAD_SVC missing",
 					);
 					adverseMediaSearch = {
 						searchId: adverseMediaSearchId,

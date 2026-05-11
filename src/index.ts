@@ -113,9 +113,19 @@ export type Bindings = Env & {
 	 */
 	INTERNAL_SECRET?: string;
 	/**
-	 * Grok API key for AI-powered features.
+	 * Grok API key (legacy `researchProvider=grok` + thread-svc containers only).
 	 */
 	GROK_API_KEY?: string;
+	/** Base URL for Cloudflare AI Gateway (no trailing slash). See docs/GEMINI_AI_GATEWAY.md */
+	AI_GATEWAY_URL?: string;
+	/** Google AI Studio API key for Gemini (secret). */
+	GEMINI_API_KEY?: string;
+	/** Override Gemini model id (default gemini-2.5-flash). */
+	GEMINI_MODEL?: string;
+	/** `gemini` | `grok` — defaults to gemini. Overridable via flags-svc `watchlist-research-provider`. */
+	RESEARCH_PROVIDER?: string;
+	/** When true, sampled structured logs for dashboards (see research-shadow.ts). */
+	RESEARCH_SHADOW?: string;
 	/**
 	 * R2 bucket for storing uploaded watchlist files (XML, etc.)
 	 */
