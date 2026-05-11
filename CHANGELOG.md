@@ -1,3 +1,16 @@
+# [1.10.0-rc.6](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.5...v1.10.0-rc.6) (2026-05-11)
+
+
+### Bug Fixes
+
+* update service binding in wrangler configuration from 'flags-svc-preview' to 'flags-svc' ([14d19d6](https://github.com/janovix/watchlist-svc/commit/14d19d6c19cac52be645a46a4ca36aa6361f6d03))
+
+
+### Features
+
+* update AI_GATEWAY_URL and R2_BUCKET_NAME in wrangler configuration files for improved integration ([2d2057f](https://github.com/janovix/watchlist-svc/commit/2d2057fbdcb2f256b7ed02ddb230b328687c7c83))
+* update README and configuration files for Gemini AI integration ([53a3d12](https://github.com/janovix/watchlist-svc/commit/53a3d1219261d91f7ea8623abecbd77a23ea57e1))
+
 # [1.10.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.4...v1.10.0-rc.5) (2026-05-08)
 
 
