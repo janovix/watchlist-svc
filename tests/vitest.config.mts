@@ -33,12 +33,12 @@ export default defineWorkersConfig({
 				"src/entrypoint.ts", // RPC entrypoint — service binding / SELF not exercised in Vitest pool
 			],
 			// Floor sits slightly below measured totals so small edits don't flake.
-			// Last measured (full include set): ~78.5% lines, ~77.8% stmts, ~66.9% branches, ~88% funcs.
+			// Last measured (full include set): ~91.5% lines, ~90.6% stmts, ~81.8% branches, ~92.2% funcs.
 			thresholds: {
-				lines: 77,
-				functions: 87,
-				branches: 65,
-				statements: 77,
+				lines: 89,
+				functions: 90,
+				branches: 79,
+				statements: 88,
 			},
 		},
 		setupFiles: ["./tests/apply-migrations.ts"],
