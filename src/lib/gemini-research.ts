@@ -8,6 +8,7 @@ import type { Bindings } from "../index";
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const REQUEST_TIMEOUT_MS = 90_000;
 const REDIRECT_RESOLVE_TIMEOUT_MS = 5_000;
+const MAX_CHUNKS_TO_RESOLVE = 10;
 
 /** Matches Grok PEP JSON contract (see thread-worker-container pep_grok handler). */
 export type PepGeminiResult = {
@@ -120,9 +121,11 @@ export async function resolveCanonicalUrl(
 	try {
 		const res = await fetch(redirectUrl, {
 			method: "HEAD",
-			redirect: "follow",
+			redirect: "manual",
 			signal: controller.signal,
 		});
+		const location = res.headers.get("location");
+		if (location) return location;
 		if (res.url && res.url !== redirectUrl) return res.url;
 	} catch {
 		// Fall back below; unresolved redirects should not fail screening.
@@ -138,8 +141,9 @@ export async function resolveCanonicalUrl(
 export async function resolveGroundingSources(
 	chunks: GroundingChunkSource[],
 ): Promise<string[]> {
+	const limitedChunks = chunks.slice(0, MAX_CHUNKS_TO_RESOLVE);
 	const resolved = await Promise.all(
-		chunks.map((chunk) => resolveCanonicalUrl(chunk.uri, chunk.title)),
+		limitedChunks.map((chunk) => resolveCanonicalUrl(chunk.uri, chunk.title)),
 	);
 	const seen = new Set<string>();
 	const sources: string[] = [];
@@ -235,6 +239,7 @@ async function generateStructured(
 		tools: [{ google_search: {} }],
 		generationConfig: {
 			temperature: 0.2,
+			thinkingConfig: { thinkingBudget: 0 },
 		},
 		safetySettings: SAFETY_SETTINGS,
 	};

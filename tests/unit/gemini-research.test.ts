@@ -54,10 +54,11 @@ function geminiResponse(
 	);
 }
 
-function responseWithUrl(url: string): Response {
-	const res = new Response(null, { status: 200 });
-	Object.defineProperty(res, "url", { value: url });
-	return res;
+function redirectResponse(location: string): Response {
+	return new Response(null, {
+		status: 302,
+		headers: { location },
+	});
 }
 
 function requestUrl(input: Parameters<typeof fetch>[0]): string {
@@ -76,7 +77,7 @@ function mockGeminiAndRedirectFetch(
 	return vi.fn(async (...args: Parameters<typeof fetch>): Promise<Response> => {
 		const url = requestUrl(args[0]);
 		if (url === GEMINI_URL) return geminiResponse(text, groundingChunks);
-		return responseWithUrl(resolvedByRedirect[url] ?? url);
+		return redirectResponse(resolvedByRedirect[url] ?? url);
 	});
 }
 
@@ -96,7 +97,7 @@ function mockGeminiSequenceAndRedirectFetch(
 				throw new Error(`Unexpected Gemini request #${geminiCallIndex}`);
 			return response;
 		}
-		return responseWithUrl(resolvedByRedirect[url] ?? url);
+		return redirectResponse(resolvedByRedirect[url] ?? url);
 	});
 }
 
@@ -170,6 +171,15 @@ describe("gemini-research", () => {
 				headers: expect.objectContaining({
 					"x-goog-api-key": "test-gemini-key",
 				}),
+			}),
+		);
+		const geminiInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+		expect(JSON.parse(String(geminiInit.body))).toEqual(
+			expect.objectContaining({
+				generationConfig: {
+					temperature: 0.2,
+					thinkingConfig: { thinkingBudget: 0 },
+				},
 			}),
 		);
 	});

@@ -68,6 +68,8 @@ export type {
 	UnscTargetType,
 } from "./target-mappers";
 
+const ADVERSE_MEDIA_GEMINI_DEADLINE_MS = 60_000;
+
 export interface SearchParams {
 	env: Bindings;
 	executionCtx: ExecutionContext;
@@ -1158,6 +1160,9 @@ export async function performSearch(
 					executionCtx.waitUntil(
 						(async () => {
 							const t0 = Date.now();
+							let adverseMediaDeadlineTimer:
+								| ReturnType<typeof setTimeout>
+								| undefined;
 							try {
 								void broadcastPepEvent(
 									env,
@@ -1169,12 +1174,29 @@ export async function performSearch(
 										progress: 0.2,
 									},
 								);
-								const geminiResult = await runGeminiAdverseMediaResearch(env, {
-									query,
-									entityType,
-									birthdate: birthDate,
-									country: countries?.[0],
-								});
+								const geminiResult = await Promise.race([
+									runGeminiAdverseMediaResearch(env, {
+										query,
+										entityType,
+										birthdate: birthDate,
+										country: countries?.[0],
+									}),
+									new Promise<never>((_, reject) => {
+										adverseMediaDeadlineTimer = setTimeout(
+											() =>
+												reject(
+													new Error(
+														"Adverse media Gemini research deadline exceeded",
+													),
+												),
+											ADVERSE_MEDIA_GEMINI_DEADLINE_MS,
+										);
+									}),
+								]);
+								if (adverseMediaDeadlineTimer) {
+									clearTimeout(adverseMediaDeadlineTimer);
+									adverseMediaDeadlineTimer = undefined;
+								}
 								await completeAdverseMediaResearch(env, {
 									searchId: adverseMediaSearchId,
 									query,
@@ -1210,6 +1232,10 @@ export async function performSearch(
 									error: msg,
 									logPrefix: "[SearchCore/Gemini adverse]",
 								});
+							} finally {
+								if (adverseMediaDeadlineTimer) {
+									clearTimeout(adverseMediaDeadlineTimer);
+								}
 							}
 						})(),
 					);

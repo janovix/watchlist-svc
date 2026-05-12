@@ -49,10 +49,12 @@ describe("gemini-research grounding helpers", () => {
 		]);
 	});
 
-	it("resolveCanonicalUrl follows redirects to the final response URL", async () => {
+	it("resolveCanonicalUrl reads the manual redirect location", async () => {
 		const final = "https://justice.gov/article";
-		const response = new Response(null, { status: 200 });
-		Object.defineProperty(response, "url", { value: final });
+		const response = new Response(null, {
+			status: 302,
+			headers: { location: final },
+		});
 		const fetchMock = vi.fn(async () => response);
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -63,7 +65,7 @@ describe("gemini-research grounding helpers", () => {
 			"https://vertex.example/redirect/a",
 			expect.objectContaining({
 				method: "HEAD",
-				redirect: "follow",
+				redirect: "manual",
 			}),
 		);
 	});
@@ -83,15 +85,16 @@ describe("gemini-research grounding helpers", () => {
 
 	it("resolveGroundingSources resolves and deduplicates canonical URLs", async () => {
 		const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
-			const response = new Response(null, { status: 200 });
 			const url = typeof input === "string" ? input : input.toString();
-			Object.defineProperty(response, "url", {
-				value:
-					url === "https://vertex.example/redirect/a"
-						? "https://news.example/story#section"
-						: "https://news.example/story",
+			return new Response(null, {
+				status: 302,
+				headers: {
+					location:
+						url === "https://vertex.example/redirect/a"
+							? "https://news.example/story#section"
+							: "https://news.example/story",
+				},
 			});
-			return response;
 		});
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -102,6 +105,30 @@ describe("gemini-research grounding helpers", () => {
 			]),
 		).resolves.toEqual(["https://news.example/story#section"]);
 		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("resolveGroundingSources only resolves the first ten chunks", async () => {
+		const fetchMock = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+			const url = typeof input === "string" ? input : input.toString();
+			const id = url.split("/").at(-1) ?? "unknown";
+			return new Response(null, {
+				status: 302,
+				headers: { location: `https://source.example/${id}` },
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const sources = await resolveGroundingSources(
+			Array.from({ length: 12 }, (_, index) => ({
+				uri: `https://vertex.example/redirect/${index}`,
+				title: `source-${index}.example`,
+			})),
+		);
+
+		expect(sources).toHaveLength(10);
+		expect(sources.at(0)).toBe("https://source.example/0");
+		expect(sources.at(-1)).toBe("https://source.example/9");
+		expect(fetchMock).toHaveBeenCalledTimes(10);
 	});
 
 	it("resolveCanonicalUrl falls back to redirect URL when title is missing", async () => {
