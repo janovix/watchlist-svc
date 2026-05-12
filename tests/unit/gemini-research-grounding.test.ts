@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-	filterSourcesToGrounding,
+	extractGroundingSources,
 	normalizeCitationUrl,
 } from "../../src/lib/gemini-research";
 
@@ -11,12 +11,20 @@ describe("gemini-research grounding helpers", () => {
 		);
 	});
 
-	it("filterSourcesToGrounding keeps only URLs present in grounding set", () => {
-		const allowed = new Set([normalizeCitationUrl("https://news.example/a")]);
-		const out = filterSourcesToGrounding(
-			["https://news.example/a", "https://evil.example/phishing", ""],
-			allowed,
-		);
-		expect(out).toEqual(["https://news.example/a"]);
+	it("extractGroundingSources returns ordered unique grounding chunk URLs", () => {
+		const out = extractGroundingSources({
+			groundingMetadata: {
+				groundingChunks: [
+					{ web: { uri: "https://vertex.example/redirect/a" } },
+					{ web: { uri: "https://vertex.example/redirect/a" } },
+					{ web: { uri: "https://vertex.example/redirect/b" } },
+					{ web: {} },
+				],
+			},
+		});
+		expect(out).toEqual([
+			"https://vertex.example/redirect/a",
+			"https://vertex.example/redirect/b",
+		]);
 	});
 });

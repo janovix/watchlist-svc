@@ -26,21 +26,39 @@ const PEP_SYSTEM = `
 You are an expert assistant that determines if a person is a politically exposed person (PEP) based on reliable sources.
 Use the Google Search tool as needed to gather current information.
 Provide the summary in both Spanish and English.
-Respond only with JSON matching the response schema (no markdown).
+Respond ONLY with a single JSON object (no markdown, no code fences) using this exact schema:
+{
+  "probability": <number between 0 and 1>,
+  "summary": { "es": "<Spanish summary>", "en": "<English summary>" },
+  "sources": ["<URL 1>", "<URL 2>", ...]
+}
+Set probability to 0 when the person is not a PEP. Criminal notoriety, sanctions, or adverse media alone do not make a person a PEP unless they held a prominent public function or are a close associate/family member of a PEP.
 `.trim();
 
 const ADVERSE_SYSTEM_PERSON = `
 You are an expert assistant that searches for adverse media about individuals. This includes negative news, sanctions, legal proceedings, fraud allegations, corruption, money laundering, regulatory violations, and other reputational risks.
 Use the Google Search tool to gather current information.
 Provide the findings in both Spanish and English.
-Respond only with JSON matching the response schema (no markdown).
+Respond ONLY with a single JSON object (no markdown, no code fences) using this exact schema:
+{
+  "risk_level": "none" | "low" | "medium" | "high",
+  "findings": { "es": "<Spanish findings>", "en": "<English findings>" },
+  "sources": ["<URL 1>", "<URL 2>", ...]
+}
+Use "none" only when you find no credible adverse media. Use "high" for confirmed serious criminal convictions, sanctions, money laundering, corruption, fraud, terrorism, drug trafficking, or major regulatory/legal actions.
 `.trim();
 
 const ADVERSE_SYSTEM_ORG = `
 You are an expert assistant that searches for adverse media about organizations, companies, and trusts. This includes sanctions, regulatory actions, fraud allegations, corruption, money laundering, legal proceedings, tax evasion, environmental violations, and other reputational risks.
 Use the Google Search tool to gather current information.
 Provide the findings in both Spanish and English.
-Respond only with JSON matching the response schema (no markdown).
+Respond ONLY with a single JSON object (no markdown, no code fences) using this exact schema:
+{
+  "risk_level": "none" | "low" | "medium" | "high",
+  "findings": { "es": "<Spanish findings>", "en": "<English findings>" },
+  "sources": ["<URL 1>", "<URL 2>", ...]
+}
+Use "none" only when you find no credible adverse media. Use "high" for confirmed sanctions, major regulatory actions, serious criminal allegations or convictions, money laundering, corruption, fraud, terrorism, tax evasion, or other severe legal proceedings.
 `.trim();
 
 export function normalizeCitationUrl(raw: string): string {
@@ -56,21 +74,28 @@ export function normalizeCitationUrl(raw: string): string {
 	}
 }
 
-function extractGroundingUrls(candidate: Record<string, unknown>): Set<string> {
-	const urls = new Set<string>();
+export function extractGroundingSources(
+	candidate: Record<string, unknown>,
+): string[] {
+	const sources: string[] = [];
+	const seen = new Set<string>();
 	const gm = candidate.groundingMetadata as Record<string, unknown> | undefined;
 	const chunks = gm?.groundingChunks as unknown[] | undefined;
-	if (!Array.isArray(chunks)) return urls;
+	if (!Array.isArray(chunks)) return sources;
 	for (const ch of chunks) {
 		const web = (ch as Record<string, unknown>)?.web as
 			| Record<string, unknown>
 			| undefined;
 		const uri = web?.uri;
 		if (typeof uri === "string" && uri.length > 0) {
-			urls.add(normalizeCitationUrl(uri));
+			const normalized = normalizeCitationUrl(uri);
+			if (!seen.has(normalized)) {
+				seen.add(normalized);
+				sources.push(uri);
+			}
 		}
 	}
-	return urls;
+	return sources;
 }
 
 function parseJsonObject(text: string): Record<string, unknown> {
@@ -134,21 +159,11 @@ async function postGemini(
 	}
 }
 
-export function filterSourcesToGrounding(
-	sources: string[],
-	allowed: Set<string>,
-): string[] {
-	return sources.filter((s) => {
-		if (typeof s !== "string" || s.trim() === "") return false;
-		return allowed.has(normalizeCitationUrl(s));
-	});
-}
-
 async function generateStructured(
 	env: Bindings,
 	systemInstruction: string,
 	userText: string,
-): Promise<{ parsed: Record<string, unknown>; groundingUrls: Set<string> }> {
+): Promise<{ parsed: Record<string, unknown>; groundingSources: string[] }> {
 	const body = {
 		systemInstruction: {
 			parts: [{ text: systemInstruction }],
@@ -191,9 +206,9 @@ async function generateStructured(
 		throw new Error("Gemini candidate missing text part");
 	}
 
-	const groundingUrls = extractGroundingUrls(first);
+	const groundingSources = extractGroundingSources(first);
 	const parsed = parseJsonObject(text);
-	return { parsed, groundingUrls };
+	return { parsed, groundingSources };
 }
 
 /**
@@ -225,7 +240,7 @@ export async function runGeminiPepResearch(
 	);
 	const userText = userParts.join("\n");
 
-	const { parsed, groundingUrls } = await generateStructured(
+	const { parsed, groundingSources } = await generateStructured(
 		env,
 		PEP_SYSTEM,
 		userText,
@@ -238,14 +253,10 @@ export async function runGeminiPepResearch(
 	const summary = parsed.summary as Record<string, unknown> | undefined;
 	const es = typeof summary?.es === "string" ? summary.es : "";
 	const en = typeof summary?.en === "string" ? summary.en : "";
-	const rawSources = Array.isArray(parsed.sources)
-		? (parsed.sources.filter((s) => typeof s === "string") as string[])
-		: [];
-
-	const sources = filterSourcesToGrounding(rawSources, groundingUrls);
-	if (sources.length === 0 && probability > 0) {
+	const sources = groundingSources;
+	if (groundingSources.length === 0 && probability > 0) {
 		console.warn(
-			"[GeminiResearch] PEP: no grounded sources after filter; forcing probability to 0",
+			"[GeminiResearch] PEP: no grounding chunks returned; forcing probability to 0",
 		);
 		probability = 0;
 	}
@@ -285,7 +296,7 @@ export async function runGeminiAdverseMediaResearch(
 		`Use Spanish and English in findings. Cite only URLs you actually retrieved via search.`,
 	);
 
-	const { parsed, groundingUrls } = await generateStructured(
+	const { parsed, groundingSources } = await generateStructured(
 		env,
 		system,
 		userParts.join("\n"),
@@ -300,14 +311,10 @@ export async function runGeminiAdverseMediaResearch(
 	const findings = parsed.findings as Record<string, unknown> | undefined;
 	const es = typeof findings?.es === "string" ? findings.es : "";
 	const en = typeof findings?.en === "string" ? findings.en : "";
-	const rawSources = Array.isArray(parsed.sources)
-		? (parsed.sources.filter((s) => typeof s === "string") as string[])
-		: [];
-
-	const sources = filterSourcesToGrounding(rawSources, groundingUrls);
-	if (sources.length === 0 && risk_level !== "none") {
+	const sources = groundingSources;
+	if (groundingSources.length === 0 && risk_level !== "none") {
 		console.warn(
-			"[GeminiResearch] Adverse media: no grounded sources; forcing risk_level to none",
+			"[GeminiResearch] Adverse media: no grounding chunks returned; forcing risk_level to none",
 		);
 		risk_level = "none";
 	}

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Bindings } from "../../src";
 import {
-	filterSourcesToGrounding,
+	extractGroundingSources,
 	normalizeCitationUrl,
 	runGeminiAdverseMediaResearch,
 	runGeminiPepResearch,
@@ -41,22 +41,27 @@ afterEach(() => {
 });
 
 describe("gemini-research", () => {
-	it("normalizes citations and filters sources to grounded URLs", () => {
+	it("normalizes citations and extracts authoritative grounding sources", () => {
 		expect(normalizeCitationUrl("HTTPS://Example.COM/path/#frag")).toBe(
 			"https://example.com/path",
 		);
 		expect(normalizeCitationUrl(" not a url ")).toBe("not a url");
 
-		const allowed = new Set([normalizeCitationUrl("https://news.example/a")]);
 		expect(
-			filterSourcesToGrounding(
-				["https://news.example/a#ignored", "https://evil.example", ""],
-				allowed,
-			),
-		).toEqual(["https://news.example/a#ignored"]);
+			extractGroundingSources({
+				groundingMetadata: {
+					groundingChunks: [
+						{ web: { uri: "https://news.example/a#section" } },
+						{ web: { uri: "https://news.example/a#section" } },
+						{ web: { uri: "https://news.example/b" } },
+						{ web: { uri: "" } },
+					],
+				},
+			}),
+		).toEqual(["https://news.example/a#section", "https://news.example/b"]);
 	});
 
-	it("runs PEP research and keeps only grounded sources", async () => {
+	it("runs PEP research and uses grounding chunks as sources", async () => {
 		const fetchMock = vi.fn(async () =>
 			geminiResponse(
 				JSON.stringify({
@@ -79,7 +84,7 @@ describe("gemini-research", () => {
 
 		expect(result.probability).toBe(1);
 		expect(result.summary.en).toBe("Yes");
-		expect(result.sources).toEqual(["https://news.example/a"]);
+		expect(result.sources).toEqual(["https://news.example/a#section"]);
 		expect(fetchMock).toHaveBeenCalledWith(
 			"https://gateway.example/google-ai-studio/v1beta/models/gemini-test-model:generateContent",
 			expect.objectContaining({
@@ -91,7 +96,7 @@ describe("gemini-research", () => {
 		);
 	});
 
-	it("forces PEP probability to zero when positive result has no grounded sources", async () => {
+	it("forces PEP probability to zero when positive result has no grounding chunks", async () => {
 		vi.stubGlobal(
 			"fetch",
 			vi.fn(async () =>
@@ -101,6 +106,7 @@ describe("gemini-research", () => {
 						summary: { es: "Si", en: "Yes" },
 						sources: ["https://ungrounded.example/story"],
 					}),
+					[],
 				),
 			),
 		);
@@ -153,7 +159,7 @@ describe("gemini-research", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 
-	it("defaults invalid adverse risk and clears ungrounded adverse findings", async () => {
+	it("defaults invalid adverse risk and clears adverse findings without grounding chunks", async () => {
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValueOnce(
@@ -172,6 +178,7 @@ describe("gemini-research", () => {
 						findings: { es: "Riesgo", en: "Risk" },
 						sources: ["https://ungrounded.example/story"],
 					}),
+					[],
 				),
 			);
 		vi.stubGlobal("fetch", fetchMock);
