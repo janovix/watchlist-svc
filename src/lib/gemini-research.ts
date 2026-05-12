@@ -249,7 +249,7 @@ async function generateStructured(
 		tools: [{ google_search: {} }],
 		generationConfig: {
 			temperature: 0.2,
-			thinkingConfig: { thinkingBudget: 0 },
+			thinkingConfig: { thinkingLevel: "minimal" },
 		},
 		safetySettings: SAFETY_SETTINGS,
 	};
