@@ -1,3 +1,10 @@
+# [1.10.0-rc.7](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.6...v1.10.0-rc.7) (2026-05-12)
+
+
+### Features
+
+* add AI_GATEWAY_TOKEN support for Cloudflare AI Gateway authentication ([e59bd30](https://github.com/janovix/watchlist-svc/commit/e59bd30ca598e8ef9954b6767a72b3a9b70a7e7e))
+
 # [1.10.0-rc.6](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.5...v1.10.0-rc.6) (2026-05-11)
 
 
