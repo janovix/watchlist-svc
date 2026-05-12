@@ -952,7 +952,7 @@ export async function performSearch(
 									"pep_grok_progress",
 									{
 										phase: "searching",
-										message: "Researching PEP status (Gemini)...",
+										message: "Researching PEP status...",
 										progress: 0.2,
 									},
 								);
@@ -1165,7 +1165,7 @@ export async function performSearch(
 									"adverse_media_progress",
 									{
 										phase: "searching",
-										message: "Searching adverse media (Gemini)...",
+										message: "Searching adverse media...",
 										progress: 0.2,
 									},
 								);

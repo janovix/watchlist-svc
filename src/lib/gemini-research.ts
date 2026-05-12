@@ -7,6 +7,7 @@ import type { Bindings } from "../index";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const REQUEST_TIMEOUT_MS = 90_000;
+const REDIRECT_RESOLVE_TIMEOUT_MS = 5_000;
 
 /** Matches Grok PEP JSON contract (see thread-worker-container pep_grok handler). */
 export type PepGeminiResult = {
@@ -20,6 +21,11 @@ export type AdverseMediaGeminiResult = {
 	risk_level: "none" | "low" | "medium" | "high";
 	findings: { es: string; en: string };
 	sources: string[];
+};
+
+export type GroundingChunkSource = {
+	uri: string;
+	title: string;
 };
 
 const PEP_SYSTEM = `
@@ -74,14 +80,14 @@ export function normalizeCitationUrl(raw: string): string {
 	}
 }
 
-export function extractGroundingSources(
+export function extractGroundingChunks(
 	candidate: Record<string, unknown>,
-): string[] {
-	const sources: string[] = [];
+): GroundingChunkSource[] {
+	const chunksOut: GroundingChunkSource[] = [];
 	const seen = new Set<string>();
 	const gm = candidate.groundingMetadata as Record<string, unknown> | undefined;
 	const chunks = gm?.groundingChunks as unknown[] | undefined;
-	if (!Array.isArray(chunks)) return sources;
+	if (!Array.isArray(chunks)) return chunksOut;
 	for (const ch of chunks) {
 		const web = (ch as Record<string, unknown>)?.web as
 			| Record<string, unknown>
@@ -91,8 +97,57 @@ export function extractGroundingSources(
 			const normalized = normalizeCitationUrl(uri);
 			if (!seen.has(normalized)) {
 				seen.add(normalized);
-				sources.push(uri);
+				const title = web?.title;
+				chunksOut.push({
+					uri,
+					title: typeof title === "string" ? title : "",
+				});
 			}
+		}
+	}
+	return chunksOut;
+}
+
+export async function resolveCanonicalUrl(
+	redirectUrl: string,
+	title: string,
+): Promise<string> {
+	const controller = new AbortController();
+	const timer = setTimeout(
+		() => controller.abort(),
+		REDIRECT_RESOLVE_TIMEOUT_MS,
+	);
+	try {
+		const res = await fetch(redirectUrl, {
+			method: "HEAD",
+			redirect: "follow",
+			signal: controller.signal,
+		});
+		if (res.url && res.url !== redirectUrl) return res.url;
+	} catch {
+		// Fall back below; unresolved redirects should not fail screening.
+	} finally {
+		clearTimeout(timer);
+	}
+
+	const trimmedTitle = title.trim();
+	if (trimmedTitle) return `https://${trimmedTitle}`;
+	return redirectUrl;
+}
+
+export async function resolveGroundingSources(
+	chunks: GroundingChunkSource[],
+): Promise<string[]> {
+	const resolved = await Promise.all(
+		chunks.map((chunk) => resolveCanonicalUrl(chunk.uri, chunk.title)),
+	);
+	const seen = new Set<string>();
+	const sources: string[] = [];
+	for (const url of resolved) {
+		const normalized = normalizeCitationUrl(url);
+		if (!seen.has(normalized)) {
+			seen.add(normalized);
+			sources.push(url);
 		}
 	}
 	return sources;
@@ -163,7 +218,10 @@ async function generateStructured(
 	env: Bindings,
 	systemInstruction: string,
 	userText: string,
-): Promise<{ parsed: Record<string, unknown>; groundingSources: string[] }> {
+): Promise<{
+	parsed: Record<string, unknown>;
+	groundingChunks: GroundingChunkSource[];
+}> {
 	const body = {
 		systemInstruction: {
 			parts: [{ text: systemInstruction }],
@@ -206,9 +264,9 @@ async function generateStructured(
 		throw new Error("Gemini candidate missing text part");
 	}
 
-	const groundingSources = extractGroundingSources(first);
+	const groundingChunks = extractGroundingChunks(first);
 	const parsed = parseJsonObject(text);
-	return { parsed, groundingSources };
+	return { parsed, groundingChunks };
 }
 
 /**
@@ -240,7 +298,7 @@ export async function runGeminiPepResearch(
 	);
 	const userText = userParts.join("\n");
 
-	const { parsed, groundingSources } = await generateStructured(
+	const { parsed, groundingChunks } = await generateStructured(
 		env,
 		PEP_SYSTEM,
 		userText,
@@ -253,8 +311,8 @@ export async function runGeminiPepResearch(
 	const summary = parsed.summary as Record<string, unknown> | undefined;
 	const es = typeof summary?.es === "string" ? summary.es : "";
 	const en = typeof summary?.en === "string" ? summary.en : "";
-	const sources = groundingSources;
-	if (groundingSources.length === 0 && probability > 0) {
+	const sources = await resolveGroundingSources(groundingChunks);
+	if (groundingChunks.length === 0 && probability > 0) {
 		console.warn(
 			"[GeminiResearch] PEP: no grounding chunks returned; forcing probability to 0",
 		);
@@ -296,7 +354,7 @@ export async function runGeminiAdverseMediaResearch(
 		`Use Spanish and English in findings. Cite only URLs you actually retrieved via search.`,
 	);
 
-	const { parsed, groundingSources } = await generateStructured(
+	const { parsed, groundingChunks } = await generateStructured(
 		env,
 		system,
 		userParts.join("\n"),
@@ -311,8 +369,8 @@ export async function runGeminiAdverseMediaResearch(
 	const findings = parsed.findings as Record<string, unknown> | undefined;
 	const es = typeof findings?.es === "string" ? findings.es : "";
 	const en = typeof findings?.en === "string" ? findings.en : "";
-	const sources = groundingSources;
-	if (groundingSources.length === 0 && risk_level !== "none") {
+	const sources = await resolveGroundingSources(groundingChunks);
+	if (groundingChunks.length === 0 && risk_level !== "none") {
 		console.warn(
 			"[GeminiResearch] Adverse media: no grounding chunks returned; forcing risk_level to none",
 		);
