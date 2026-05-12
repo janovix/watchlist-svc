@@ -92,50 +92,6 @@ function geminiGenerateUrl(env: Bindings): string {
 	return `${base}/google-ai-studio/v1beta/models/${model}:generateContent`;
 }
 
-const PEP_RESPONSE_SCHEMA = {
-	type: "OBJECT",
-	properties: {
-		probability: { type: "NUMBER" },
-		summary: {
-			type: "OBJECT",
-			properties: {
-				es: { type: "STRING" },
-				en: { type: "STRING" },
-			},
-			required: ["es", "en"],
-		},
-		sources: {
-			type: "ARRAY",
-			items: { type: "STRING" },
-		},
-	},
-	required: ["probability", "summary", "sources"],
-} as const;
-
-const ADVERSE_RESPONSE_SCHEMA = {
-	type: "OBJECT",
-	properties: {
-		risk_level: {
-			type: "STRING",
-			description:
-				'One of: "none", "low", "medium", "high". Use "none" when no adverse signals.',
-		},
-		findings: {
-			type: "OBJECT",
-			properties: {
-				es: { type: "STRING" },
-				en: { type: "STRING" },
-			},
-			required: ["es", "en"],
-		},
-		sources: {
-			type: "ARRAY",
-			items: { type: "STRING" },
-		},
-	},
-	required: ["risk_level", "findings", "sources"],
-} as const;
-
 const SAFETY_SETTINGS = [
 	{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
 	{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -192,7 +148,6 @@ async function generateStructured(
 	env: Bindings,
 	systemInstruction: string,
 	userText: string,
-	responseSchema: Record<string, unknown>,
 ): Promise<{ parsed: Record<string, unknown>; groundingUrls: Set<string> }> {
 	const body = {
 		systemInstruction: {
@@ -207,8 +162,6 @@ async function generateStructured(
 		tools: [{ google_search: {} }],
 		generationConfig: {
 			temperature: 0.2,
-			responseMimeType: "application/json",
-			responseSchema,
 		},
 		safetySettings: SAFETY_SETTINGS,
 	};
@@ -276,7 +229,6 @@ export async function runGeminiPepResearch(
 		env,
 		PEP_SYSTEM,
 		userText,
-		PEP_RESPONSE_SCHEMA as unknown as Record<string, unknown>,
 	);
 
 	let probability = Number(parsed.probability);
@@ -337,7 +289,6 @@ export async function runGeminiAdverseMediaResearch(
 		env,
 		system,
 		userParts.join("\n"),
-		ADVERSE_RESPONSE_SCHEMA as unknown as Record<string, unknown>,
 	);
 
 	const rlRaw = parsed.risk_level;
