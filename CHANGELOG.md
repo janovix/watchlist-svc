@@ -1,3 +1,10 @@
+# [1.10.0-rc.8](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.7...v1.10.0-rc.8) (2026-05-12)
+
+
+### Features
+
+* implement watchlist research queue for Gemini adverse media processing in search-core and related files ([d1f0550](https://github.com/janovix/watchlist-svc/commit/d1f0550fd9a97aced8a8f8b76c75a51908d8ac8f))
+
 # [1.10.0-rc.7](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.6...v1.10.0-rc.7) (2026-05-12)
 
 
