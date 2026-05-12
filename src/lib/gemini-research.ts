@@ -1,11 +1,11 @@
 /**
- * Gemini 2.5 Flash + Google Search grounding for PEP / adverse-media research.
+ * Gemini 3.1 Flash-Lite + Google Search grounding for PEP / adverse-media research.
  * Calls Google AI Studio via Cloudflare AI Gateway (see docs/GEMINI_AI_GATEWAY.md).
  */
 
 import type { Bindings } from "../index";
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.1-flash-lite";
 const REQUEST_TIMEOUT_MS = 90_000;
 const REDIRECT_RESOLVE_TIMEOUT_MS = 5_000;
 const MAX_CHUNKS_TO_RESOLVE = 10;
@@ -40,6 +40,11 @@ Respond ONLY with a single JSON object (no markdown, no code fences) using this 
   "sources": ["<URL 1>", "<URL 2>", ...]
 }
 Set probability to 0 when the person is not a PEP. Criminal notoriety, sanctions, or adverse media alone do not make a person a PEP unless they held a prominent public function or are a close associate/family member of a PEP.
+CRITICAL - Identity Matching Rules:
+- You MUST only report findings that pertain to the EXACT person queried.
+- The queried name may appear in different word orders (for example, "LOERA GUZMAN JOAQUIN" = "JOAQUIN GUZMAN LOERA") or as a shorter subset of a longer legal name (for example, "JOAQUIN GUZMAN" may match "JOAQUIN ARCHIVALDO GUZMAN LOERA").
+- However, if the queried name contains a surname token that does NOT appear in the person found (for example, queried "JOAQUIN GUZMAN PEREZ" but found "JOAQUIN GUZMAN LOERA"), treat them as DIFFERENT people and set probability to 0.
+- When in doubt, use birth date and country context to disambiguate. If you cannot confirm identity, default to probability 0.
 `.trim();
 
 const ADVERSE_SYSTEM_PERSON = `
@@ -53,6 +58,11 @@ Respond ONLY with a single JSON object (no markdown, no code fences) using this 
   "sources": ["<URL 1>", "<URL 2>", ...]
 }
 Use "none" only when you find no credible adverse media. Use "high" for confirmed serious criminal convictions, sanctions, money laundering, corruption, fraud, terrorism, drug trafficking, or major regulatory/legal actions.
+CRITICAL - Identity Matching Rules:
+- You MUST only report findings that pertain to the EXACT person queried.
+- The queried name may appear in different word orders (for example, "LOERA GUZMAN JOAQUIN" = "JOAQUIN GUZMAN LOERA") or as a shorter subset of a longer legal name (for example, "JOAQUIN GUZMAN" may match "JOAQUIN ARCHIVALDO GUZMAN LOERA").
+- However, if the queried name contains a surname token that does NOT appear in the person found (for example, queried "JOAQUIN GUZMAN PEREZ" but found "JOAQUIN GUZMAN LOERA"), treat them as DIFFERENT people and report risk_level "none".
+- When in doubt, use birth date and country context to disambiguate. If you cannot confirm identity, default to risk_level "none".
 `.trim();
 
 const ADVERSE_SYSTEM_ORG = `
