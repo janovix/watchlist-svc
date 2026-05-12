@@ -178,7 +178,7 @@ describe("gemini-research", () => {
 			expect.objectContaining({
 				generationConfig: {
 					temperature: 0.2,
-					thinkingConfig: { thinkingLevel: "minimal" },
+					thinkingConfig: { thinkingBudget: 0 },
 				},
 			}),
 		);

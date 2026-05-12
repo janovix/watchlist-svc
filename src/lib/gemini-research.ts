@@ -1,11 +1,11 @@
 /**
- * Gemini 3.1 Flash-Lite + Google Search grounding for PEP / adverse-media research.
+ * Gemini 2.5 Flash + Google Search grounding for PEP / adverse-media research.
  * Calls Google AI Studio via Cloudflare AI Gateway (see docs/GEMINI_AI_GATEWAY.md).
  */
 
 import type { Bindings } from "../index";
 
-const DEFAULT_MODEL = "gemini-3.1-flash-lite";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 const REQUEST_TIMEOUT_MS = 90_000;
 const REDIRECT_RESOLVE_TIMEOUT_MS = 5_000;
 const MAX_CHUNKS_TO_RESOLVE = 10;
@@ -249,7 +249,7 @@ async function generateStructured(
 		tools: [{ google_search: {} }],
 		generationConfig: {
 			temperature: 0.2,
-			thinkingConfig: { thinkingLevel: "minimal" },
+			thinkingConfig: { thinkingBudget: 0 },
 		},
 		safetySettings: SAFETY_SETTINGS,
 	};
