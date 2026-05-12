@@ -158,13 +158,18 @@ async function postGemini(
 
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+		"x-goog-api-key": key,
+	};
+	const gatewayToken = env.AI_GATEWAY_TOKEN?.trim();
+	if (gatewayToken) {
+		headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
+	}
 	try {
 		return await fetch(url, {
 			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"x-goog-api-key": key,
-			},
+			headers,
 			body: JSON.stringify(body),
 			signal: controller.signal,
 		});

@@ -118,6 +118,8 @@ export type Bindings = Env & {
 	GROK_API_KEY?: string;
 	/** Base URL for Cloudflare AI Gateway (no trailing slash). See docs/GEMINI_AI_GATEWAY.md */
 	AI_GATEWAY_URL?: string;
+	/** Cloudflare AI Gateway authentication token (secret). Required when Authenticated Gateway is enabled. */
+	AI_GATEWAY_TOKEN?: string;
 	/** Google AI Studio API key for Gemini (secret). */
 	GEMINI_API_KEY?: string;
 	/** Override Gemini model id (default gemini-2.5-flash). */
