@@ -80,6 +80,10 @@ import type {
 	AuthServiceBinding,
 	ThreadSvcBinding,
 } from "./types/service-bindings";
+import {
+	processWatchlistResearchBatch,
+	type WatchlistResearchJob,
+} from "./lib/research-queue";
 import { installVitestPoolBindings } from "./install-test-bindings";
 
 // Export Durable Objects
@@ -128,6 +132,8 @@ export type Bindings = Env & {
 	RESEARCH_PROVIDER?: string;
 	/** When true, sampled structured logs for dashboards (see research-shadow.ts). */
 	RESEARCH_SHADOW?: string;
+	/** Durable queue for Gemini watchlist research jobs. */
+	WATCHLIST_RESEARCH_QUEUE?: Queue<WatchlistResearchJob>;
 	/**
 	 * R2 bucket for storing uploaded watchlist files (XML, etc.)
 	 */
@@ -379,7 +385,7 @@ openapi.post(
 
 // Sentry is enabled only when SENTRY_DSN environment variable is set.
 // Configure it via wrangler secrets: `wrangler secret put SENTRY_DSN`
-export default Sentry.withSentry((env: Bindings) => {
+const sentryApp = Sentry.withSentry((env: Bindings) => {
 	const versionId = env.CF_VERSION_METADATA?.id;
 	return {
 		// When DSN is undefined/empty, Sentry SDK is disabled (no events sent)
@@ -391,3 +397,16 @@ export default Sentry.withSentry((env: Bindings) => {
 		sendDefaultPii: true,
 	};
 }, app);
+
+export default {
+	fetch: sentryApp.fetch.bind(sentryApp),
+
+	async queue(
+		batch: MessageBatch<WatchlistResearchJob>,
+		env: Bindings,
+		ctx: ExecutionContext,
+	): Promise<void> {
+		void ctx;
+		await processWatchlistResearchBatch(batch, env);
+	},
+} satisfies ExportedHandler<Bindings, WatchlistResearchJob>;

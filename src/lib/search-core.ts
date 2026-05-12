@@ -44,12 +44,8 @@ import {
 	defaultEmbeddings,
 	defaultVectorIndex,
 } from "./search-vectorize";
+import { runGeminiPepResearch } from "./gemini-research";
 import {
-	runGeminiAdverseMediaResearch,
-	runGeminiPepResearch,
-} from "./gemini-research";
-import {
-	completeAdverseMediaResearch,
 	completePepAiResearch,
 	failAdverseMediaResearch,
 	failPepAiResearch,
@@ -61,14 +57,13 @@ import {
 } from "./research-provider";
 import { logResearchShadowMetric } from "./research-shadow";
 import { broadcastPepEvent } from "./pep-events-broadcast";
+import type { WatchlistResearchJob } from "./research-queue";
 
 export type {
 	OfacTargetType,
 	Sat69bTargetType,
 	UnscTargetType,
 } from "./target-mappers";
-
-const ADVERSE_MEDIA_GEMINI_DEADLINE_MS = 60_000;
 
 export interface SearchParams {
 	env: Bindings;
@@ -1157,88 +1152,65 @@ export async function performSearch(
 						status: "pending",
 						result: null,
 					};
-					executionCtx.waitUntil(
-						(async () => {
-							const t0 = Date.now();
-							let adverseMediaDeadlineTimer:
-								| ReturnType<typeof setTimeout>
-								| undefined;
-							try {
-								void broadcastPepEvent(
-									env,
-									adverseMediaSearchId,
-									"adverse_media_progress",
-									{
-										phase: "searching",
-										message: "Searching adverse media...",
-										progress: 0.2,
-									},
-								);
-								const geminiResult = await Promise.race([
-									runGeminiAdverseMediaResearch(env, {
-										query,
-										entityType,
-										birthdate: birthDate,
-										country: countries?.[0],
-									}),
-									new Promise<never>((_, reject) => {
-										adverseMediaDeadlineTimer = setTimeout(
-											() =>
-												reject(
-													new Error(
-														"Adverse media Gemini research deadline exceeded",
-													),
-												),
-											ADVERSE_MEDIA_GEMINI_DEADLINE_MS,
-										);
-									}),
-								]);
-								if (adverseMediaDeadlineTimer) {
-									clearTimeout(adverseMediaDeadlineTimer);
-									adverseMediaDeadlineTimer = undefined;
-								}
-								await completeAdverseMediaResearch(env, {
-									searchId: adverseMediaSearchId,
-									query,
-									entityType,
-									risk_level: geminiResult.risk_level,
-									findings: geminiResult.findings,
-									sources: geminiResult.sources,
-									logPrefix: "[SearchCore/Gemini adverse]",
-								});
-								const shadowOn = await resolveResearchShadowEnabled(
-									env,
-									organizationId,
-								);
-								if (shadowOn && researchShadowSample(adverseMediaSearchId)) {
-									logResearchShadowMetric({
-										kind: "watchlist_research_shadow_sample",
-										search_id: adverseMediaSearchId,
-										organization_id: organizationId,
-										research_kind: "adverse_media",
-										provider: "gemini",
-										latency_ms: Date.now() - t0,
-										summary: {
-											risk_level: geminiResult.risk_level,
-											source_count: geminiResult.sources.length,
-										},
-									});
-								}
-							} catch (err) {
-								const msg = err instanceof Error ? err.message : String(err);
-								console.error("[SearchCore] Gemini adverse media failed:", err);
-								await failAdverseMediaResearch(env, {
-									searchId: adverseMediaSearchId,
-									error: msg,
-									logPrefix: "[SearchCore/Gemini adverse]",
-								});
-							} finally {
-								if (adverseMediaDeadlineTimer) {
-									clearTimeout(adverseMediaDeadlineTimer);
-								}
-							}
-						})(),
-					);
+					try {
+						const researchQueue = env.WATCHLIST_RESEARCH_QUEUE;
+						if (!researchQueue) {
+							throw new Error("WATCHLIST_RESEARCH_QUEUE is not configured");
+						}
+						const job: WatchlistResearchJob = {
+							kind: "gemini_adverse_media",
+							searchId: adverseMediaSearchId,
+							query,
+							entityType,
+							birthdate: birthDate,
+							country: countries?.[0],
+							organizationId,
+							environment,
+						};
+						await researchQueue.send(job);
+						console.log("[SearchCore] Enqueued Gemini adverse media research", {
+							searchId: adverseMediaSearchId,
+							entityType,
+							model: env.GEMINI_MODEL,
+							environment,
+						});
+						executionCtx.waitUntil(
+							broadcastPepEvent(
+								env,
+								adverseMediaSearchId,
+								"adverse_media_progress",
+								{
+									phase: "queued",
+									message: "Adverse media research queued...",
+									progress: 0.1,
+								},
+							).catch((err) =>
+								console.error(
+									"[SearchCore] Adverse media queued broadcast failed:",
+									err,
+								),
+							),
+						);
+					} catch (queueError) {
+						const msg =
+							queueError instanceof Error
+								? queueError.message
+								: String(queueError);
+						console.error(
+							"[SearchCore] Failed to enqueue Gemini adverse media research:",
+							queueError,
+						);
+						adverseMediaSearch = {
+							searchId: adverseMediaSearchId,
+							status: "failed",
+							result: { error: msg },
+						};
+						await failAdverseMediaResearch(env, {
+							searchId: adverseMediaSearchId,
+							error: msg,
+							logPrefix: "[SearchCore/Gemini adverse]",
+						});
+					}
 				} else if (env.THREAD_SVC) {
 					const baseUrl = getCallbackUrl(env.ENVIRONMENT);
 					const callbackUrl = baseUrl + "/internal/adverse-media";

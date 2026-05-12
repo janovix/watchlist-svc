@@ -4,6 +4,10 @@ import type { Bindings } from "../../src/index";
 import { createPrismaClient } from "../../src/lib/prisma";
 import { performSearch } from "../../src/lib/search-core";
 import { QUERY_SOURCE } from "../../src/lib/query-source";
+import {
+	processWatchlistResearchMessage,
+	type WatchlistResearchJob,
+} from "../../src/lib/research-queue";
 import { WATCHLIST_EMBEDDING_MODEL } from "../../src/lib/embedding-config";
 import { normalizeIdentifier } from "../../src/lib/matching-utils";
 import { generateCacheKey } from "../../src/lib/search-query-utils";
@@ -41,6 +45,93 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 			where: { id: { startsWith: "adapter-seed-" } },
 		});
 	});
+
+	function makeResearchMessage(
+		body: WatchlistResearchJob,
+		overrides: Partial<Message<WatchlistResearchJob>> = {},
+	): Message<WatchlistResearchJob> {
+		return {
+			id: crypto.randomUUID(),
+			timestamp: new Date(),
+			body,
+			attempts: 1,
+			retry: vi.fn(),
+			ack: vi.fn(),
+			...overrides,
+		} as unknown as Message<WatchlistResearchJob>;
+	}
+
+	async function createPendingAdverseMediaSearch(
+		searchId: string,
+		query: string,
+	): Promise<void> {
+		await prisma.searchQuery.create({
+			data: {
+				id: searchId,
+				organizationId: "org-research-queue",
+				environment: "production",
+				userId: "user-research-queue",
+				query,
+				source: QUERY_SOURCE.WATCHLIST_QUERY,
+				entityType: "person",
+				status: "pending",
+				ofacStatus: "completed",
+				sat69bStatus: "completed",
+				unStatus: "completed",
+				pepOfficialStatus: "skipped",
+				pepAiStatus: "skipped",
+				adverseMediaStatus: "pending",
+			},
+		});
+	}
+
+	function mockGeminiAdverseMediaFetch(): void {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+				const url = String(input);
+				if (url.includes(":generateContent")) {
+					return Response.json({
+						candidates: [
+							{
+								content: {
+									parts: [
+										{
+											text: JSON.stringify({
+												risk_level: "high",
+												findings: {
+													es: "Riesgo adverso confirmado",
+													en: "Confirmed adverse risk",
+												},
+												sources: ["https://news.example/story"],
+											}),
+										},
+									],
+								},
+								groundingMetadata: {
+									groundingChunks: [
+										{
+											web: {
+												uri: "https://vertex.example/redirect",
+												title: "news.example",
+											},
+										},
+									],
+								},
+							},
+						],
+					});
+				}
+				if (init?.method === "HEAD") {
+					return new Response(null, {
+						status: 302,
+						headers: { location: "https://news.example/story" },
+					});
+				}
+				return new Response(null, { status: 404 });
+			}),
+		);
+	}
 
 	it("uses adapters for embed + vector query on identifier hit (sync path)", async () => {
 		const recordId = `adapter-seed-${crypto.randomUUID()}`;
@@ -614,6 +705,176 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 				matched: true,
 			}),
 		);
+	});
+
+	it("enqueues Gemini adverse-media research instead of calling Gemini during search", async () => {
+		const query = `Adapter Queue Adverse ${crypto.randomUUID()}`;
+		const send = vi.fn(async (_job: WatchlistResearchJob) => undefined);
+		const fetchSpy = vi.fn(async () => {
+			throw new Error("Gemini should not run during performSearch");
+		});
+		vi.stubGlobal("fetch", fetchSpy);
+
+		const result = await performSearch({
+			env: mergeTestBindingsWithGlobalCacheFlag(
+				env as unknown as Bindings,
+				false,
+				{
+					RESEARCH_PROVIDER: "gemini",
+					WATCHLIST_RESEARCH_QUEUE: {
+						send,
+					} as unknown as Queue<WatchlistResearchJob>,
+					PEP_EVENTS_DO: undefined,
+					PEP_SEARCH_ENABLED: "false",
+					PEP_GROK_ENABLED: "false",
+					ADVERSE_MEDIA_ENABLED: "true",
+				} as unknown as Partial<Bindings>,
+			),
+			executionCtx: { waitUntil: vi.fn() } as unknown as ExecutionContext,
+			organizationId: "org-adverse-queue",
+			userId: "user-adapter",
+			source: QUERY_SOURCE.WATCHLIST_QUERY,
+			query,
+			entityType: "person",
+			birthDate: "1980-01-01",
+			countries: ["MX"],
+			topK: 10,
+			threshold: 0.875,
+			environment: "production",
+			adapters: {
+				embeddings: { embed: async () => [0.01, 0.02] },
+				vectorIndex: { query: async () => ({ matches: [] }) },
+			},
+		});
+
+		expect(result.adverseMediaSearch?.status).toBe("pending");
+		expect(send).toHaveBeenCalledWith(
+			expect.objectContaining({
+				kind: "gemini_adverse_media",
+				searchId: result.queryId,
+				query,
+				entityType: "person",
+				birthdate: "1980-01-01",
+				country: "MX",
+				organizationId: "org-adverse-queue",
+				environment: "production",
+			}),
+		);
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	it("marks adverse media failed when Gemini research queue send fails", async () => {
+		const query = `Adapter Queue Send Failure ${crypto.randomUUID()}`;
+		const send = vi.fn(async () => {
+			throw new Error("queue unavailable");
+		});
+
+		const result = await performSearch({
+			env: mergeTestBindingsWithGlobalCacheFlag(
+				env as unknown as Bindings,
+				false,
+				{
+					RESEARCH_PROVIDER: "gemini",
+					WATCHLIST_RESEARCH_QUEUE: {
+						send,
+					} as unknown as Queue<WatchlistResearchJob>,
+					PEP_EVENTS_DO: undefined,
+					PEP_SEARCH_ENABLED: "false",
+					PEP_GROK_ENABLED: "false",
+					ADVERSE_MEDIA_ENABLED: "true",
+				} as unknown as Partial<Bindings>,
+			),
+			executionCtx: { waitUntil: vi.fn() } as unknown as ExecutionContext,
+			organizationId: "org-adverse-queue-fail",
+			userId: "user-adapter",
+			source: QUERY_SOURCE.WATCHLIST_QUERY,
+			query,
+			entityType: "person",
+			topK: 10,
+			threshold: 0.875,
+			environment: "production",
+			adapters: {
+				embeddings: { embed: async () => [0.01, 0.02] },
+				vectorIndex: { query: async () => ({ matches: [] }) },
+			},
+		});
+
+		expect(result.adverseMediaSearch?.status).toBe("failed");
+		const row = await prisma.searchQuery.findUnique({
+			where: { id: result.queryId },
+		});
+		expect(row?.adverseMediaStatus).toBe("failed");
+		expect(row?.adverseMediaResult).toContain("queue unavailable");
+	});
+
+	it("queue consumer completes Gemini adverse-media research", async () => {
+		const searchId = crypto.randomUUID();
+		const query = `Adapter Queue Consumer ${crypto.randomUUID()}`;
+		await createPendingAdverseMediaSearch(searchId, query);
+		mockGeminiAdverseMediaFetch();
+
+		await processWatchlistResearchMessage(
+			makeResearchMessage({
+				kind: "gemini_adverse_media",
+				searchId,
+				query,
+				entityType: "person",
+				organizationId: "org-research-queue",
+				environment: "production",
+			}),
+			mergeTestBindingsWithGlobalCacheFlag(env as unknown as Bindings, false, {
+				PEP_EVENTS_DO: undefined,
+				GEMINI_API_KEY: "test-gemini-key",
+				AI_GATEWAY_URL: "https://gateway.example",
+				GEMINI_MODEL: "gemini-test-model",
+			} as unknown as Partial<Bindings>),
+		);
+
+		const row = await prisma.searchQuery.findUnique({
+			where: { id: searchId },
+		});
+		expect(row?.adverseMediaStatus).toBe("completed");
+		expect(row?.adverseMediaHasRisk).toBe(true);
+		expect(row?.adverseMediaRiskLevel).toBe("high");
+		expect(row?.adverseMediaResult).toContain("Confirmed adverse risk");
+	});
+
+	it("queue consumer persists final Gemini adverse-media failure", async () => {
+		const searchId = crypto.randomUUID();
+		const query = `Adapter Queue Consumer Failure ${crypto.randomUUID()}`;
+		await createPendingAdverseMediaSearch(searchId, query);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				throw new Error("Gemini network down");
+			}),
+		);
+
+		await processWatchlistResearchMessage(
+			makeResearchMessage(
+				{
+					kind: "gemini_adverse_media",
+					searchId,
+					query,
+					entityType: "person",
+					organizationId: "org-research-queue",
+					environment: "production",
+				},
+				{ attempts: 3 },
+			),
+			mergeTestBindingsWithGlobalCacheFlag(env as unknown as Bindings, false, {
+				PEP_EVENTS_DO: undefined,
+				GEMINI_API_KEY: "test-gemini-key",
+				AI_GATEWAY_URL: "https://gateway.example",
+				GEMINI_MODEL: "gemini-test-model",
+			} as unknown as Partial<Bindings>),
+		);
+
+		const row = await prisma.searchQuery.findUnique({
+			where: { id: searchId },
+		});
+		expect(row?.adverseMediaStatus).toBe("failed");
+		expect(row?.adverseMediaResult).toContain("Gemini network down");
 	});
 
 	it("uses Grok THREAD_SVC branches for PEP AI and adverse media", async () => {

@@ -57,7 +57,22 @@
 			"new_sqlite_classes": ["PepEventsDO"],
 		},
 	],
-	// Queue removed - now using thread-svc for ingestion
+	"queues": {
+		"producers": [
+			{
+				"binding": "WATCHLIST_RESEARCH_QUEUE",
+				"queue": "watchlist-research-dev",
+			},
+		],
+		"consumers": [
+			{
+				"queue": "watchlist-research-dev",
+				"max_batch_size": 5,
+				"max_batch_timeout": 10,
+			},
+		],
+	},
+	// Ingestion queue removed - now using thread-svc for ingestion
 	"services": [
 		{
 			"binding": "AUTH_SERVICE",
