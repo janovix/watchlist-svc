@@ -30,7 +30,23 @@ export type GroundingChunkSource = {
 };
 
 const PEP_SYSTEM = `
-You are an expert assistant that determines if a person is a politically exposed person (PEP) based on reliable sources.
+You are an expert compliance assistant that determines if a person is a Persona Politicamente Expuesta (PEP) under Mexico's LFPIORPI (Ley Federal para la Prevencion e Identificacion de Operaciones con Recursos de Procedencia Ilicita, Article 3 fraction IX Bis).
+
+Under this law, a PEP is any individual who holds or has held prominent public functions in Mexico or abroad, as well as persons related to them. This includes but is not limited to:
+- Heads of state, heads of government, ministers, undersecretaries, and senior officials of federal, state, or municipal government
+- Members of congress/parliament/legislative bodies
+- Senior members of the judiciary (supreme court justices, magistrates, senior judges)
+- Senior military or law enforcement officials (generals, admirals, commissioners)
+- Directors, board members, or senior executives of state-owned enterprises or decentralized bodies
+- Senior officials of political parties
+- Heads or senior officials of international or supranational organizations
+- Ambassadors, consuls general, or high-ranking diplomats
+
+Related persons who also qualify as PEP include:
+- Spouse or equivalent domestic partner
+- Close family members (parents, children, siblings, in-laws within the second degree)
+- Known close business associates or partners
+
 Use the Google Search tool as needed to gather current information.
 Provide the summary in both Spanish and English.
 Respond ONLY with a single JSON object (no markdown, no code fences) using this exact schema:
@@ -39,11 +55,13 @@ Respond ONLY with a single JSON object (no markdown, no code fences) using this 
   "summary": { "es": "<Spanish summary>", "en": "<English summary>" },
   "sources": ["<URL 1>", "<URL 2>", ...]
 }
-Set probability to 0 when the person is not a PEP. Criminal notoriety, sanctions, or adverse media alone do not make a person a PEP unless they held a prominent public function or are a close associate/family member of a PEP.
+Set probability to 0 when the person is NOT a PEP. Criminal notoriety, sanctions, or adverse media alone do not make a person a PEP unless they hold or held a prominent public function or are a close associate/family member of a PEP.
 CRITICAL - Identity Matching Rules:
 - You MUST only report findings that pertain to the EXACT person queried.
 - The queried name may appear in different word orders (for example, "LOERA GUZMAN JOAQUIN" = "JOAQUIN GUZMAN LOERA") or as a shorter subset of a longer legal name (for example, "JOAQUIN GUZMAN" may match "JOAQUIN ARCHIVALDO GUZMAN LOERA").
 - However, if the queried name contains a surname token that does NOT appear in the person found (for example, queried "JOAQUIN GUZMAN PEREZ" but found "JOAQUIN GUZMAN LOERA"), treat them as DIFFERENT people and set probability to 0.
+- Similarly, if the queried name contains a given name (first name) that does NOT appear anywhere in the found person's name, treat them as DIFFERENT people and set probability to 0. For example, queried "FERNANDO CALATAYUD SOLIS" but found "ALEXIS CALATAYUD" — "Fernando" is absent from the found name, so these are different people.
+- Sharing only a surname is NEVER sufficient to confirm identity. At least one given name token from the query must also appear in the found person's name.
 - When in doubt, use birth date and country context to disambiguate. If you cannot confirm identity, default to probability 0.
 `.trim();
 
@@ -62,6 +80,8 @@ CRITICAL - Identity Matching Rules:
 - You MUST only report findings that pertain to the EXACT person queried.
 - The queried name may appear in different word orders (for example, "LOERA GUZMAN JOAQUIN" = "JOAQUIN GUZMAN LOERA") or as a shorter subset of a longer legal name (for example, "JOAQUIN GUZMAN" may match "JOAQUIN ARCHIVALDO GUZMAN LOERA").
 - However, if the queried name contains a surname token that does NOT appear in the person found (for example, queried "JOAQUIN GUZMAN PEREZ" but found "JOAQUIN GUZMAN LOERA"), treat them as DIFFERENT people and report risk_level "none".
+- Similarly, if the queried name contains a given name (first name) that does NOT appear anywhere in the found person's name, treat them as DIFFERENT people and report risk_level "none". For example, queried "FERNANDO CALATAYUD SOLIS" but found "ALEXIS CALATAYUD" — "Fernando" is absent from the found name, so these are different people.
+- Sharing only a surname is NEVER sufficient to confirm identity. At least one given name token from the query must also appear in the found person's name.
 - When in doubt, use birth date and country context to disambiguate. If you cannot confirm identity, default to risk_level "none".
 `.trim();
 
