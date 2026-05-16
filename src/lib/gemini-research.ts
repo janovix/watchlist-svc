@@ -10,12 +10,57 @@ const REQUEST_TIMEOUT_MS = 90_000;
 const REDIRECT_RESOLVE_TIMEOUT_MS = 5_000;
 const MAX_CHUNKS_TO_RESOLVE = 10;
 
+export type PepType =
+	| "direct_current"
+	| "direct_former"
+	| "related_family"
+	| "associate"
+	| "advisory_or_distant"
+	| "none";
+
 /** Matches Grok PEP JSON contract (see thread-worker-container pep_grok handler). */
 export type PepGeminiResult = {
 	probability: number;
+	pep_type: PepType;
 	summary: { es: string; en: string };
 	sources: string[];
 };
+
+const PEP_TYPE_VALUES = new Set<string>([
+	"direct_current",
+	"direct_former",
+	"related_family",
+	"associate",
+	"advisory_or_distant",
+	"none",
+]);
+
+/** Hard caps per pep_type (defense-in-depth when the model ignores the rubric). */
+const PEP_TYPE_PROBABILITY_CAPS: Record<PepType, number> = {
+	direct_current: 1,
+	direct_former: 0.85,
+	related_family: 0.65,
+	associate: 0.55,
+	advisory_or_distant: 0.35,
+	none: 0,
+};
+
+export function parsePepType(raw: unknown): PepType {
+	const value = String(raw ?? "").trim();
+	if (PEP_TYPE_VALUES.has(value)) {
+		return value as PepType;
+	}
+	return "related_family";
+}
+
+export function clampPepProbability(
+	pepType: PepType,
+	probability: number,
+): number {
+	const cap = PEP_TYPE_PROBABILITY_CAPS[pepType];
+	if (pepType === "none") return 0;
+	return Math.min(cap, Math.max(0, probability));
+}
 
 /** Matches adverse_media_grok JSON contract. */
 export type AdverseMediaGeminiResult = {
@@ -52,17 +97,42 @@ Provide the summary in both Spanish and English.
 Respond ONLY with a single JSON object (no markdown, no code fences) using this exact schema:
 {
   "probability": <number between 0 and 1>,
+  "pep_type": "direct_current" | "direct_former" | "related_family" | "associate" | "advisory_or_distant" | "none",
   "summary": { "es": "<Spanish summary>", "en": "<English summary>" },
   "sources": ["<URL 1>", "<URL 2>", ...]
 }
-Set probability to 0 when the person is NOT a PEP. Criminal notoriety, sanctions, or adverse media alone do not make a person a PEP unless they hold or held a prominent public function or are a close associate/family member of a PEP.
+
+pep_type classification (choose exactly one):
+- "direct_current": the person themselves currently holds a prominent public function
+- "direct_former": the person themselves held a prominent public function that ended within the last 5 years
+- "related_family": first-degree relative (spouse, parent, child, sibling, in-law) of a current or recent PEP, but the person themselves does NOT hold public office
+- "associate": known close business associate or partner of a PEP, but not a family member
+- "advisory_or_distant": distant relative, honorary/advisory-only role (e.g. presidential business advisory council), or historic PEP whose office ended more than 10 years ago
+- "none": not a PEP under LFPIORPI Article 3 fraction IX Bis
+
+Probability calibration (probability reflects BOTH identity confidence AND strength of PEP designation):
+- 0.85-1.00 — direct_current: person themselves currently holds a prominent public function with strong documentary evidence
+- 0.65-0.85 — direct_former: person themselves held a prominent public function that ended within the last 5 years
+- 0.40-0.65 — related_family: first-degree relative of a current or recent PEP (HARD CAP 0.65 — never exceed)
+- 0.30-0.55 — associate: known close business associate or partner of a PEP
+- 0.15-0.35 — advisory_or_distant: distant relative, honorary/advisory-only role, or historic PEP whose office ended more than 10 years ago
+- 0.00 — none: not a PEP
+
+CRITICAL calibration rules:
+- Reserve probability >= 0.85 ONLY when the person themselves currently holds, or held within the last 5 years, a prominent public function with clear documentary evidence.
+- Family connection alone — no matter how senior the relative — must NOT exceed 0.65. Set pep_type to "related_family".
+- Criminal notoriety, sanctions, or adverse media alone do NOT make a person a PEP unless they hold or held a prominent public function or are a close associate/family member of a PEP.
+- probability must be consistent with pep_type (stay within the band for that type).
+
+Worked example: A Mexican business owner whose adult daughter is a federal senator is pep_type "related_family", probability around 0.55 (mid-range, cap 0.65). Do NOT score 1.0.
+
 CRITICAL - Identity Matching Rules:
 - You MUST only report findings that pertain to the EXACT person queried.
 - The queried name may appear in different word orders (for example, "LOERA GUZMAN JOAQUIN" = "JOAQUIN GUZMAN LOERA") or as a shorter subset of a longer legal name (for example, "JOAQUIN GUZMAN" may match "JOAQUIN ARCHIVALDO GUZMAN LOERA").
-- However, if the queried name contains a surname token that does NOT appear in the person found (for example, queried "JOAQUIN GUZMAN PEREZ" but found "JOAQUIN GUZMAN LOERA"), treat them as DIFFERENT people and set probability to 0.
-- Similarly, if the queried name contains a given name (first name) that does NOT appear anywhere in the found person's name, treat them as DIFFERENT people and set probability to 0. For example, queried "FERNANDO CALATAYUD SOLIS" but found "ALEXIS CALATAYUD" — "Fernando" is absent from the found name, so these are different people.
+- However, if the queried name contains a surname token that does NOT appear in the person found (for example, queried "JOAQUIN GUZMAN PEREZ" but found "JOAQUIN GUZMAN LOERA"), treat them as DIFFERENT people and set probability to 0 and pep_type to "none".
+- Similarly, if the queried name contains a given name (first name) that does NOT appear anywhere in the found person's name, treat them as DIFFERENT people and set probability to 0 and pep_type to "none". For example, queried "FERNANDO CALATAYUD SOLIS" but found "ALEXIS CALATAYUD" — "Fernando" is absent from the found name, so these are different people.
 - Sharing only a surname is NEVER sufficient to confirm identity. At least one given name token from the query must also appear in the found person's name.
-- When in doubt, use birth date and country context to disambiguate. If you cannot confirm identity, default to probability 0.
+- When in doubt, use birth date and country context to disambiguate. If you cannot confirm identity, default to probability 0 and pep_type "none".
 `.trim();
 
 const ADVERSE_SYSTEM_PERSON = `
@@ -343,6 +413,26 @@ export async function runGeminiPepResearch(
 	if (!Number.isFinite(probability)) probability = 0;
 	probability = Math.min(1, Math.max(0, probability));
 
+	const rawPepType = parsed.pep_type;
+	const pepTypeUnknown =
+		rawPepType == null ||
+		rawPepType === "" ||
+		!PEP_TYPE_VALUES.has(String(rawPepType).trim());
+	const pep_type = parsePepType(rawPepType);
+	if (pepTypeUnknown && probability > 0) {
+		console.warn(
+			`[GeminiResearch] PEP: missing or invalid pep_type "${String(rawPepType)}"; defaulting to related_family`,
+		);
+	}
+
+	const beforeClamp = probability;
+	probability = clampPepProbability(pep_type, probability);
+	if (probability !== beforeClamp) {
+		console.warn(
+			`[GeminiResearch] PEP: clamped probability ${beforeClamp} -> ${probability} for pep_type ${pep_type}`,
+		);
+	}
+
 	const summary = parsed.summary as Record<string, unknown> | undefined;
 	const es = typeof summary?.es === "string" ? summary.es : "";
 	const en = typeof summary?.en === "string" ? summary.en : "";
@@ -354,7 +444,7 @@ export async function runGeminiPepResearch(
 		probability = 0;
 	}
 
-	return { probability, summary: { es, en }, sources };
+	return { probability, pep_type, summary: { es, en }, sources };
 }
 
 export async function runGeminiAdverseMediaResearch(

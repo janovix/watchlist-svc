@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Bindings } from "../../src";
 import {
+	clampPepProbability,
 	extractGroundingChunks,
 	normalizeCitationUrl,
+	parsePepType,
 	runGeminiAdverseMediaResearch,
 	runGeminiPepResearch,
 } from "../../src/lib/gemini-research";
@@ -149,6 +151,7 @@ describe("gemini-research", () => {
 		const fetchMock = mockGeminiAndRedirectFetch(
 			JSON.stringify({
 				probability: 1.5,
+				pep_type: "direct_current",
 				summary: { es: "Si", en: "Yes" },
 				sources: ["https://news.example/a", "https://ungrounded.example/story"],
 			}),
@@ -162,6 +165,7 @@ describe("gemini-research", () => {
 		});
 
 		expect(result.probability).toBe(1);
+		expect(result.pep_type).toBe("direct_current");
 		expect(result.summary.en).toBe("Yes");
 		expect(result.sources).toEqual(["https://news.example/article"]);
 		expect(fetchMock).toHaveBeenCalledWith(
@@ -182,6 +186,124 @@ describe("gemini-research", () => {
 				},
 			}),
 		);
+	});
+
+	it("caps related-family PEP probability at 0.65 even when Gemini returns 1.0", async () => {
+		vi.stubGlobal(
+			"fetch",
+			mockGeminiAndRedirectFetch(
+				JSON.stringify({
+					probability: 1.0,
+					pep_type: "related_family",
+					summary: { es: "PEP por parentesco", en: "PEP by family tie" },
+					sources: ["https://news.example/a"],
+				}),
+			),
+		);
+
+		const result = await runGeminiPepResearch(geminiEnv(), {
+			query: "Ricardo Salinas Pliego",
+		});
+
+		expect(result.probability).toBe(0.65);
+		expect(result.pep_type).toBe("related_family");
+	});
+
+	it("passes through direct-current PEP probability of 1.0 unchanged", async () => {
+		vi.stubGlobal(
+			"fetch",
+			mockGeminiAndRedirectFetch(
+				JSON.stringify({
+					probability: 1.0,
+					pep_type: "direct_current",
+					summary: { es: "Presidenta", en: "President" },
+					sources: ["https://news.example/a"],
+				}),
+			),
+		);
+
+		const result = await runGeminiPepResearch(geminiEnv(), {
+			query: "Claudia Sheinbaum",
+		});
+
+		expect(result.probability).toBe(1);
+		expect(result.pep_type).toBe("direct_current");
+	});
+
+	it("caps associate and advisory_or_distant PEP probabilities", async () => {
+		const fetchMock = mockGeminiSequenceAndRedirectFetch([
+			geminiResponse(
+				JSON.stringify({
+					probability: 0.9,
+					pep_type: "associate",
+					summary: { es: "Asociado", en: "Associate" },
+					sources: ["https://news.example/a"],
+				}),
+			),
+			geminiResponse(
+				JSON.stringify({
+					probability: 0.8,
+					pep_type: "advisory_or_distant",
+					summary: { es: "Asesor", en: "Advisor" },
+					sources: ["https://news.example/a"],
+				}),
+			),
+		]);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const associate = await runGeminiPepResearch(geminiEnv(), {
+			query: "Business Associate",
+		});
+		const advisory = await runGeminiPepResearch(geminiEnv(), {
+			query: "Advisory Council Member",
+		});
+
+		expect(associate.probability).toBe(0.55);
+		expect(associate.pep_type).toBe("associate");
+		expect(advisory.probability).toBe(0.35);
+		expect(advisory.pep_type).toBe("advisory_or_distant");
+	});
+
+	it("defaults to related_family cap when pep_type is missing or invalid", async () => {
+		const fetchMock = mockGeminiSequenceAndRedirectFetch([
+			geminiResponse(
+				JSON.stringify({
+					probability: 0.9,
+					summary: { es: "Sin tipo", en: "No type" },
+					sources: ["https://news.example/a"],
+				}),
+			),
+			geminiResponse(
+				JSON.stringify({
+					probability: 0.9,
+					pep_type: "invalid_type",
+					summary: { es: "Tipo invalido", en: "Invalid type" },
+					sources: ["https://news.example/a"],
+				}),
+			),
+		]);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const missing = await runGeminiPepResearch(geminiEnv(), {
+			query: "Missing Pep Type",
+		});
+		const invalid = await runGeminiPepResearch(geminiEnv(), {
+			query: "Invalid Pep Type",
+		});
+
+		expect(missing.probability).toBe(0.65);
+		expect(missing.pep_type).toBe("related_family");
+		expect(invalid.probability).toBe(0.65);
+		expect(invalid.pep_type).toBe("related_family");
+	});
+
+	it("clampPepProbability and parsePepType enforce rubric caps", () => {
+		expect(parsePepType("related_family")).toBe("related_family");
+		expect(parsePepType(undefined)).toBe("related_family");
+		expect(parsePepType("bogus")).toBe("related_family");
+		expect(clampPepProbability("related_family", 1)).toBe(0.65);
+		expect(clampPepProbability("direct_current", 1)).toBe(1);
+		expect(clampPepProbability("none", 0.5)).toBe(0);
 	});
 
 	it("forces PEP probability to zero when positive result has no grounding chunks", async () => {
@@ -286,6 +408,7 @@ describe("gemini-research", () => {
 			geminiResponse(
 				JSON.stringify({
 					probability: 0.4,
+					pep_type: "related_family",
 					summary: { es: "Tal vez", en: "Maybe" },
 					sources: ["https://news.example/a"],
 				}),
@@ -357,6 +480,7 @@ describe("gemini-research", () => {
 			mockGeminiAndRedirectFetch(`\`\`\`json
 {
   "probability": 0.2,
+  "pep_type": "advisory_or_distant",
   "summary": { "es": "Bajo", "en": "Low" },
   "sources": ["https://news.example/a"]
 }
@@ -368,6 +492,7 @@ describe("gemini-research", () => {
 		});
 
 		expect(result.probability).toBe(0.2);
+		expect(result.pep_type).toBe("advisory_or_distant");
 		expect(result.summary.en).toBe("Low");
 	});
 });
