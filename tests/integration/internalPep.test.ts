@@ -1,5 +1,8 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it, beforeEach } from "vitest";
+import type { Bindings } from "../../src/index";
+import { isGlobalCacheEnabled } from "../../src/lib/watchlist-cache";
+import { clearPepCache, localSelfUrl } from "./_helpers";
 
 /**
  * Internal PEP Endpoint Tests
@@ -14,18 +17,7 @@ import { describe, expect, it, beforeEach } from "vitest";
  */
 describe("Internal PEP Endpoints", () => {
 	beforeEach(async () => {
-		// Clear KV cache if exists
-		const pepCache = (env as { PEP_CACHE?: KVNamespace }).PEP_CACHE;
-		if (pepCache) {
-			try {
-				const keys = await pepCache.list();
-				for (const key of keys.keys) {
-					await pepCache.delete(key.name);
-				}
-			} catch {
-				// Ignore if KV not configured
-			}
-		}
+		await clearPepCache(env);
 	});
 
 	// =========================================================================
@@ -84,14 +76,11 @@ describe("Internal PEP Endpoints", () => {
 				],
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/pep/results",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/pep/results"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
 
 			expect(response.status).toBe(200);
 			const body = (await response.json()) as {
@@ -122,14 +111,11 @@ describe("Internal PEP Endpoints", () => {
 				results,
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/pep/results",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/pep/results"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
 
 			expect(response.status).toBe(200);
 			const body = (await response.json()) as { success: boolean };
@@ -151,109 +137,37 @@ describe("Internal PEP Endpoints", () => {
 				],
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/pep/results",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/pep/results"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
 
 			expect(response.status).toBe(200);
 			const body = (await response.json()) as { success: boolean };
 			expect(body.success).toBe(true);
 		});
 
-		it("should cache results when PEP_CACHE_ENABLED is true", async () => {
-			// Skip if KV not configured
-			const pepCache = (env as { PEP_CACHE?: KVNamespace }).PEP_CACHE;
-			if (!pepCache) {
-				return;
-			}
+		it("isGlobalCacheEnabled uses CACHE_ENABLED when FLAGS_SERVICE is absent", async () => {
+			const merged = {
+				...(env as unknown as Bindings),
+				CACHE_ENABLED: "true",
+			} as unknown as Bindings;
+			delete (merged as { FLAGS_SERVICE?: Bindings["FLAGS_SERVICE"] })
+				.FLAGS_SERVICE;
 
-			// Enable cache temporarily
-			const envWithCache = env as {
-				PEP_CACHE_ENABLED?: string;
-			};
-			const originalCacheEnabled = envWithCache.PEP_CACHE_ENABLED;
-			envWithCache.PEP_CACHE_ENABLED = "true";
-
-			try {
-				const payload = {
-					search_id: "pep_cache_test",
-					query: "Test Cache Query",
-					total_results: 1,
-					total_pages: 1,
-					results_sent: 1,
-					results: [
-						{
-							id: "cache-test-1",
-							nombre: "Test Person",
-							entidadfederativa: "Test State",
-						},
-					],
-				};
-
-				const response = await SELF.fetch(
-					"http://local.test/internal/pep/results",
-					{
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify(payload),
-					},
-				);
-
-				expect(response.status).toBe(200);
-				const body = (await response.json()) as { cached: boolean };
-				expect(body.cached).toBe(true);
-			} finally {
-				// Restore original setting
-				if (originalCacheEnabled !== undefined) {
-					envWithCache.PEP_CACHE_ENABLED = originalCacheEnabled;
-				}
-			}
+			await expect(isGlobalCacheEnabled(merged, {})).resolves.toBe(true);
 		});
 
-		it("should not cache when PEP_CACHE_ENABLED is false", async () => {
-			const envWithCache = env as {
-				PEP_CACHE_ENABLED?: string;
-			};
-			const originalCacheEnabled = envWithCache.PEP_CACHE_ENABLED;
-			envWithCache.PEP_CACHE_ENABLED = "false";
+		it("isGlobalCacheEnabled returns false for CACHE_ENABLED=false when FLAGS_SERVICE is absent", async () => {
+			const merged = {
+				...(env as unknown as Bindings),
+				CACHE_ENABLED: "false",
+			} as unknown as Bindings;
+			delete (merged as { FLAGS_SERVICE?: Bindings["FLAGS_SERVICE"] })
+				.FLAGS_SERVICE;
 
-			try {
-				const payload = {
-					search_id: "pep_no_cache",
-					query: "No Cache Query",
-					total_results: 1,
-					total_pages: 1,
-					results_sent: 1,
-					results: [
-						{
-							id: "no-cache-1",
-							nombre: "Test Person",
-						},
-					],
-				};
-
-				const response = await SELF.fetch(
-					"http://local.test/internal/pep/results",
-					{
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify(payload),
-					},
-				);
-
-				expect(response.status).toBe(200);
-				const body = (await response.json()) as { cached: boolean };
-				expect(body.cached).toBe(false);
-			} finally {
-				if (originalCacheEnabled !== undefined) {
-					envWithCache.PEP_CACHE_ENABLED = originalCacheEnabled;
-				}
-			}
+			await expect(isGlobalCacheEnabled(merged, {})).resolves.toBe(false);
 		});
 
 		it("should accept empty results", async () => {
@@ -266,14 +180,11 @@ describe("Internal PEP Endpoints", () => {
 				results: [],
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/pep/results",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/pep/results"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
 
 			expect(response.status).toBe(200);
 			const body = (await response.json()) as { success: boolean };
@@ -323,14 +234,11 @@ describe("Internal PEP Endpoints", () => {
 				],
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/pep/results",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/pep/results"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
 
 			expect(response.status).toBe(200);
 			const body = (await response.json()) as { success: boolean };
@@ -348,14 +256,11 @@ describe("Internal PEP Endpoints", () => {
 				error: "API timeout after 3 retries",
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/pep/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/pep/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
 
 			expect(response.status).toBe(200);
 			const body = (await response.json()) as { success: boolean };
@@ -367,14 +272,11 @@ describe("Internal PEP Endpoints", () => {
 				error: "Some error",
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/pep/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/pep/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
 
 			// Should accept but log warning
 			expect(response.status).toBeLessThanOrEqual(500);
@@ -387,14 +289,11 @@ describe("Internal PEP Endpoints", () => {
 				error: longError,
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/pep/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/pep/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
 
 			expect(response.status).toBe(200);
 			const body = (await response.json()) as { success: boolean };
@@ -407,14 +306,11 @@ describe("Internal PEP Endpoints", () => {
 				error: "Error: <script>alert('xss')</script> & special chars: é, ñ, ü",
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/pep/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(payload),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/pep/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(payload),
+			});
 
 			expect(response.status).toBe(200);
 			const body = (await response.json()) as { success: boolean };

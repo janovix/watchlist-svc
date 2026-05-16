@@ -1,0 +1,506 @@
+/**
+ * Gemini 2.5 Flash + Google Search grounding for PEP / adverse-media research.
+ * Calls Google AI Studio via Cloudflare AI Gateway (see docs/GEMINI_AI_GATEWAY.md).
+ */
+
+import type { Bindings } from "../index";
+
+const DEFAULT_MODEL = "gemini-2.5-flash";
+const REQUEST_TIMEOUT_MS = 90_000;
+const REDIRECT_RESOLVE_TIMEOUT_MS = 5_000;
+const MAX_CHUNKS_TO_RESOLVE = 10;
+
+export type PepType =
+	| "direct_current"
+	| "direct_former"
+	| "related_family"
+	| "associate"
+	| "advisory_or_distant"
+	| "none";
+
+/** Matches Grok PEP JSON contract (see thread-worker-container pep_grok handler). */
+export type PepGeminiResult = {
+	probability: number;
+	pep_type: PepType;
+	summary: { es: string; en: string };
+	sources: string[];
+};
+
+const PEP_TYPE_VALUES = new Set<string>([
+	"direct_current",
+	"direct_former",
+	"related_family",
+	"associate",
+	"advisory_or_distant",
+	"none",
+]);
+
+/** Hard caps per pep_type (defense-in-depth when the model ignores the rubric). */
+const PEP_TYPE_PROBABILITY_CAPS: Record<PepType, number> = {
+	direct_current: 1,
+	direct_former: 0.85,
+	related_family: 0.65,
+	associate: 0.55,
+	advisory_or_distant: 0.35,
+	none: 0,
+};
+
+export function parsePepType(raw: unknown): PepType {
+	const value = String(raw ?? "").trim();
+	if (PEP_TYPE_VALUES.has(value)) {
+		return value as PepType;
+	}
+	return "related_family";
+}
+
+export function clampPepProbability(
+	pepType: PepType,
+	probability: number,
+): number {
+	const cap = PEP_TYPE_PROBABILITY_CAPS[pepType];
+	if (pepType === "none") return 0;
+	return Math.min(cap, Math.max(0, probability));
+}
+
+/** Matches adverse_media_grok JSON contract. */
+export type AdverseMediaGeminiResult = {
+	risk_level: "none" | "low" | "medium" | "high";
+	findings: { es: string; en: string };
+	sources: string[];
+};
+
+export type GroundingChunkSource = {
+	uri: string;
+	title: string;
+};
+
+const PEP_SYSTEM = `
+You are an expert compliance assistant that determines if a person is a Persona Politicamente Expuesta (PEP) under Mexico's LFPIORPI (Ley Federal para la Prevencion e Identificacion de Operaciones con Recursos de Procedencia Ilicita, Article 3 fraction IX Bis).
+
+Under this law, a PEP is any individual who holds or has held prominent public functions in Mexico or abroad, as well as persons related to them. This includes but is not limited to:
+- Heads of state, heads of government, ministers, undersecretaries, and senior officials of federal, state, or municipal government
+- Members of congress/parliament/legislative bodies
+- Senior members of the judiciary (supreme court justices, magistrates, senior judges)
+- Senior military or law enforcement officials (generals, admirals, commissioners)
+- Directors, board members, or senior executives of state-owned enterprises or decentralized bodies
+- Senior officials of political parties
+- Heads or senior officials of international or supranational organizations
+- Ambassadors, consuls general, or high-ranking diplomats
+
+Related persons who also qualify as PEP include:
+- Spouse or equivalent domestic partner
+- Close family members (parents, children, siblings, in-laws within the second degree)
+- Known close business associates or partners
+
+Use the Google Search tool as needed to gather current information.
+Provide the summary in both Spanish and English.
+Respond ONLY with a single JSON object (no markdown, no code fences) using this exact schema:
+{
+  "probability": <number between 0 and 1>,
+  "pep_type": "direct_current" | "direct_former" | "related_family" | "associate" | "advisory_or_distant" | "none",
+  "summary": { "es": "<Spanish summary>", "en": "<English summary>" },
+  "sources": ["<URL 1>", "<URL 2>", ...]
+}
+
+pep_type classification (choose exactly one):
+- "direct_current": the person themselves currently holds a prominent public function
+- "direct_former": the person themselves held a prominent public function that ended within the last 5 years
+- "related_family": first-degree relative (spouse, parent, child, sibling, in-law) of a current or recent PEP, but the person themselves does NOT hold public office
+- "associate": known close business associate or partner of a PEP, but not a family member
+- "advisory_or_distant": distant relative, honorary/advisory-only role (e.g. presidential business advisory council), or historic PEP whose office ended more than 10 years ago
+- "none": not a PEP under LFPIORPI Article 3 fraction IX Bis
+
+Probability calibration (probability reflects BOTH identity confidence AND strength of PEP designation):
+- 0.85-1.00 — direct_current: person themselves currently holds a prominent public function with strong documentary evidence
+- 0.65-0.85 — direct_former: person themselves held a prominent public function that ended within the last 5 years
+- 0.40-0.65 — related_family: first-degree relative of a current or recent PEP (HARD CAP 0.65 — never exceed)
+- 0.30-0.55 — associate: known close business associate or partner of a PEP
+- 0.15-0.35 — advisory_or_distant: distant relative, honorary/advisory-only role, or historic PEP whose office ended more than 10 years ago
+- 0.00 — none: not a PEP
+
+CRITICAL calibration rules:
+- Reserve probability >= 0.85 ONLY when the person themselves currently holds, or held within the last 5 years, a prominent public function with clear documentary evidence.
+- Family connection alone — no matter how senior the relative — must NOT exceed 0.65. Set pep_type to "related_family".
+- Criminal notoriety, sanctions, or adverse media alone do NOT make a person a PEP unless they hold or held a prominent public function or are a close associate/family member of a PEP.
+- probability must be consistent with pep_type (stay within the band for that type).
+
+Worked example: A Mexican business owner whose adult daughter is a federal senator is pep_type "related_family", probability around 0.55 (mid-range, cap 0.65). Do NOT score 1.0.
+
+CRITICAL - Identity Matching Rules:
+- You MUST only report findings that pertain to the EXACT person queried.
+- The queried name may appear in different word orders (for example, "LOERA GUZMAN JOAQUIN" = "JOAQUIN GUZMAN LOERA") or as a shorter subset of a longer legal name (for example, "JOAQUIN GUZMAN" may match "JOAQUIN ARCHIVALDO GUZMAN LOERA").
+- However, if the queried name contains a surname token that does NOT appear in the person found (for example, queried "JOAQUIN GUZMAN PEREZ" but found "JOAQUIN GUZMAN LOERA"), treat them as DIFFERENT people and set probability to 0 and pep_type to "none".
+- Similarly, if the queried name contains a given name (first name) that does NOT appear anywhere in the found person's name, treat them as DIFFERENT people and set probability to 0 and pep_type to "none". For example, queried "FERNANDO CALATAYUD SOLIS" but found "ALEXIS CALATAYUD" — "Fernando" is absent from the found name, so these are different people.
+- Sharing only a surname is NEVER sufficient to confirm identity. At least one given name token from the query must also appear in the found person's name.
+- When in doubt, use birth date and country context to disambiguate. If you cannot confirm identity, default to probability 0 and pep_type "none".
+`.trim();
+
+const ADVERSE_SYSTEM_PERSON = `
+You are an expert assistant that searches for adverse media about individuals. This includes negative news, sanctions, legal proceedings, fraud allegations, corruption, money laundering, regulatory violations, and other reputational risks.
+Use the Google Search tool to gather current information.
+Provide the findings in both Spanish and English.
+Respond ONLY with a single JSON object (no markdown, no code fences) using this exact schema:
+{
+  "risk_level": "none" | "low" | "medium" | "high",
+  "findings": { "es": "<Spanish findings>", "en": "<English findings>" },
+  "sources": ["<URL 1>", "<URL 2>", ...]
+}
+Use "none" only when you find no credible adverse media. Use "high" for confirmed serious criminal convictions, sanctions, money laundering, corruption, fraud, terrorism, drug trafficking, or major regulatory/legal actions.
+CRITICAL - Identity Matching Rules:
+- You MUST only report findings that pertain to the EXACT person queried.
+- The queried name may appear in different word orders (for example, "LOERA GUZMAN JOAQUIN" = "JOAQUIN GUZMAN LOERA") or as a shorter subset of a longer legal name (for example, "JOAQUIN GUZMAN" may match "JOAQUIN ARCHIVALDO GUZMAN LOERA").
+- However, if the queried name contains a surname token that does NOT appear in the person found (for example, queried "JOAQUIN GUZMAN PEREZ" but found "JOAQUIN GUZMAN LOERA"), treat them as DIFFERENT people and report risk_level "none".
+- Similarly, if the queried name contains a given name (first name) that does NOT appear anywhere in the found person's name, treat them as DIFFERENT people and report risk_level "none". For example, queried "FERNANDO CALATAYUD SOLIS" but found "ALEXIS CALATAYUD" — "Fernando" is absent from the found name, so these are different people.
+- Sharing only a surname is NEVER sufficient to confirm identity. At least one given name token from the query must also appear in the found person's name.
+- When in doubt, use birth date and country context to disambiguate. If you cannot confirm identity, default to risk_level "none".
+`.trim();
+
+const ADVERSE_SYSTEM_ORG = `
+You are an expert assistant that searches for adverse media about organizations, companies, and trusts. This includes sanctions, regulatory actions, fraud allegations, corruption, money laundering, legal proceedings, tax evasion, environmental violations, and other reputational risks.
+Use the Google Search tool to gather current information.
+Provide the findings in both Spanish and English.
+Respond ONLY with a single JSON object (no markdown, no code fences) using this exact schema:
+{
+  "risk_level": "none" | "low" | "medium" | "high",
+  "findings": { "es": "<Spanish findings>", "en": "<English findings>" },
+  "sources": ["<URL 1>", "<URL 2>", ...]
+}
+Use "none" only when you find no credible adverse media. Use "high" for confirmed sanctions, major regulatory actions, serious criminal allegations or convictions, money laundering, corruption, fraud, terrorism, tax evasion, or other severe legal proceedings.
+`.trim();
+
+export function normalizeCitationUrl(raw: string): string {
+	try {
+		const u = new URL(raw.trim());
+		u.hash = "";
+		let path = u.pathname;
+		if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+		u.pathname = path;
+		return u.href.toLowerCase();
+	} catch {
+		return raw.trim().toLowerCase();
+	}
+}
+
+export function extractGroundingChunks(
+	candidate: Record<string, unknown>,
+): GroundingChunkSource[] {
+	const chunksOut: GroundingChunkSource[] = [];
+	const seen = new Set<string>();
+	const gm = candidate.groundingMetadata as Record<string, unknown> | undefined;
+	const chunks = gm?.groundingChunks as unknown[] | undefined;
+	if (!Array.isArray(chunks)) return chunksOut;
+	for (const ch of chunks) {
+		const web = (ch as Record<string, unknown>)?.web as
+			| Record<string, unknown>
+			| undefined;
+		const uri = web?.uri;
+		if (typeof uri === "string" && uri.length > 0) {
+			const normalized = normalizeCitationUrl(uri);
+			if (!seen.has(normalized)) {
+				seen.add(normalized);
+				const title = web?.title;
+				chunksOut.push({
+					uri,
+					title: typeof title === "string" ? title : "",
+				});
+			}
+		}
+	}
+	return chunksOut;
+}
+
+export async function resolveCanonicalUrl(
+	redirectUrl: string,
+	title: string,
+): Promise<string> {
+	const controller = new AbortController();
+	const timer = setTimeout(
+		() => controller.abort(),
+		REDIRECT_RESOLVE_TIMEOUT_MS,
+	);
+	try {
+		const res = await fetch(redirectUrl, {
+			method: "HEAD",
+			redirect: "manual",
+			signal: controller.signal,
+		});
+		const location = res.headers.get("location");
+		if (location) return location;
+		if (res.url && res.url !== redirectUrl) return res.url;
+	} catch {
+		// Fall back below; unresolved redirects should not fail screening.
+	} finally {
+		clearTimeout(timer);
+	}
+
+	const trimmedTitle = title.trim();
+	if (trimmedTitle) return `https://${trimmedTitle}`;
+	return redirectUrl;
+}
+
+export async function resolveGroundingSources(
+	chunks: GroundingChunkSource[],
+): Promise<string[]> {
+	const limitedChunks = chunks.slice(0, MAX_CHUNKS_TO_RESOLVE);
+	const resolved = await Promise.all(
+		limitedChunks.map((chunk) => resolveCanonicalUrl(chunk.uri, chunk.title)),
+	);
+	const seen = new Set<string>();
+	const sources: string[] = [];
+	for (const url of resolved) {
+		const normalized = normalizeCitationUrl(url);
+		if (!seen.has(normalized)) {
+			seen.add(normalized);
+			sources.push(url);
+		}
+	}
+	return sources;
+}
+
+function parseJsonObject(text: string): Record<string, unknown> {
+	const trimmed = text.trim();
+	try {
+		return JSON.parse(trimmed) as Record<string, unknown>;
+	} catch {
+		const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+		if (fence?.[1]) {
+			return JSON.parse(fence[1].trim()) as Record<string, unknown>;
+		}
+		throw new Error("Gemini returned non-JSON text");
+	}
+}
+
+function geminiGenerateUrl(env: Bindings): string {
+	const base = (env.AI_GATEWAY_URL ?? "").replace(/\/$/, "");
+	const model = env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+	return `${base}/google-ai-studio/v1beta/models/${model}:generateContent`;
+}
+
+const SAFETY_SETTINGS = [
+	{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+	{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+	{ category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+	{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+];
+
+async function postGemini(
+	env: Bindings,
+	body: Record<string, unknown>,
+): Promise<Response> {
+	const key = env.GEMINI_API_KEY;
+	if (!key || key.trim() === "") {
+		throw new Error("GEMINI_API_KEY is not configured");
+	}
+	const url = geminiGenerateUrl(env);
+	if (!env.AI_GATEWAY_URL || env.AI_GATEWAY_URL.trim() === "") {
+		throw new Error("AI_GATEWAY_URL is not configured");
+	}
+
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+	const headers: Record<string, string> = {
+		"Content-Type": "application/json",
+		"x-goog-api-key": key,
+	};
+	const gatewayToken = env.AI_GATEWAY_TOKEN?.trim();
+	if (gatewayToken) {
+		headers["cf-aig-authorization"] = `Bearer ${gatewayToken}`;
+	}
+	try {
+		return await fetch(url, {
+			method: "POST",
+			headers,
+			body: JSON.stringify(body),
+			signal: controller.signal,
+		});
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function generateStructured(
+	env: Bindings,
+	systemInstruction: string,
+	userText: string,
+): Promise<{
+	parsed: Record<string, unknown>;
+	groundingChunks: GroundingChunkSource[];
+}> {
+	const body = {
+		systemInstruction: {
+			parts: [{ text: systemInstruction }],
+		},
+		contents: [
+			{
+				role: "user",
+				parts: [{ text: userText }],
+			},
+		],
+		tools: [{ google_search: {} }],
+		generationConfig: {
+			temperature: 0.2,
+			thinkingConfig: { thinkingBudget: 0 },
+		},
+		safetySettings: SAFETY_SETTINGS,
+	};
+
+	let res = await postGemini(env, body);
+	if (res.status === 429 || res.status >= 500) {
+		await new Promise((r) => setTimeout(r, 2000));
+		res = await postGemini(env, body);
+	}
+	if (!res.ok) {
+		const errText = await res.text().catch(() => "");
+		throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 500)}`);
+	}
+
+	const json = (await res.json()) as Record<string, unknown>;
+	const candidates = json.candidates as unknown[] | undefined;
+	const first = candidates?.[0] as Record<string, unknown> | undefined;
+	if (!first) {
+		throw new Error("Gemini returned no candidates");
+	}
+
+	const content = first.content as Record<string, unknown> | undefined;
+	const parts = content?.parts as unknown[] | undefined;
+	const textPart = parts?.[0] as Record<string, unknown> | undefined;
+	const text = textPart?.text;
+	if (typeof text !== "string") {
+		throw new Error("Gemini candidate missing text part");
+	}
+
+	const groundingChunks = extractGroundingChunks(first);
+	const parsed = parseJsonObject(text);
+	return { parsed, groundingChunks };
+}
+
+/**
+ * Single retry on transient errors is applied inside {@link generateStructured}.
+ */
+export async function runGeminiPepResearch(
+	env: Bindings,
+	params: {
+		query: string;
+		birthdate?: string;
+		country?: string;
+	},
+): Promise<PepGeminiResult> {
+	const userParts = [
+		`Task: Determine whether ${params.query} is a politically exposed person (PEP).`,
+		`Use search to verify against official and reputable news sources.`,
+		`Answer in JSON only.`,
+	];
+	if (params.birthdate) {
+		userParts.push(
+			`Birth date context (if relevant for disambiguation): ${params.birthdate}.`,
+		);
+	}
+	if (params.country) {
+		userParts.push(`Country / nationality context: ${params.country}.`);
+	}
+	userParts.push(
+		`Provide both Spanish and English summaries. Cite only URLs you actually retrieved via search.`,
+	);
+	const userText = userParts.join("\n");
+
+	const { parsed, groundingChunks } = await generateStructured(
+		env,
+		PEP_SYSTEM,
+		userText,
+	);
+
+	let probability = Number(parsed.probability);
+	if (!Number.isFinite(probability)) probability = 0;
+	probability = Math.min(1, Math.max(0, probability));
+
+	const rawPepType = parsed.pep_type;
+	const pepTypeUnknown =
+		rawPepType == null ||
+		rawPepType === "" ||
+		!PEP_TYPE_VALUES.has(String(rawPepType).trim());
+	const pep_type = parsePepType(rawPepType);
+	if (pepTypeUnknown && probability > 0) {
+		console.warn(
+			`[GeminiResearch] PEP: missing or invalid pep_type "${String(rawPepType)}"; defaulting to related_family`,
+		);
+	}
+
+	const beforeClamp = probability;
+	probability = clampPepProbability(pep_type, probability);
+	if (probability !== beforeClamp) {
+		console.warn(
+			`[GeminiResearch] PEP: clamped probability ${beforeClamp} -> ${probability} for pep_type ${pep_type}`,
+		);
+	}
+
+	const summary = parsed.summary as Record<string, unknown> | undefined;
+	const es = typeof summary?.es === "string" ? summary.es : "";
+	const en = typeof summary?.en === "string" ? summary.en : "";
+	const sources = await resolveGroundingSources(groundingChunks);
+	if (groundingChunks.length === 0 && probability > 0) {
+		console.warn(
+			"[GeminiResearch] PEP: no grounding chunks returned; forcing probability to 0",
+		);
+		probability = 0;
+	}
+
+	return { probability, pep_type, summary: { es, en }, sources };
+}
+
+export async function runGeminiAdverseMediaResearch(
+	env: Bindings,
+	params: {
+		query: string;
+		entityType: string;
+		birthdate?: string;
+		country?: string;
+	},
+): Promise<AdverseMediaGeminiResult> {
+	const isOrg = params.entityType === "organization";
+	const system = isOrg ? ADVERSE_SYSTEM_ORG : ADVERSE_SYSTEM_PERSON;
+
+	const userParts: string[] = [];
+	if (isOrg) {
+		userParts.push(
+			`Search for adverse media, sanctions, regulatory actions, fraud, or legal proceedings involving the organization ${params.query}.`,
+		);
+	} else {
+		userParts.push(
+			`Search for adverse media, negative news, sanctions, or regulatory violations involving ${params.query}.`,
+		);
+	}
+	if (params.birthdate && !isOrg) {
+		userParts.push(`Birth date context: ${params.birthdate}.`);
+	}
+	if (params.country) {
+		userParts.push(`Country context: ${params.country}.`);
+	}
+	userParts.push(
+		`Use Spanish and English in findings. Cite only URLs you actually retrieved via search.`,
+	);
+
+	const { parsed, groundingChunks } = await generateStructured(
+		env,
+		system,
+		userParts.join("\n"),
+	);
+
+	const rlRaw = parsed.risk_level;
+	const allowedRl = new Set(["none", "low", "medium", "high"]);
+	let risk_level = allowedRl.has(String(rlRaw))
+		? (String(rlRaw) as AdverseMediaGeminiResult["risk_level"])
+		: "none";
+
+	const findings = parsed.findings as Record<string, unknown> | undefined;
+	const es = typeof findings?.es === "string" ? findings.es : "";
+	const en = typeof findings?.en === "string" ? findings.en : "";
+	const sources = await resolveGroundingSources(groundingChunks);
+	if (groundingChunks.length === 0 && risk_level !== "none") {
+		console.warn(
+			"[GeminiResearch] Adverse media: no grounding chunks returned; forcing risk_level to none",
+		);
+		risk_level = "none";
+	}
+
+	return { risk_level, findings: { es, en }, sources };
+}

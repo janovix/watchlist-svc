@@ -1,3 +1,4 @@
+// TODO(janovix): currently only referenced by integration tests — kept warm pending product decision
 /**
  * Subscription middleware for checking usage limits and feature access
  */

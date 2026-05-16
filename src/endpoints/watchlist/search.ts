@@ -2,90 +2,13 @@ import { OpenAPIRoute, ApiException } from "chanfana";
 import { AppContext } from "../../types";
 import { contentJson } from "chanfana";
 import { z } from "zod";
-import { ofacMatch } from "./searchOfac";
-import { unscMatch } from "./searchUnsc";
-import { sat69bMatch } from "./searchSat69b";
 import {
 	buildGateDenialBody,
 	createUsageRightsClient,
 } from "../../lib/usage-rights-client";
 import { performSearch } from "../../lib/search-core";
 import { QUERY_SOURCE } from "../../lib/query-source";
-
-// Tipos para los targets
-type _OfacTargetType = {
-	id: string;
-	partyType: string;
-	primaryName: string;
-	aliases: string[] | null;
-	birthDate: string | null;
-	birthPlace: string | null;
-	addresses: string[] | null;
-	identifiers: Array<{
-		type?: string;
-		number?: string;
-		country?: string;
-		issueDate?: string;
-		expirationDate?: string;
-	}> | null;
-	remarks: string | null;
-	sourceList: string;
-	createdAt: string;
-	updatedAt: string;
-};
-
-type _UnscTargetType = {
-	id: string;
-	partyType: string;
-	primaryName: string;
-	aliases: string[] | null;
-	birthDate: string | null;
-	birthPlace: string | null;
-	gender: string | null;
-	nationalities: string[] | null;
-	addresses: string[] | null;
-	identifiers: Array<{ type?: string; number?: string }> | null;
-	designations: string[] | null;
-	remarks: string | null;
-	unListType: string;
-	referenceNumber: string | null;
-	listedOn: string | null;
-	createdAt: string;
-	updatedAt: string;
-};
-
-type _Sat69bTargetType = {
-	id: string;
-	rfc: string;
-	taxpayerName: string;
-	taxpayerStatus: string;
-	presumptionPhase: {
-		satNotice: string | null;
-		satDate: string | null;
-		dofNotice: string | null;
-		dofDate: string | null;
-	} | null;
-	rebuttalPhase: {
-		satNotice: string | null;
-		satDate: string | null;
-		dofNotice: string | null;
-		dofDate: string | null;
-	} | null;
-	definitivePhase: {
-		satNotice: string | null;
-		satDate: string | null;
-		dofNotice: string | null;
-		dofDate: string | null;
-	} | null;
-	favorablePhase: {
-		satNotice: string | null;
-		satDate: string | null;
-		dofNotice: string | null;
-		dofDate: string | null;
-	} | null;
-	createdAt: string;
-	updatedAt: string;
-};
+import { hybridWatchlistSearchResultSchema } from "./schemas";
 
 export class SearchEndpoint extends OpenAPIRoute {
 	public schema = {
@@ -116,44 +39,7 @@ export class SearchEndpoint extends OpenAPIRoute {
 				description: "Search results with hybrid scoring, separated by dataset",
 				...contentJson({
 					success: Boolean,
-					result: z.object({
-						queryId: z
-							.string()
-							.describe("Persistent query ID for result aggregation"),
-						ofac: z.object({
-							matches: z.array(ofacMatch),
-							count: z.number(),
-						}),
-						unsc: z.object({
-							matches: z.array(unscMatch),
-							count: z.number(),
-						}),
-						sat69b: z.object({
-							matches: z.array(sat69bMatch),
-							count: z.number(),
-						}),
-						pepSearch: z
-							.object({
-								searchId: z.string(),
-								status: z.enum(["completed", "pending"]),
-								results: z.any().nullable(),
-							})
-							.optional(),
-						pepAiSearch: z
-							.object({
-								searchId: z.string(),
-								status: z.enum(["completed", "pending", "skipped"]),
-								result: z.any().nullable(),
-							})
-							.optional(),
-						adverseMediaSearch: z
-							.object({
-								searchId: z.string(),
-								status: z.enum(["completed", "pending"]),
-								result: z.any().nullable(),
-							})
-							.optional(),
-					}),
+					result: hybridWatchlistSearchResultSchema,
 				}),
 			},
 			"400": {

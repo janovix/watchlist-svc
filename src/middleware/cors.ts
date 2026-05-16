@@ -93,6 +93,9 @@ export function corsMiddleware(): MiddlewareHandler {
 				"X-Requested-With",
 				"Accept",
 				"X-Environment",
+				// Playwright E2E: global `x-e2e-turnstile-bypass` (smoke-tests) is sent on
+				// browser requests; Watchlist app fetch to watchlist-svc must pass preflight.
+				"x-e2e-turnstile-bypass",
 			],
 			allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
 			exposeHeaders: ["Content-Length", "X-Request-Id"],

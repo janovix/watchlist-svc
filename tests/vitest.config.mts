@@ -3,7 +3,6 @@ import {
 	defineWorkersConfig,
 	readD1Migrations,
 } from "@cloudflare/vitest-pool-workers/config";
-
 const migrationsPath = path.join(__dirname, "..", "migrations");
 const migrations = await readD1Migrations(migrationsPath);
 
@@ -29,37 +28,17 @@ export default defineWorkersConfig({
 				"**/tests/**",
 				"**/dist/**",
 				"**/coverage/**",
-				"src/dictionaries/**", // Generated dictionary data, no business logic to test
-				"src/lib/ingestion-service.ts", // Hard to test without external dependencies
-				"src/lib/auth-middleware.ts", // Requires AUTH_SERVICE binding (service binding to auth-svc)
-				"src/lib/auth-settings.ts", // Requires AUTH_SERVICE binding for getResolvedSettings
-				"src/lib/search-core.ts", // Requires AI/Vectorize bindings difficult to mock
-				"src/queue-consumer.ts", // Queue consumer requires queue infrastructure setup
-				"src/endpoints/watchlist/pepSearch.ts", // Requires AI/Vectorize bindings difficult to mock
-				"src/endpoints/watchlist/search.ts", // Requires AI/Vectorize bindings difficult to mock
-				"src/endpoints/watchlist/searchOfac.ts", // Requires AI/Vectorize bindings difficult to mock
-				"src/endpoints/watchlist/searchUnsc.ts", // Requires AI/Vectorize bindings difficult to mock
-				"src/endpoints/watchlist/searchSat69b.ts", // Requires AI/Vectorize bindings difficult to mock
-				"src/endpoints/watchlist/internalSearch.ts", // Requires AI/Vectorize bindings difficult to mock
-				"src/endpoints/watchlist/internalVectorize.ts", // Requires AI/Vectorize bindings difficult to mock
-				"src/endpoints/watchlist/addOnVectorize.ts", // Requires AI/Vectorize bindings difficult to mock
-				"src/endpoints/watchlist/adminIngest.ts", // Requires WATCHLIST_INGEST_QUEUE binding
-				"src/endpoints/watchlist/ingestionUpload.ts", // Requires WATCHLIST_INGEST_QUEUE binding
-				"src/routes/upload.ts", // Requires R2 bucket binding for file uploads
-				"src/endpoints/watchlist/pepEvents.ts", // Requires PEP_EVENTS_DO binding
-				"src/durable-objects/pep-events.ts", // Durable Object - hard to test in vitest environment
-				"src/endpoints/watchlist/internalPep.ts", // Requires PEP_CACHE and PEP_EVENTS_DO bindings
-				"src/endpoints/watchlist/internalAdverseMedia.ts", // Requires PEP_EVENTS_DO binding
-				"src/endpoints/watchlist/internalGrokPep.ts", // Requires PEP_EVENTS_DO binding
-				"src/entrypoint.ts", // RPC entrypoint calls performSearch (AI/Vectorize bindings)
-				"src/endpoints/watchlist/events.ts", // Requires PEP_EVENTS_DO Durable Object
-				"src/endpoints/watchlist/adminVectorize.ts", // Requires THREAD_SVC.createThread RPC
+				"src/endpoints/watchlist/internalVectorize.ts", // Heavy AI/Vectorize batch paths; count/delete partially covered via integration tests
+				"src/endpoints/watchlist/ingestionUpload.ts", // R2 presign + queue orchestration; partial coverage via upload routes + presign tests
+				"src/entrypoint.ts", // RPC entrypoint — service binding / SELF not exercised in Vitest pool
 			],
+			// Floor sits slightly below measured totals so small edits don't flake.
+			// Last measured (full include set): ~91.5% lines, ~90.6% stmts, ~81.8% branches, ~92.2% funcs.
 			thresholds: {
-				lines: 85,
-				functions: 85,
-				branches: 80,
-				statements: 85,
+				lines: 89,
+				functions: 90,
+				branches: 79,
+				statements: 88,
 			},
 		},
 		setupFiles: ["./tests/apply-migrations.ts"],
@@ -68,19 +47,28 @@ export default defineWorkersConfig({
 				singleWorker: true,
 				main: path.join(__dirname, "..", "src", "index.ts"),
 				miniflare: {
+					compatibilityDate: "2025-10-08",
 					compatibilityFlags: ["experimental", "nodejs_compat"],
 					bindings: {
 						MIGRATIONS: migrations,
 						GROK_API_KEY: "test-grok-api-key",
 						ENVIRONMENT: "test",
+						E2E_API_KEY: "test-e2e-key",
+						RESEARCH_PROVIDER: "grok",
+						AI_GATEWAY_URL: "http://localhost",
 					},
-					// Configure D1 database directly (no wrangler dev needed)
-					// This prevents wrangler from trying to use remote mode
+					durableObjects: {
+						PEP_EVENTS_DO: "PepEventsDO",
+					},
+					r2Buckets: {
+						WATCHLIST_UPLOADS_BUCKET: "test-uploads-bucket",
+					},
 					d1Databases: {
 						DB: "test-db",
 					},
 					kvNamespaces: {
 						WATCHLIST_KV: "test-kv",
+						PEP_CACHE: "test-pep-cache",
 					},
 				},
 			},

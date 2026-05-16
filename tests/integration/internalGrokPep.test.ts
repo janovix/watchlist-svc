@@ -1,5 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it, beforeEach } from "vitest";
+import { clearPepCache, localSelfUrl } from "./_helpers";
 
 /**
  * Internal Grok PEP Endpoint Tests
@@ -9,18 +10,7 @@ import { describe, expect, it, beforeEach } from "vitest";
  */
 describe("Internal Grok PEP Endpoints", () => {
 	beforeEach(async () => {
-		// Clear KV cache if exists
-		const pepCache = (env as { PEP_CACHE?: KVNamespace }).PEP_CACHE;
-		if (pepCache) {
-			try {
-				const keys = await pepCache.list();
-				for (const key of keys.keys) {
-					await pepCache.delete(key.name);
-				}
-			} catch {
-				// Ignore if KV not configured
-			}
-		}
+		await clearPepCache(env);
 	});
 
 	// =========================================================================
@@ -44,7 +34,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/results",
+				localSelfUrl("/internal/grok-pep/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -74,7 +64,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/results",
+				localSelfUrl("/internal/grok-pep/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -100,7 +90,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/results",
+				localSelfUrl("/internal/grok-pep/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -128,7 +118,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/results",
+				localSelfUrl("/internal/grok-pep/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -152,7 +142,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/results",
+				localSelfUrl("/internal/grok-pep/results"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -176,7 +166,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/progress",
+				localSelfUrl("/internal/grok-pep/progress"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -202,7 +192,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/progress",
+				localSelfUrl("/internal/grok-pep/progress"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -222,7 +212,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/progress",
+				localSelfUrl("/internal/grok-pep/progress"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -245,7 +235,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/failed",
+				localSelfUrl("/internal/grok-pep/failed"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -265,7 +255,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/failed",
+				localSelfUrl("/internal/grok-pep/failed"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -283,7 +273,7 @@ describe("Internal Grok PEP Endpoints", () => {
 			};
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/grok-pep/failed",
+				localSelfUrl("/internal/grok-pep/failed"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },

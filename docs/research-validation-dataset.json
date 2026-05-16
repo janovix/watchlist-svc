@@ -1,0 +1,33 @@
+[
+	{
+		"id": "pep-001",
+		"category": "known_pep",
+		"query": "Joseph R. Biden Jr.",
+		"entity_type": "person",
+		"country": "US",
+		"notes": "Sanity check — widely documented PEP; expect probability >> 0.7"
+	},
+	{
+		"id": "clean-001",
+		"category": "likely_clean",
+		"query": "Jane Doe Generic",
+		"entity_type": "person",
+		"notes": "Synthetic uncommon name; expect low PEP probability or empty grounded sources"
+	},
+	{
+		"id": "adverse-001",
+		"category": "adverse_media_positive",
+		"query": "Bernie Madoff",
+		"entity_type": "person",
+		"notes": "Historical fraud case; expect elevated adverse-media risk with grounded URLs"
+	},
+	{
+		"id": "disambig-001",
+		"category": "disambiguation",
+		"query": "Carlos Lopez",
+		"entity_type": "person",
+		"country": "Mexico",
+		"birth_date_hint": "Use screening birth_date when available",
+		"notes": "Common name — verify summaries cite correct individual via DOB + country"
+	}
+]

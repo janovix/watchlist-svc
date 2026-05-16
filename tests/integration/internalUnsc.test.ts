@@ -2,6 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InternalUnscCompleteEndpoint } from "../../src/endpoints/watchlist/internalUnsc";
 import { createPrismaClient } from "../../src/lib/prisma";
+import { localSelfUrl, seedIngestionRun } from "./_helpers";
 
 /**
  * Internal UNSC Endpoint Tests
@@ -26,13 +27,9 @@ describe("Internal UNSC Endpoints", () => {
 		await prisma.unscEntry.deleteMany({});
 		await prisma.watchlistIngestionRun.deleteMany({});
 
-		// Create a test ingestion run for callbacks to reference
-		const run = await prisma.watchlistIngestionRun.create({
-			data: {
-				sourceUrl: "r2://test/consolidated_list.xml",
-				sourceType: "unsc_xml",
-				status: "running",
-			},
+		const run = await seedIngestionRun(prisma, {
+			sourceUrl: "r2://test/consolidated_list.xml",
+			sourceType: "unsc_xml",
 		});
 		testRunId = run.id;
 	});
@@ -61,7 +58,7 @@ describe("Internal UNSC Endpoints", () => {
 			});
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/truncate",
+				localSelfUrl("/internal/unsc/truncate"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -84,7 +81,7 @@ describe("Internal UNSC Endpoints", () => {
 
 		it("should update run status to inserting phase", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/truncate",
+				localSelfUrl("/internal/unsc/truncate"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -105,7 +102,7 @@ describe("Internal UNSC Endpoints", () => {
 
 		it("should handle truncate when table is already empty", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/truncate",
+				localSelfUrl("/internal/unsc/truncate"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -165,19 +162,16 @@ describe("Internal UNSC Endpoints", () => {
 				},
 			];
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: 3,
-						records,
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/unsc/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: 3,
+					records,
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -202,19 +196,16 @@ describe("Internal UNSC Endpoints", () => {
 		});
 
 		it("should handle empty batch", async () => {
-			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: 1,
-						records: [],
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/unsc/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: 1,
+					records: [],
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -252,7 +243,7 @@ describe("Internal UNSC Endpoints", () => {
 			});
 
 			// Send first batch
-			await SELF.fetch("http://local.test/internal/unsc/batch", {
+			await SELF.fetch(localSelfUrl("/internal/unsc/batch"), {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -264,7 +255,7 @@ describe("Internal UNSC Endpoints", () => {
 			});
 
 			// Send second batch
-			await SELF.fetch("http://local.test/internal/unsc/batch", {
+			await SELF.fetch(localSelfUrl("/internal/unsc/batch"), {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -321,19 +312,16 @@ describe("Internal UNSC Endpoints", () => {
 				},
 			];
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: 1,
-						records,
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/unsc/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: 1,
+					records,
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -384,19 +372,16 @@ describe("Internal UNSC Endpoints", () => {
 				listed_on: "2020-01-01",
 			}));
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: 1,
-						records,
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/unsc/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: 1,
+					records,
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -434,19 +419,16 @@ describe("Internal UNSC Endpoints", () => {
 				},
 			];
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: 1,
-						records,
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/unsc/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: 1,
+					records,
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -487,19 +469,16 @@ describe("Internal UNSC Endpoints", () => {
 				listed_on: "2020-01-01",
 			};
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/batch",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						batch_number: 1,
-						total_batches: undefined, // No total_batches provided
-						records: [record],
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/unsc/batch"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					batch_number: 1,
+					total_batches: undefined, // No total_batches provided
+					records: [record],
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{
@@ -523,7 +502,7 @@ describe("Internal UNSC Endpoints", () => {
 	describe("POST /internal/unsc/complete", () => {
 		it("should mark run as completed with stats", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/complete",
+				localSelfUrl("/internal/unsc/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -560,7 +539,7 @@ describe("Internal UNSC Endpoints", () => {
 			const errors = Array.from({ length: 150 }, (_, i) => `Error ${i}`);
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/complete",
+				localSelfUrl("/internal/unsc/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -586,7 +565,7 @@ describe("Internal UNSC Endpoints", () => {
 			const nonExistentRunId = 99999;
 
 			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/complete",
+				localSelfUrl("/internal/unsc/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -606,7 +585,7 @@ describe("Internal UNSC Endpoints", () => {
 
 		it("should skip vectorization when skip_vectorization is true", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/complete",
+				localSelfUrl("/internal/unsc/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -631,7 +610,7 @@ describe("Internal UNSC Endpoints", () => {
 
 		it("should skip vectorization when total_records is 0", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/complete",
+				localSelfUrl("/internal/unsc/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -656,7 +635,7 @@ describe("Internal UNSC Endpoints", () => {
 
 		it("should skip vectorization when THREAD_SVC is not configured", async () => {
 			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/complete",
+				localSelfUrl("/internal/unsc/complete"),
 				{
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
@@ -731,17 +710,14 @@ describe("Internal UNSC Endpoints", () => {
 	// =========================================================================
 	describe("POST /internal/unsc/failed", () => {
 		it("should mark run as failed with error message", async () => {
-			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						error_message: "Parse error: malformed XML at line 42",
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/unsc/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					error_message: "Parse error: malformed XML at line 42",
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{ success: boolean }>();
@@ -760,17 +736,14 @@ describe("Internal UNSC Endpoints", () => {
 		it("should truncate long error messages to 1000 chars", async () => {
 			const longError = "x".repeat(2000);
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: testRunId,
-						error_message: longError,
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/unsc/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: testRunId,
+					error_message: longError,
+				}),
+			});
 
 			expect(response.status).toBe(200);
 
@@ -783,17 +756,14 @@ describe("Internal UNSC Endpoints", () => {
 		it("should handle failure when run_id does not exist", async () => {
 			const nonExistentRunId = 99999;
 
-			const response = await SELF.fetch(
-				"http://local.test/internal/unsc/failed",
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						run_id: nonExistentRunId,
-						error_message: "Test error",
-					}),
-				},
-			);
+			const response = await SELF.fetch(localSelfUrl("/internal/unsc/failed"), {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					run_id: nonExistentRunId,
+					error_message: "Test error",
+				}),
+			});
 
 			expect(response.status).toBe(200);
 			const body = await response.json<{ success: boolean }>();

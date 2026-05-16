@@ -1,60 +1,40 @@
 /**
- * Internal Grok PEP endpoints for container callbacks.
- *
- * These endpoints are called by the pep_grok container to deliver search results
- * and broadcast them to clients via SSE (Server-Sent Events).
- *
- * These are INTERNAL endpoints - not exposed to public API.
+ * Legacy HTTP paths for PEP AI callbacks (`/internal/grok-pep/*`).
+ * Handlers delegate to {@link completePepAiResearch} / {@link failPepAiResearch}.
  */
 
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
-import { createPrismaClient } from "../../lib/prisma";
-import { QUERY_SOURCE } from "../../lib/query-source";
 import {
-	generateCacheKey,
-	writeCache,
-	checkAndUpdateQueryCompletion,
-} from "../../lib/search-query-utils";
+	failPepAiResearch,
+	completePepAiResearch,
+} from "../../lib/research-results";
+import { broadcastPepEvent } from "../../lib/pep-events-broadcast";
+import { containerProgressPayloadSchema } from "./schemas";
 
-// =============================================================================
-// Schemas
-// =============================================================================
-
-/**
- * Grok PEP result schema
- */
 const grokPepResultSchema = z.object({
-	search_id: z.string().describe("Search ID for tracking"),
-	query: z.string().describe("Person's name searched"),
-	probability: z.number().min(0).max(1).describe("PEP probability (0-1)"),
-	summary: z
-		.object({
-			es: z.string().describe("Summary in Spanish"),
-			en: z.string().describe("Summary in English"),
-		})
-		.describe("Bilingual summary"),
-	sources: z.array(z.string()).describe("Source URLs or domains"),
+	search_id: z.string(),
+	query: z.string(),
+	probability: z.number().min(0).max(1),
+	summary: z.object({
+		es: z.string(),
+		en: z.string(),
+	}),
+	sources: z.array(z.string()),
+	entity_type: z.enum(["person", "organization"]).optional(),
+	birthdate: z.string().optional(),
+	country: z.string().optional(),
 });
 
 export type GrokPepResult = z.infer<typeof grokPepResultSchema>;
 
-// =============================================================================
-// POST /internal/grok-pep/results - Receive search results from container
-// =============================================================================
-
-/**
- * POST /internal/grok-pep/results
- * Receives PEP detection results from pep_grok container
- */
 export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 	schema = {
 		tags: ["Internal"],
-		summary: "Receive Grok PEP results (internal)",
+		summary: "Receive PEP AI results (internal)",
 		description:
-			"Called by pep_grok container with PEP detection results. " +
-			"Results are broadcast via SSE to connected clients.",
+			"Legacy path name (grok-pep). Persists PEP AI results and broadcasts SSE.",
 		security: [],
 		request: {
 			body: {
@@ -67,7 +47,7 @@ export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 		},
 		responses: {
 			"200": {
-				description: "Results received and broadcast successfully",
+				description: "Results received",
 				content: {
 					"application/json": {
 						schema: z.object({
@@ -81,109 +61,22 @@ export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 	};
 
 	async handle(c: { env: Bindings; req: Request }) {
-		const body = await c.req.json();
-		const { search_id, query, probability, summary, sources } =
-			body as GrokPepResult;
-
+		const body = grokPepResultSchema.parse(await c.req.json());
 		console.log(
-			`[InternalGrokPep] Received results for search ${search_id} (query: ${query}, probability: ${probability})`,
+			`[InternalGrokPep] Received results for search ${body.search_id} (query: ${body.query}, probability: ${body.probability})`,
 		);
 
-		// Store in KV cache (cross-org cache for latency reduction)
-		if (c.env.PEP_CACHE) {
-			const cacheKey = generateCacheKey("pep_ai", query);
-			const cacheData = { probability, summary, sources };
-			await writeCache(c.env.PEP_CACHE, cacheKey, cacheData);
-		}
-
-		// Persist to D1 search_query table (org-scoped audit trail)
-		const prisma = createPrismaClient(c.env.DB);
-		try {
-			const searchQuery = await prisma.searchQuery.update({
-				where: { id: search_id },
-				data: {
-					pepAiStatus: "completed",
-					pepAiResult: JSON.stringify({ probability, summary, sources }),
-				},
-			});
-
-			console.log(
-				`[InternalGrokPep] Persisted PEP AI result to search_query ${search_id}`,
-			);
-
-			// Check if all search types completed
-			await checkAndUpdateQueryCompletion(prisma, search_id);
-
-			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
-				try {
-					await c.env.AML_SERVICE.processScreeningCallback({
-						queryId: search_id,
-						type: "pep_ai",
-						status: "completed",
-						matched: probability >= 0.7,
-					});
-					console.log(
-						`[InternalGrokPep] AML callback sent for query ${search_id}`,
-					);
-				} catch (callbackError) {
-					console.error(
-						`[InternalGrokPep] Failed to send AML callback:`,
-						callbackError,
-					);
-					// Don't fail the whole request if callback fails
-				}
-			}
-		} catch (persistError) {
-			console.error(`[InternalGrokPep] Failed to persist to D1:`, persistError);
-			// Don't fail the whole request if D1 persistence fails
-		}
-
-		// Broadcast results via SSE to connected clients
-		let broadcastSent = 0;
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-
-				const response = await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "pep_grok_results",
-						payload: {
-							search_id,
-							query,
-							probability,
-							summary,
-							sources,
-							status: "completed",
-							completed_at: new Date().toISOString(),
-						},
-					}),
-				});
-
-				if (response.ok) {
-					const broadcastResult = (await response.json()) as {
-						sent: number;
-					};
-					broadcastSent = broadcastResult.sent;
-					console.log(
-						`[InternalGrokPep] Broadcast sent to ${broadcastSent} clients for search ${search_id}`,
-					);
-				} else {
-					console.error(
-						`[InternalGrokPep] Broadcast failed: ${response.status}`,
-						await response.text(),
-					);
-				}
-			} catch (error) {
-				console.error(`[InternalGrokPep] Failed to broadcast results:`, error);
-				// Don't fail the whole request if broadcast fails
-			}
-		} else {
-			console.warn(`[InternalGrokPep] PEP_EVENTS_DO binding not configured`);
-		}
+		const { broadcastSent } = await completePepAiResearch(c.env, {
+			searchId: body.search_id,
+			query: body.query,
+			entityType: body.entity_type ?? "person",
+			birthdate: body.birthdate,
+			country: body.country,
+			probability: body.probability,
+			summary: body.summary,
+			sources: body.sources,
+			logPrefix: "[InternalGrokPep]",
+		});
 
 		return Response.json({
 			success: true,
@@ -192,40 +85,16 @@ export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 	}
 }
 
-// =============================================================================
-// Progress payload schema (shared shape for progress events)
-// =============================================================================
-
-const progressPayloadSchema = z.object({
-	search_id: z.string().describe("Search ID for tracking"),
-	phase: z
-		.string()
-		.optional()
-		.describe("Phase identifier e.g. searching, thinking"),
-	message: z.string().optional().describe("Human-readable progress message"),
-	progress: z.number().min(0).max(1).optional().describe("Progress 0-1"),
-});
-
-// =============================================================================
-// POST /internal/grok-pep/progress - Progress updates from container
-// =============================================================================
-
-/**
- * POST /internal/grok-pep/progress
- * Called by pep_grok container during execution to stream progress to SSE clients.
- */
 export class InternalGrokPepProgressEndpoint extends OpenAPIRoute {
 	schema = {
 		tags: ["Internal"],
-		summary: "Grok PEP progress (internal)",
-		description:
-			"Called by pep_grok container to broadcast progress (e.g. Searching websites..., Thinking...).",
+		summary: "PEP AI progress (internal)",
 		security: [],
 		request: {
 			body: {
 				content: {
 					"application/json": {
-						schema: progressPayloadSchema,
+						schema: containerProgressPayloadSchema,
 					},
 				},
 			},
@@ -258,7 +127,7 @@ export class InternalGrokPepProgressEndpoint extends OpenAPIRoute {
 		}
 		const body = await c.req.json();
 		const { search_id, phase, message, progress } = body as z.infer<
-			typeof progressPayloadSchema
+			typeof containerProgressPayloadSchema
 		>;
 
 		if (!search_id) {
@@ -268,54 +137,33 @@ export class InternalGrokPepProgressEndpoint extends OpenAPIRoute {
 			);
 		}
 
-		let sent = 0;
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-				const response = await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "pep_grok_progress",
-						payload: { phase, message, progress },
-					}),
-				});
-				if (response.ok) {
-					const result = (await response.json()) as { sent: number };
-					sent = result.sent;
-				}
-			} catch (error) {
-				console.error(`[InternalGrokPep] Progress broadcast failed:`, error);
-			}
-		}
+		const { sent } = await broadcastPepEvent(
+			c.env,
+			search_id,
+			"pep_grok_progress",
+			{
+				phase,
+				message,
+				progress,
+			},
+		);
 
 		return Response.json({ success: true, sent });
 	}
 }
 
-// =============================================================================
-// POST /internal/grok-pep/failed - Mark search as failed
-// =============================================================================
-
-/**
- * POST /internal/grok-pep/failed
- * Called by container when search fails
- */
 export class InternalGrokPepFailedEndpoint extends OpenAPIRoute {
 	schema = {
 		tags: ["Internal"],
-		summary: "Mark Grok PEP search as failed (internal)",
-		description:
-			"Called by pep_grok container when search fails. Broadcasts error to SSE clients.",
+		summary: "Mark PEP AI search as failed (internal)",
 		security: [],
 		request: {
 			body: {
 				content: {
 					"application/json": {
 						schema: z.object({
-							search_id: z.string().describe("Search ID"),
-							error: z.string().describe("Error message"),
+							search_id: z.string(),
+							error: z.string(),
 						}),
 					},
 				},
@@ -341,82 +189,11 @@ export class InternalGrokPepFailedEndpoint extends OpenAPIRoute {
 
 		console.log(`[InternalGrokPep] Search ${search_id} failed: ${error}`);
 
-		// Persist failure to D1
-		const prisma = createPrismaClient(c.env.DB);
-		try {
-			const searchQuery = await prisma.searchQuery.update({
-				where: { id: search_id },
-				data: {
-					pepAiStatus: "failed",
-					pepAiResult: JSON.stringify({ error }),
-				},
-			});
-
-			console.log(
-				`[InternalGrokPep] Persisted failure status to search_query ${search_id}`,
-			);
-
-			// Check if all search types completed
-			await checkAndUpdateQueryCompletion(prisma, search_id);
-
-			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
-				try {
-					await c.env.AML_SERVICE.processScreeningCallback({
-						queryId: search_id,
-						type: "pep_ai",
-						status: "failed",
-						matched: false,
-					});
-					console.log(
-						`[InternalGrokPep] AML callback sent for failed query ${search_id}`,
-					);
-				} catch (callbackError) {
-					console.error(
-						`[InternalGrokPep] Failed to send AML callback:`,
-						callbackError,
-					);
-					// Don't fail the whole request if callback fails
-				}
-			}
-		} catch (persistError) {
-			console.error(
-				`[InternalGrokPep] Failed to persist failure to D1:`,
-				persistError,
-			);
-			// Don't fail if D1 update fails (row might not exist)
-		}
-
-		// Broadcast failure via SSE
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-
-				await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "pep_grok_error",
-						payload: {
-							search_id,
-							status: "failed",
-							error,
-							failed_at: new Date().toISOString(),
-						},
-					}),
-				});
-
-				console.log(
-					`[InternalGrokPep] Failure broadcast for search ${search_id}`,
-				);
-			} catch (broadcastError) {
-				console.error(
-					`[InternalGrokPep] Failed to broadcast error:`,
-					broadcastError,
-				);
-			}
-		}
+		await failPepAiResearch(c.env, {
+			searchId: search_id,
+			error,
+			logPrefix: "[InternalGrokPep]",
+		});
 
 		return Response.json({
 			success: true,

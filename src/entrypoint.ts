@@ -18,6 +18,9 @@ export interface WatchlistSearchInput {
 	threshold?: number;
 	/** Deployment environment for data isolation (defaults to "production") */
 	environment?: string;
+	/** AML client or beneficial controller ID */
+	entityId?: string;
+	entityKind?: "client" | "beneficial_controller";
 }
 
 export interface WatchlistSearchResult {
@@ -131,6 +134,8 @@ export class WatchlistEntrypoint extends WorkerEntrypoint<Bindings> {
 			topK,
 			threshold,
 			environment,
+			entityId: input.entityId,
+			entityKind: input.entityKind,
 		});
 
 		return {

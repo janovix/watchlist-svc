@@ -10,10 +10,16 @@
 import { OpenAPIRoute } from "chanfana";
 import { z } from "zod";
 import type { Bindings } from "../../index";
-import { createHash } from "crypto";
+import {
+	runWatchlistContainerFailurePipeline,
+	runWatchlistContainerSuccessPipeline,
+} from "../../lib/container-callback-pipeline";
 import { createPrismaClient } from "../../lib/prisma";
-import { QUERY_SOURCE } from "../../lib/query-source";
-import { checkAndUpdateQueryCompletion } from "../../lib/search-query-utils";
+import { generateCacheKey } from "../../lib/search-query-utils";
+import {
+	isGlobalCacheEnabled,
+	resolveSearchQueryFlagEnvironment,
+} from "../../lib/watchlist-cache";
 
 // =============================================================================
 // Schemas
@@ -143,147 +149,72 @@ export class InternalPepResultsEndpoint extends OpenAPIRoute {
 			`[InternalPep] Received ${results_sent} results for search ${search_id} (query: ${query})`,
 		);
 
-		let cached = false;
+		const prismaForFlags = createPrismaClient(c.env.DB);
+		const flagEnv = await resolveSearchQueryFlagEnvironment(
+			prismaForFlags,
+			search_id,
+		);
+		const cacheOn = await isGlobalCacheEnabled(c.env, { environment: flagEnv });
+		const cacheKey = generateCacheKey("pep_search", query);
 
-		// Store in KV cache if enabled
-		const cacheEnabled = String(c.env.PEP_CACHE_ENABLED ?? "") === "true";
-		if (cacheEnabled && c.env.PEP_CACHE) {
-			try {
-				const cacheKey = this.generateCacheKey(query);
-				const cacheData = {
-					query,
-					total_results,
-					total_pages,
-					results,
-					results_sent,
-					cached_at: new Date().toISOString(),
-				};
-
-				await c.env.PEP_CACHE.put(cacheKey, JSON.stringify(cacheData), {
-					expirationTtl: 259200, // 72 hours
-				});
-
-				cached = true;
-				console.log(
-					`[InternalPep] Cached ${results_sent} results for query "${query}" (TTL: 72h)`,
-				);
-			} catch (error) {
-				console.error(`[InternalPep] Failed to cache results:`, error);
-				// Don't fail the whole request if cache fails
-			}
-		}
-
-		// Persist to SearchQuery table
-		try {
-			const prisma = createPrismaClient(c.env.DB);
-			const searchQuery = await prisma.searchQuery.update({
-				where: { id: search_id },
-				data: {
-					pepOfficialStatus: "completed",
-					pepOfficialResult: JSON.stringify({
+		const { broadcastSent, cacheWritten } =
+			await runWatchlistContainerSuccessPipeline({
+				env: c.env,
+				searchId: search_id,
+				logPrefix: "[InternalPep]",
+				cacheWrite:
+					cacheOn && c.env.PEP_CACHE
+						? {
+								kv: c.env.PEP_CACHE,
+								key: cacheKey,
+								value: {
+									query,
+									total_results,
+									total_pages,
+									results,
+									results_sent,
+									cached_at: new Date().toISOString(),
+								},
+							}
+						: undefined,
+				persist: async (prisma) => {
+					const row = await prisma.searchQuery.update({
+						where: { id: search_id },
+						data: {
+							pepOfficialStatus: "completed",
+							pepOfficialResult: JSON.stringify({
+								query,
+								total_results,
+								total_pages,
+								results,
+								results_sent,
+							}),
+							pepOfficialCount: results_sent,
+						},
+					});
+					return { source: row.source };
+				},
+				aml: { type: "pep_official", matched: results_sent > 0 },
+				broadcast: {
+					event: "pep_results",
+					payload: {
+						search_id,
 						query,
 						total_results,
 						total_pages,
 						results,
 						results_sent,
-					}),
-					pepOfficialCount: results_sent,
+						status: "completed",
+						completed_at: new Date().toISOString(),
+					},
 				},
 			});
-			console.log(
-				`[InternalPep] Persisted ${results_sent} results to SearchQuery ${search_id}`,
-			);
-
-			// Check if all searches are done and update overall status
-			await checkAndUpdateQueryCompletion(prisma, search_id);
-
-			// If this is an AML-screening query, callback to aml-svc via RPC
-			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
-				try {
-					await c.env.AML_SERVICE.processScreeningCallback({
-						queryId: search_id,
-						type: "pep_official",
-						status: "completed",
-						matched: results_sent > 0,
-					});
-					console.log(`[InternalPep] AML callback sent for query ${search_id}`);
-				} catch (callbackError) {
-					console.error(
-						`[InternalPep] Failed to send AML callback:`,
-						callbackError,
-					);
-					// Don't fail the whole request if callback fails
-				}
-			}
-		} catch (error) {
-			console.error(
-				`[InternalPep] Failed to persist results to SearchQuery:`,
-				error,
-			);
-			// Don't fail the whole request if persistence fails
-		}
-
-		// Broadcast results via SSE to connected clients
-		let broadcastSent = 0;
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-
-				const response = await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "pep_results",
-						payload: {
-							search_id,
-							query,
-							total_results,
-							total_pages,
-							results,
-							results_sent,
-							status: "completed",
-							completed_at: new Date().toISOString(),
-						},
-					}),
-				});
-
-				if (response.ok) {
-					const broadcastResult = (await response.json()) as {
-						sent: number;
-					};
-					broadcastSent = broadcastResult.sent;
-					console.log(
-						`[InternalPep] Broadcast sent to ${broadcastSent} clients for search ${search_id}`,
-					);
-				} else {
-					console.error(
-						`[InternalPep] Broadcast failed: ${response.status}`,
-						await response.text(),
-					);
-				}
-			} catch (error) {
-				console.error(`[InternalPep] Failed to broadcast results:`, error);
-				// Don't fail the whole request if broadcast fails
-			}
-		} else {
-			console.warn(`[InternalPep] PEP_EVENTS_DO binding not configured`);
-		}
 
 		return Response.json({
 			success: true,
-			cached,
+			cached: cacheWritten,
 			broadcast_sent: broadcastSent,
 		});
-	}
-
-	/**
-	 * Generate cache key from query string
-	 */
-	private generateCacheKey(query: string): string {
-		const normalized = query.toLowerCase().trim();
-		const hash = createHash("sha256").update(normalized).digest("hex");
-		return `pep_search:${hash}`;
 	}
 }
 
@@ -334,79 +265,31 @@ export class InternalPepFailedEndpoint extends OpenAPIRoute {
 
 		console.log(`[InternalPep] Search ${search_id} failed: ${error}`);
 
-		// Persist failure to SearchQuery table
-		try {
-			const prisma = createPrismaClient(c.env.DB);
-			const searchQuery = await prisma.searchQuery.update({
-				where: { id: search_id },
-				data: {
-					pepOfficialStatus: "failed",
-					pepOfficialResult: JSON.stringify({ error }),
-				},
-			});
-			console.log(
-				`[InternalPep] Persisted failure to SearchQuery ${search_id}`,
-			);
-
-			// Check if all searches are done and update overall status
-			await checkAndUpdateQueryCompletion(prisma, search_id);
-
-			// If this is an AML-screening query, callback to aml-svc
-			if (searchQuery.source === QUERY_SOURCE.AML && c.env.AML_SERVICE) {
-				try {
-					await c.env.AML_SERVICE.processScreeningCallback({
-						queryId: search_id,
-						type: "pep_official",
-						status: "failed",
-						matched: false,
-					});
-					console.log(
-						`[InternalPep] AML callback sent for failed query ${search_id}`,
-					);
-				} catch (callbackError) {
-					console.error(
-						`[InternalPep] Failed to send AML callback:`,
-						callbackError,
-					);
-					// Don't fail the whole request if callback fails
-				}
-			}
-		} catch (persistError) {
-			console.error(
-				`[InternalPep] Failed to persist failure to SearchQuery:`,
-				persistError,
-			);
-			// Don't fail the whole request if persistence fails
-		}
-
-		// Broadcast failure via SSE
-		if (c.env.PEP_EVENTS_DO) {
-			try {
-				const id = c.env.PEP_EVENTS_DO.idFromName(search_id);
-				const stub = c.env.PEP_EVENTS_DO.get(id);
-
-				await stub.fetch("http://pep-events/broadcast", {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						event: "pep_error",
-						payload: {
-							search_id,
-							status: "failed",
-							error,
-							failed_at: new Date().toISOString(),
-						},
-					}),
+		await runWatchlistContainerFailurePipeline({
+			env: c.env,
+			searchId: search_id,
+			logPrefix: "[InternalPep]",
+			persist: async (prisma) => {
+				const row = await prisma.searchQuery.update({
+					where: { id: search_id },
+					data: {
+						pepOfficialStatus: "failed",
+						pepOfficialResult: JSON.stringify({ error }),
+					},
 				});
-
-				console.log(`[InternalPep] Failure broadcast for search ${search_id}`);
-			} catch (broadcastError) {
-				console.error(
-					`[InternalPep] Failed to broadcast error:`,
-					broadcastError,
-				);
-			}
-		}
+				return { source: row.source };
+			},
+			aml: { type: "pep_official" },
+			broadcast: {
+				event: "pep_error",
+				payload: {
+					search_id,
+					status: "failed",
+					error,
+					failed_at: new Date().toISOString(),
+				},
+			},
+		});
 
 		return Response.json({
 			success: true,

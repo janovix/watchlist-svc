@@ -27,12 +27,13 @@ import {
 	composeUnscVectorMetadata,
 	getUnscVectorId,
 } from "../../lib/unsc-vectorize-service";
+import { WATCHLIST_EMBEDDING_MODEL } from "../../lib/embedding-config";
 
 // =============================================================================
 // Constants
 // =============================================================================
 
-const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
+const EMBEDDING_MODEL = WATCHLIST_EMBEDDING_MODEL;
 const EMBEDDING_BATCH_SIZE = 50; // Workers AI limit per call
 const VECTORIZE_BATCH_SIZE = 100; // Vectorize upsert batch size
 const DELETE_BATCH_SIZE = 1000; // Vectorize delete batch size

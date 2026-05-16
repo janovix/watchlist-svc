@@ -6,6 +6,7 @@ import {
 	writeCache,
 	checkAndUpdateQueryCompletion,
 	GROK_CACHE_TTL_SECONDS,
+	RESEARCH_CACHE_TTL_SECONDS_NEGATIVE,
 	computePepAiIndicatesMatch,
 } from "../../src/lib/search-query-utils";
 import { createPrismaClient } from "../../src/lib/prisma";
@@ -131,8 +132,12 @@ describe("Search Query Utils", () => {
 	// writeCache
 	// =========================================================================
 	describe("writeCache", () => {
-		it("should use 72h TTL constant (259200 seconds)", () => {
-			expect(GROK_CACHE_TTL_SECONDS).toBe(259200); // 72 * 60 * 60
+		it("exposes legacy GROK_CACHE_TTL_SECONDS (72h) for backwards compatibility", () => {
+			expect(GROK_CACHE_TTL_SECONDS).toBe(259200);
+		});
+
+		it("uses long negative-result TTL by default (30 days)", () => {
+			expect(RESEARCH_CACHE_TTL_SECONDS_NEGATIVE).toBe(30 * 24 * 60 * 60);
 		});
 
 		it("should write value to cache", async () => {

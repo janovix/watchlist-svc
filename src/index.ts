@@ -28,6 +28,7 @@ import {
 	IngestionFailedEndpoint,
 } from "./endpoints/watchlist/ingestionUpload";
 import { uploadRoutes } from "./routes/upload";
+import { internalE2eRouter } from "./routes/internal-e2e";
 import {
 	InternalOfacTruncateEndpoint,
 	InternalOfacBatchEndpoint,
@@ -62,6 +63,7 @@ import {
 } from "./endpoints/watchlist/internalGrokPep";
 import { InternalSearchEndpoint } from "./endpoints/watchlist/internalSearch";
 import { QueryListEndpoint } from "./endpoints/watchlist/queryList";
+import { QueryListByEntityEndpoint } from "./endpoints/watchlist/queryListByEntity";
 import { QueryReadEndpoint } from "./endpoints/watchlist/queryRead";
 import eventsRouter from "./endpoints/watchlist/events";
 import {
@@ -78,6 +80,11 @@ import type {
 	AuthServiceBinding,
 	ThreadSvcBinding,
 } from "./types/service-bindings";
+import {
+	processWatchlistResearchBatch,
+	type WatchlistResearchJob,
+} from "./lib/research-queue";
+import { installVitestPoolBindings } from "./install-test-bindings";
 
 // Export Durable Objects
 export { PepEventsDO } from "./durable-objects/pep-events";
@@ -110,9 +117,23 @@ export type Bindings = Env & {
 	 */
 	INTERNAL_SECRET?: string;
 	/**
-	 * Grok API key for AI-powered features.
+	 * Grok API key (legacy `researchProvider=grok` + thread-svc containers only).
 	 */
 	GROK_API_KEY?: string;
+	/** Base URL for Cloudflare AI Gateway (no trailing slash). See docs/GEMINI_AI_GATEWAY.md */
+	AI_GATEWAY_URL?: string;
+	/** Cloudflare AI Gateway authentication token (secret). Required when Authenticated Gateway is enabled. */
+	AI_GATEWAY_TOKEN?: string;
+	/** Google AI Studio API key for Gemini (secret). */
+	GEMINI_API_KEY?: string;
+	/** Override Gemini model id (default gemini-2.5-flash). */
+	GEMINI_MODEL?: string;
+	/** `gemini` | `grok` — defaults to gemini. Overridable via flags-svc `watchlist-research-provider`. */
+	RESEARCH_PROVIDER?: string;
+	/** When true, sampled structured logs for dashboards (see research-shadow.ts). */
+	RESEARCH_SHADOW?: string;
+	/** Durable queue for Gemini watchlist research jobs. */
+	WATCHLIST_RESEARCH_QUEUE?: Queue<WatchlistResearchJob>;
 	/**
 	 * R2 bucket for storing uploaded watchlist files (XML, etc.)
 	 */
@@ -159,7 +180,7 @@ export type Bindings = Env & {
 	/**
 	 * Enable/disable PEP cache (default: "false").
 	 */
-	PEP_CACHE_ENABLED?: string;
+	CACHE_ENABLED?: string;
 	/**
 	 * PEP Events Durable Object for SSE streaming.
 	 */
@@ -179,10 +200,18 @@ export type Bindings = Env & {
 	 * Set to "false" to skip the adverse_media_grok container lookup.
 	 */
 	ADVERSE_MEDIA_ENABLED?: string;
+	/** Shared secret for E2E org purge and internal test hooks */
+	E2E_API_KEY?: string;
 };
 
 // Start a Hono app
 const app = new Hono<{ Bindings: Bindings }>();
+
+// Test pool: ensure AI / Vectorize stubs exist inside worker isolates (see module docstring).
+app.use("*", (c, next) => {
+	installVitestPoolBindings(c.env);
+	return next();
+});
 
 // CORS middleware using TRUSTED_ORIGINS environment variable
 app.use("*", corsMiddleware());
@@ -237,6 +266,8 @@ app.get("/docsz", (c) => {
 	return c.html(getScalarHtml(appMeta));
 });
 
+app.route("/api/v1/internal/e2e", internalE2eRouter);
+
 // Apply auth middleware to protected routes
 // Pattern: Apply middleware to specific paths before registering endpoints
 app.use("/search", authMiddleware());
@@ -248,6 +279,7 @@ app.use("/search/unsc", requireActiveOrganization());
 app.use("/search/sat69b", authMiddleware());
 app.use("/search/sat69b", requireActiveOrganization());
 app.use("/queries", authMiddleware());
+app.use("/queries/by-entity", authMiddleware());
 app.use("/queries/:queryId", authMiddleware());
 
 // Admin routes require authentication + admin role
@@ -266,6 +298,8 @@ openapi.post("/search/unsc", SearchUnscEndpoint);
 openapi.post("/search/sat69b", SearchSat69bEndpoint);
 
 // Query management endpoints (authenticated)
+// Static path must be registered before /queries/:queryId
+openapi.get("/queries/by-entity", QueryListByEntityEndpoint);
 openapi.get("/queries", QueryListEndpoint);
 openapi.get("/queries/:queryId", QueryReadEndpoint);
 
@@ -351,7 +385,7 @@ openapi.post(
 
 // Sentry is enabled only when SENTRY_DSN environment variable is set.
 // Configure it via wrangler secrets: `wrangler secret put SENTRY_DSN`
-export default Sentry.withSentry((env: Bindings) => {
+const sentryApp = Sentry.withSentry((env: Bindings) => {
 	const versionId = env.CF_VERSION_METADATA?.id;
 	return {
 		// When DSN is undefined/empty, Sentry SDK is disabled (no events sent)
@@ -363,3 +397,16 @@ export default Sentry.withSentry((env: Bindings) => {
 		sendDefaultPii: true,
 	};
 }, app);
+
+export default {
+	fetch: sentryApp.fetch.bind(sentryApp),
+
+	async queue(
+		batch: MessageBatch<WatchlistResearchJob>,
+		env: Bindings,
+		ctx: ExecutionContext,
+	): Promise<void> {
+		void ctx;
+		await processWatchlistResearchBatch(batch, env);
+	},
+} satisfies ExportedHandler<Bindings, WatchlistResearchJob>;

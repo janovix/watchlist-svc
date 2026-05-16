@@ -1,5 +1,7 @@
 import { env, SELF } from "cloudflare:test";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Bindings } from "../../src";
+import { AdminVectorizeReindexEndpoint } from "../../src/endpoints/watchlist/adminVectorize";
 import { createPrismaClient } from "../../src/lib/prisma";
 
 /**
@@ -158,6 +160,83 @@ describe("Admin Vectorize Endpoints", () => {
 
 				expect([200, 500]).toContain(response.status);
 			}
+		});
+	});
+
+	describe("AdminVectorizeReindexEndpoint.handle()", () => {
+		it("returns 200 when THREAD_SVC creates a vectorization thread", async () => {
+			const createThread = vi.fn(async () => ({ id: "thread-vectorize-1" }));
+			const endpoint =
+				new (AdminVectorizeReindexEndpoint as unknown as new () => AdminVectorizeReindexEndpoint)();
+
+			const response = await endpoint.handle({
+				env: {
+					...(env as unknown as Bindings),
+					THREAD_SVC: {
+						createThread,
+					} as unknown as Bindings["THREAD_SVC"],
+					ENVIRONMENT: "dev",
+				},
+				req: new Request("http://local.test/admin/vectorize/reindex", {
+					method: "POST",
+					body: JSON.stringify({
+						dataset: "ofac_sdn",
+						reindex_all: false,
+						batch_size: 25,
+					}),
+				}),
+			});
+			const body = (await response.json()) as {
+				success: boolean;
+				thread_id: string;
+				message: string;
+			};
+
+			expect(response.status).toBe(200);
+			expect(body).toMatchObject({
+				success: true,
+				thread_id: "thread-vectorize-1",
+			});
+			expect(createThread).toHaveBeenCalledWith(
+				expect.objectContaining({
+					task_type: "vectorize_index",
+					job_params: expect.objectContaining({
+						dataset: "ofac_sdn",
+						reindex_all: false,
+						batch_size: 25,
+					}),
+				}),
+			);
+		});
+
+		it("returns 500 when THREAD_SVC.createThread rejects", async () => {
+			const endpoint =
+				new (AdminVectorizeReindexEndpoint as unknown as new () => AdminVectorizeReindexEndpoint)();
+
+			const response = await endpoint.handle({
+				env: {
+					...(env as unknown as Bindings),
+					THREAD_SVC: {
+						createThread: vi.fn(async () => {
+							throw new Error("thread creation failed");
+						}),
+					} as unknown as Bindings["THREAD_SVC"],
+				},
+				req: new Request("http://local.test/admin/vectorize/reindex", {
+					method: "POST",
+					body: JSON.stringify({ dataset: "unsc" }),
+				}),
+			});
+			const body = (await response.json()) as {
+				success: boolean;
+				error: string;
+			};
+
+			expect(response.status).toBe(500);
+			expect(body).toEqual({
+				success: false,
+				error: "thread creation failed",
+			});
 		});
 	});
 });

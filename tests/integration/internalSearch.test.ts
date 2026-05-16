@@ -1,5 +1,11 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it, beforeEach } from "vitest";
+import type { Bindings } from "../../src/index";
+import {
+	amlInternalSearchHeaders,
+	disableAsyncSearchSideEffects,
+	localSelfUrl,
+} from "./_helpers";
 
 /**
  * Internal Search Endpoint Tests
@@ -9,6 +15,7 @@ import { describe, expect, it, beforeEach } from "vitest";
  */
 describe("POST /internal/search - AML Screening", () => {
 	beforeEach(async () => {
+		disableAsyncSearchSideEffects(env as unknown as Bindings);
 		// Clear any cache if exists
 		const cache = (env as { CACHE?: any }).CACHE;
 		if (cache?.default) {
@@ -22,7 +29,7 @@ describe("POST /internal/search - AML Screening", () => {
 
 	describe("Authentication & Headers", () => {
 		it("should require X-Organization-Id header", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -45,7 +52,7 @@ describe("POST /internal/search - AML Screening", () => {
 		});
 
 		it("should require X-User-Id header", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -70,13 +77,9 @@ describe("POST /internal/search - AML Screening", () => {
 
 	describe("Request Validation", () => {
 		it("should require query text", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"X-Organization-Id": "org-123",
-					"X-User-Id": "user-123",
-				},
+				headers: amlInternalSearchHeaders("org-123", "user-123"),
 				body: JSON.stringify({
 					// Missing q
 					entityType: "person",
@@ -89,7 +92,7 @@ describe("POST /internal/search - AML Screening", () => {
 		});
 
 		it.skip("should require entityType", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -109,8 +112,8 @@ describe("POST /internal/search - AML Screening", () => {
 	});
 
 	describe("Search Response", () => {
-		it.skip("should return queryId and result counts for person search", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+		it("should return queryId and result counts for person search", async () => {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -141,7 +144,7 @@ describe("POST /internal/search - AML Screening", () => {
 		});
 
 		it.skip("should return queryId and result counts for organization search", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -165,7 +168,7 @@ describe("POST /internal/search - AML Screening", () => {
 
 	describe("Source Tracking", () => {
 		it.skip("should create search query with source='aml-screening'", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -193,7 +196,7 @@ describe("POST /internal/search - AML Screening", () => {
 
 	describe("Optional Parameters", () => {
 		it.skip("should accept identifiers array", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -215,7 +218,7 @@ describe("POST /internal/search - AML Screening", () => {
 		});
 
 		it.skip("should accept countries array", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
@@ -235,7 +238,7 @@ describe("POST /internal/search - AML Screening", () => {
 		});
 
 		it.skip("should accept birthDate for person searches", async () => {
-			const response = await SELF.fetch("http://localhost/internal/search", {
+			const response = await SELF.fetch(localSelfUrl("/internal/search"), {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",

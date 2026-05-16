@@ -6,6 +6,9 @@
 /** Minimum discriminative token-set score; below this we cap name score to reduce false positives from generic-term-only overlap. Set to 0.7 so capped scores stay below default search threshold (0.875). */
 const DISCRIMINATIVE_MIN = 0.7;
 
+/** Per-token Jaro–Winkler below this for a discriminative query token triggers a score cap. */
+const WEAKEST_LINK_FLOOR = 0.85;
+
 /**
  * Generic entity terms (Spanish/Mexican company name boilerplate).
  * When name similarity is driven only by these tokens, we cap the score
@@ -79,6 +82,77 @@ export function normalizeIdentifierType(type: string): string {
 		.replace(/[.\-#\s]/g, "")
 		.toUpperCase()
 		.trim();
+}
+
+/**
+ * Normalize country code for comparison (2–3 letter codes)
+ */
+function normalizeCountryForMeta(code: string): string {
+	return code.toUpperCase().trim();
+}
+
+/**
+ * OFAC record countries from identifiers and trailing country hints in address lines
+ */
+export function extractOfacRecordCountries(target: {
+	identifiers: Array<{ country?: string }> | null;
+	addresses: string[] | null;
+}): string[] {
+	const out: string[] = [];
+	if (target.identifiers) {
+		for (const id of target.identifiers) {
+			if (id.country && id.country.trim()) {
+				out.push(normalizeCountryForMeta(id.country));
+			}
+		}
+	}
+	if (target.addresses) {
+		for (const line of target.addresses) {
+			if (!line) continue;
+			// e.g. "...MEXICO" or ", MX" at end
+			const parts = line.split(",").map((s) => s.trim());
+			const last = parts[parts.length - 1];
+			if (last && /^[A-Z]{2,3}$/i.test(last)) {
+				out.push(last.toUpperCase());
+			}
+		}
+	}
+	return [...new Set(out.filter(Boolean))];
+}
+
+/**
+ * UNSC nationalities as normalized country list
+ */
+export function extractUnscRecordCountries(
+	nationalities: string[] | null | undefined,
+): string[] {
+	if (!nationalities || nationalities.length === 0) return [];
+	return [
+		...new Set(nationalities.map((c) => normalizeCountryForMeta(c))),
+	].filter((c) => c.length > 0);
+}
+
+/**
+ * Parse birth date (YYYY-MM-DD) from a 13-char natural-person Mexican RFC, else null.
+ * 12-char RFC = legal entity; no date segment for comparison here.
+ * SAT pivot: YY 00-29 => 20YY, 30-99 => 19YY
+ */
+export function parseRfcBirthDate(rfc: string): string | null {
+	const r = rfc.replace(/\s+/g, "").toUpperCase();
+	if (r.length !== 13) return null;
+	const yymmdd = r.slice(4, 10);
+	if (!/^\d{6}$/.test(yymmdd)) return null;
+	const yy = yymmdd.slice(0, 2);
+	const mm = yymmdd.slice(2, 4);
+	const dd = yymmdd.slice(4, 6);
+	const nYy = Number.parseInt(yy, 10);
+	if (nYy < 0 || nYy > 99) return null;
+	const year = nYy <= 29 ? 2000 + nYy : 1900 + nYy;
+	const iso = `${String(year).padStart(4, "0")}-${mm}-${dd}`;
+	const d = new Date(`${iso}T00:00:00Z`);
+	if (Number.isNaN(d.getTime())) return null;
+	if (d.toISOString().slice(0, 10) !== iso) return null;
+	return iso;
 }
 
 /**
@@ -171,14 +245,38 @@ export function jaroWinkler(s1: string, s2: string, prefixScale = 0.1): number {
 }
 
 /**
+ * Multiplier when the worst discriminative query token match is below WEAKEST_LINK_FLOOR
+ */
+function weakestLinkMultiplier(
+	queryTokens: string[],
+	targetTokens: string[],
+): number {
+	const discriminative = queryTokens.filter(
+		(t) => !ENTITY_GENERIC_TERMS.has(t),
+	);
+	if (discriminative.length === 0) return 1.0;
+
+	let worst = 1.0;
+	for (const qt of discriminative) {
+		let best = 0;
+		for (const tt of targetTokens) {
+			best = Math.max(best, jaroWinkler(qt, tt));
+		}
+		worst = Math.min(worst, best);
+	}
+
+	if (worst >= WEAKEST_LINK_FLOOR) return 1.0;
+	return Math.min(1, worst + 0.15);
+}
+
+/**
  * Compute token-set similarity: measures how well query tokens are covered
  * by the target name. Resilient to extra tokens in the target (e.g., middle names)
  * and token reordering.
  *
  * For each query token, finds the best Jaro-Winkler match among target tokens.
- * Returns the weighted average, so "JOAQUIN GUZMAN LOERA" vs
- * "GUZMAN LOERA JOAQUIN ARCHIVALDO" scores high because all 3 query tokens
- * have near-perfect matches in the target.
+ * Discriminative query tokens use a "weakest link" cap so a wrong surname
+ * (e.g. PEREZ vs no such token) cannot be averaged away.
  */
 function tokenSetScore(queryTokens: string[], targetTokens: string[]): number {
 	if (queryTokens.length === 0 || targetTokens.length === 0) return 0;
@@ -199,7 +297,8 @@ function tokenSetScore(queryTokens: string[], targetTokens: string[]): number {
 	const lengthRatio = Math.min(queryTokens.length / targetTokens.length, 1.0);
 	const lengthPenalty = 0.8 + 0.2 * lengthRatio;
 
-	return queryCoverage * lengthPenalty;
+	const wlm = weakestLinkMultiplier(queryTokens, targetTokens);
+	return queryCoverage * lengthPenalty * wlm;
 }
 
 /**
@@ -222,7 +321,7 @@ function tokenSetScoreDiscriminative(
  * Find the best name score by comparing query against name and all aliases.
  * Uses three strategies and picks the maximum:
  *   1. Full-string Jaro-Winkler (good for exact/near-exact matches)
- *   2. Token-sorted Jaro-Winkler (handles name reordering)
+ *   2. Token-sorted Jaro-Winkler (handles name reordering; prefix scale 0 — sorted order is not natural prefix)
  *   3. Token-set coverage (handles missing middle names and extra tokens)
  *
  * When the query has discriminative tokens (non-generic), the score is capped
@@ -253,10 +352,10 @@ export function bestNameScore(
 	let maxScore = jaroWinkler(normalizedQuery, normalizedName);
 	let bestTokens = nameTokens;
 
-	// Strategy 2: Token-sorted Jaro-Winkler (handles reordering)
+	// Strategy 2: Token-sorted Jaro-Winkler (handles reordering; no prefix bonus on sorted strings)
 	const sortedQuery = [...queryTokens].sort().join(" ");
 	const sortedName = [...nameTokens].sort().join(" ");
-	const score2 = jaroWinkler(sortedQuery, sortedName);
+	const score2 = jaroWinkler(sortedQuery, sortedName, 0);
 	if (score2 > maxScore) {
 		maxScore = score2;
 		bestTokens = nameTokens;
@@ -280,6 +379,7 @@ export function bestNameScore(
 			const aliasSorted = jaroWinkler(
 				sortedQuery,
 				[...aliasTokens].sort().join(" "),
+				0,
 			);
 			const aliasSet = tokenSetScore(queryTokens, aliasTokens);
 			const aliasMax = Math.max(aliasFull, aliasSorted, aliasSet);
@@ -306,14 +406,59 @@ export function bestNameScore(
 }
 
 /**
- * Compute metadata score based on birthDate and countries match
- * BirthDate match contributes 0.5, countries overlap contributes 0.5
- *
- * @param queryBirthDate - Query birth date (ISO string)
- * @param queryCountries - Query countries array
- * @param recordBirthDate - Record birth date (ISO string)
- * @param recordCountries - Record countries array
- * @returns Meta score between 0 and 1
+ * Result of metadata comparison: reward matches and report hard mismatches
+ */
+export interface MetaSignal {
+	score: number;
+	/** true when both sides have comparable data and they conflict */
+	mismatch: boolean;
+}
+
+/**
+ * Compute metadata signal from birth date and country overlap
+ */
+export function computeMetaSignal(
+	queryBirthDate: string | null | undefined,
+	queryCountries: string[] | null | undefined,
+	recordBirthDate: string | null | undefined,
+	recordCountries: string[] | null | undefined,
+): MetaSignal {
+	let score = 0;
+	let mismatch = false;
+
+	if (queryBirthDate && recordBirthDate) {
+		if (queryBirthDate === recordBirthDate) {
+			score += 0.5;
+		} else {
+			// Definitive different person: do not reward partial country overlap
+			return { score: 0, mismatch: true };
+		}
+	}
+
+	if (
+		queryCountries &&
+		queryCountries.length > 0 &&
+		recordCountries &&
+		recordCountries.length > 0
+	) {
+		const querySet = new Set(
+			queryCountries.map((c) => normalizeCountryForMeta(c)),
+		);
+		const hasOverlap = recordCountries.some((c) =>
+			querySet.has(normalizeCountryForMeta(c)),
+		);
+		if (hasOverlap) {
+			score += 0.5;
+		} else {
+			mismatch = true;
+		}
+	}
+
+	return { score, mismatch };
+}
+
+/**
+ * @deprecated use computeMetaSignal; kept for call sites that need score only
  */
 export function computeMetaScore(
 	queryBirthDate: string | null | undefined,
@@ -321,30 +466,12 @@ export function computeMetaScore(
 	recordBirthDate: string | null | undefined,
 	recordCountries: string[] | null | undefined,
 ): number {
-	let score = 0;
-
-	// BirthDate match: 0.5 if matches
-	if (queryBirthDate && recordBirthDate && queryBirthDate === recordBirthDate) {
-		score += 0.5;
-	}
-
-	// Countries overlap: 0.5 if any overlap
-	if (
-		queryCountries &&
-		queryCountries.length > 0 &&
-		recordCountries &&
-		recordCountries.length > 0
-	) {
-		const querySet = new Set(queryCountries.map((c) => c.toUpperCase().trim()));
-		const hasOverlap = recordCountries.some((c) =>
-			querySet.has(c.toUpperCase().trim()),
-		);
-		if (hasOverlap) {
-			score += 0.5;
-		}
-	}
-
-	return score;
+	return computeMetaSignal(
+		queryBirthDate,
+		queryCountries,
+		recordBirthDate,
+		recordCountries,
+	).score;
 }
 
 /**
@@ -374,19 +501,28 @@ const NAME_OVERRIDE_MIN_NAME = 0.9;
 /** Minimum hybrid score when using name override (avoid pure-name matches with no semantic support). */
 const NAME_OVERRIDE_MIN_HYBRID = 0.7;
 
+export type PassesMatchFilterOpts = {
+	/** true when identifier matched or metadata contributed positively */
+	corroborated: boolean;
+	/** true when DOB or country proves a different person */
+	mismatch: boolean;
+};
+
 /**
  * Returns true if a candidate should be shown as a match given the hybrid score, name score, and threshold.
- * Show match if hybrid >= threshold OR (nameScore >= 0.9 AND hybrid >= 0.7) so exact/same-person matches
- * still appear when semantic/metadata pull the hybrid score below threshold.
+ * Mismatch always rejects. Otherwise: hybrid >= threshold, or name-override with corroboration.
  */
 export function passesMatchFilter(
 	hybridScore: number,
 	nameScore: number,
 	threshold: number,
+	opts: PassesMatchFilterOpts,
 ): boolean {
+	if (opts.mismatch) return false;
 	if (hybridScore >= threshold) return true;
 	return (
 		nameScore >= NAME_OVERRIDE_MIN_NAME &&
-		hybridScore >= NAME_OVERRIDE_MIN_HYBRID
+		hybridScore >= NAME_OVERRIDE_MIN_HYBRID &&
+		opts.corroborated
 	);
 }

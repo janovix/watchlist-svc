@@ -1,3 +1,4 @@
+// TODO(janovix): currently only referenced by integration tests — kept warm pending product decision
 /**
  * Subscription client via auth-svc RPC service binding
  *

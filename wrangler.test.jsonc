@@ -26,7 +26,7 @@
 	"vectorize": [
 		{
 			"binding": "WATCHLIST_VECTORIZE",
-			"index_name": "watchlist-dev",
+			"index_name": "watchlist-m3-dev",
 		},
 	],
 	"ai": {
@@ -35,5 +35,9 @@
 	// Queue removed - now using thread-svc for ingestion
 	"vars": {
 		"ENVIRONMENT": "test",
+		"RESEARCH_PROVIDER": "grok",
+		"AI_GATEWAY_URL": "",
+		"GEMINI_MODEL": "gemini-2.5-flash",
+		"RESEARCH_SHADOW": "false",
 	},
 }

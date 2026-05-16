@@ -59,7 +59,19 @@ Watchlist ingestion and search service using Hono + Chanfana + D1 + Vectorize.
 
 ## Environment Variables
 
-- `GROK_API_KEY` - API key for Grok API (used for PEP search fallback)
+- **`AI_GATEWAY_URL`** — Cloudflare AI Gateway base URL (no trailing slash). See [docs/GEMINI_AI_GATEWAY.md](docs/GEMINI_AI_GATEWAY.md).
+- **`GEMINI_API_KEY`** — Google AI Studio API key (`wrangler secret put GEMINI_API_KEY`).
+- **`GEMINI_MODEL`** — Optional override (default `gemini-2.5-flash`).
+- **`RESEARCH_PROVIDER`** — `gemini` (default) or `grok`. Overridable per org via flags-svc `watchlist-research-provider`.
+- **`RESEARCH_SHADOW`** — `true` to emit structured JSON logs on sampled requests (see `research-shadow.ts`).
+- **`GROK_API_KEY`** — Only when `RESEARCH_PROVIDER=grok` and thread-svc Grok containers are deployed (legacy).
+
+### Cross-org cache (flags-svc)
+
+- **`watchlist-global-cache`** (boolean flag in **flags-svc**, default `true`) — When enabled, watchlist-svc reads/writes shared KV entries for (a) **L1** hybrid sync results (~1h TTL) and (b) **L2** PEP AI / adverse-media payloads (TTL varies by risk: ~30d negatives / ~7d positives). Evaluated via the `FLAGS_SERVICE` binding.
+- **`CACHE_ENABLED`** — **Fallback only**: used when `FLAGS_SERVICE` is missing or `isFlagEnabled` fails (e.g. some local setups). Set to `"true"` to force cache behavior without flags-svc. Production control should remain the `watchlist-global-cache` flag.
+
+See also: `src/lib/watchlist-cache.ts` (`isGlobalCacheEnabled`).
 
 - `AUTH_SERVICE` - Service binding to auth-svc for JWT validation
 - `AUTH_SERVICE_URL` - URL for auth-svc JWKS endpoint

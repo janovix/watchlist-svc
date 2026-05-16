@@ -6,4 +6,10 @@ export const WATCHLIST_FEATURE_FLAG_KEYS = {
 	pepSearch: "watchlist-pep-search",
 	pepGrok: "watchlist-pep-grok",
 	adverseMedia: "watchlist-adverse-media",
+	/** KV cache for hybrid sync results + Grok PEP / adverse media payloads */
+	globalCache: "watchlist-global-cache",
+	/** `gemini` | `grok` — PEP AI + adverse media web research backend */
+	researchProvider: "watchlist-research-provider",
+	/** When true, emit structured shadow metrics for sampled Gemini requests */
+	researchShadow: "watchlist-research-shadow",
 } as const;

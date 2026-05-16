@@ -31,7 +31,7 @@
 	"vectorize": [
 		{
 			"binding": "WATCHLIST_VECTORIZE",
-			"index_name": "watchlist-dev",
+			"index_name": "watchlist-m3-dev",
 		},
 	],
 	"ai": {
@@ -57,7 +57,22 @@
 			"new_sqlite_classes": ["PepEventsDO"],
 		},
 	],
-	// Queue removed - now using thread-svc for ingestion
+	"queues": {
+		"producers": [
+			{
+				"binding": "WATCHLIST_RESEARCH_QUEUE",
+				"queue": "watchlist-research-dev",
+			},
+		],
+		"consumers": [
+			{
+				"queue": "watchlist-research-dev",
+				"max_batch_size": 5,
+				"max_batch_timeout": 10,
+			},
+		],
+	},
+	// Ingestion queue removed - now using thread-svc for ingestion
 	"services": [
 		{
 			"binding": "AUTH_SERVICE",
@@ -84,7 +99,7 @@
 		"ENVIRONMENT": "dev",
 		"TRUSTED_ORIGINS": "*.janovix.workers.dev,http://localhost:*",
 		"AUTH_JWKS_CACHE_TTL": "3600",
-		"PEP_CACHE_ENABLED": "false",
+		"CACHE_ENABLED": "false",
 		"PEP_SEARCH_ENABLED": "false",
 		"PEP_GROK_ENABLED": "true",
 		"ADVERSE_MEDIA_ENABLED": "true",
@@ -93,5 +108,9 @@
 		// "R2_SECRET_ACCESS_KEY": "set-via-secret",
 		// "CLOUDFLARE_ACCOUNT_ID": "set-via-secret",
 		"R2_BUCKET_NAME": "watchlist-uploads-dev",
+		"RESEARCH_PROVIDER": "gemini",
+		"AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/37d5ea9be13559a1ea8f5a46068eac99/watchlist-dev",
+		"GEMINI_MODEL": "gemini-2.5-flash",
+		"RESEARCH_SHADOW": "false",
 	},
 }
