@@ -1,3 +1,10 @@
+# [1.10.0-rc.9](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.8...v1.10.0-rc.9) (2026-05-16)
+
+
+### Features
+
+* add PEP type classification and probability clamping in gemini-research.ts for enhanced compliance and clarity ([37e85fe](https://github.com/janovix/watchlist-svc/commit/37e85fe375ff58946a376715af995fbd06b50cc9))
+
 # [1.10.0-rc.8](https://github.com/janovix/watchlist-svc/compare/v1.10.0-rc.7...v1.10.0-rc.8) (2026-05-12)
 
 
