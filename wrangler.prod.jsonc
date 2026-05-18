@@ -108,7 +108,7 @@
 		// "CLOUDFLARE_ACCOUNT_ID": "set-via-secret",
 		"R2_BUCKET_NAME": "watchlist-uploads",
 		"RESEARCH_PROVIDER": "gemini",
-		"AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/37d5ea9be13559a1ea8f5a46068eac99/watchlist/compat/chat/completions",
+		"AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/37d5ea9be13559a1ea8f5a46068eac99/watchlist",
 		"GEMINI_MODEL": "gemini-2.5-flash",
 		"RESEARCH_SHADOW": "false",
 	},
