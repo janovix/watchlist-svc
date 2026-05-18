@@ -1,3 +1,10 @@
+## [1.11.1](https://github.com/janovix/watchlist-svc/compare/v1.11.0...v1.11.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* update watchlist research queue name in wrangler configuration from 'watchlist-research-prod' to 'watchlist-research' ([8d5dd28](https://github.com/janovix/watchlist-svc/commit/8d5dd28f1fa6613acef289dee4bde8f812b36876))
+
 # [1.11.0](https://github.com/janovix/watchlist-svc/compare/v1.10.0...v1.11.0) (2026-05-16)
 
 
