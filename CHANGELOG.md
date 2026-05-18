@@ -1,3 +1,10 @@
+## [1.11.2](https://github.com/janovix/watchlist-svc/compare/v1.11.1...v1.11.2) (2026-05-18)
+
+
+### Bug Fixes
+
+* update AI_GATEWAY_URL in wrangler configuration for improved endpoint clarity ([398b976](https://github.com/janovix/watchlist-svc/commit/398b976009c273c71031ecc8ad23ac7285d9a837))
+
 ## [1.11.1](https://github.com/janovix/watchlist-svc/compare/v1.11.0...v1.11.1) (2026-05-18)
 
 
