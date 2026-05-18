@@ -3,29 +3,10 @@
 
 ### Bug Fixes
 
+* update AI_GATEWAY_URL in wrangler configuration for improved endpoint clarity ([398b976](https://github.com/janovix/watchlist-svc/commit/398b976009c273c71031ecc8ad23ac7285d9a837))
 * update watchlist research queue name in wrangler configuration from 'watchlist-research-prod' to 'watchlist-research' ([8d5dd28](https://github.com/janovix/watchlist-svc/commit/8d5dd28f1fa6613acef289dee4bde8f812b36876))
 
 # [1.11.0](https://github.com/janovix/watchlist-svc/compare/v1.10.0...v1.11.0) (2026-05-16)
-
-
-### Bug Fixes
-
-* update service binding in wrangler configuration from 'flags-svc-preview' to 'flags-svc' ([14d19d6](https://github.com/janovix/watchlist-svc/commit/14d19d6c19cac52be645a46a4ca36aa6361f6d03))
-
-
-### Features
-
-* add AI_GATEWAY_TOKEN support for Cloudflare AI Gateway authentication ([e59bd30](https://github.com/janovix/watchlist-svc/commit/e59bd30ca598e8ef9954b6767a72b3a9b70a7e7e))
-* add PEP type classification and probability clamping in gemini-research.ts for enhanced compliance and clarity ([37e85fe](https://github.com/janovix/watchlist-svc/commit/37e85fe375ff58946a376715af995fbd06b50cc9))
-* **cors:** allow preflight requests with x-e2e-turnstile-bypass header in CORS middleware and add corresponding tests ([321c824](https://github.com/janovix/watchlist-svc/commit/321c8241f5173afaf224aea45b736a46cdb08a22))
-* **e2e:** add E2E_API_KEY configuration to wrangler files and internal E2E route ([c8fe17f](https://github.com/janovix/watchlist-svc/commit/c8fe17fc4ba1d4097dcc748454afe0c63bdd4c67))
-* implement watchlist research queue for Gemini adverse media processing in search-core and related files ([d1f0550](https://github.com/janovix/watchlist-svc/commit/d1f0550fd9a97aced8a8f8b76c75a51908d8ac8f))
-* **schemas:** introduce shared Zod schemas for watchlist endpoints and refactor existing endpoints to utilize these schemas ([a530356](https://github.com/janovix/watchlist-svc/commit/a530356c901b0bba1406f86da23f3dd8b911d1ae))
-* **search:** update wrangler configurations for new watchlist-m3 index and add entity_id and entity_kind to search queries ([96c982f](https://github.com/janovix/watchlist-svc/commit/96c982f8229a307e73a63ea8cf0ac31b9c285500))
-* update AI_GATEWAY_URL and R2_BUCKET_NAME in wrangler configuration files for improved integration ([2d2057f](https://github.com/janovix/watchlist-svc/commit/2d2057fbdcb2f256b7ed02ddb230b328687c7c83))
-* update README and configuration files for Gemini AI integration ([53a3d12](https://github.com/janovix/watchlist-svc/commit/53a3d1219261d91f7ea8623abecbd77a23ea57e1))
-
-# [1.11.0-rc.1](https://github.com/janovix/watchlist-svc/compare/v1.10.0...v1.11.0-rc.1) (2026-05-16)
 
 
 ### Bug Fixes
