@@ -60,12 +60,12 @@
 		"producers": [
 			{
 				"binding": "WATCHLIST_RESEARCH_QUEUE",
-				"queue": "watchlist-research-prod",
+				"queue": "watchlist-research",
 			},
 		],
 		"consumers": [
 			{
-				"queue": "watchlist-research-prod",
+				"queue": "watchlist-research",
 				"max_batch_size": 5,
 				"max_batch_timeout": 10,
 			},
