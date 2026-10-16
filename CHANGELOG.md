@@ -1,3 +1,10 @@
+# [1.11.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.11.0-rc.3...v1.11.0-rc.4) (2026-10-16)
+
+
+### Bug Fixes
+
+* update GEMINI_MODEL in wrangler configuration from 'gemini-2.5-flash' to 'gemini-3.8-flash' ([e233dca](https://github.com/janovix/watchlist-svc/commit/e233dca95f15319b76177459d227ee1d1099e976))
+
 # [1.11.0-rc.3](https://github.com/janovix/watchlist-svc/compare/v1.11.0-rc.2...v1.11.0-rc.3) (2026-05-18)
 
 
