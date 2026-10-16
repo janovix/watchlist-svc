@@ -109,6 +109,7 @@
 		// "CLOUDFLARE_ACCOUNT_ID": "set-via-secret",
 		"R2_BUCKET_NAME": "watchlist-uploads-dev",
 		"RESEARCH_PROVIDER": "grok",
+		"GROK_MODEL": "grok-4-1-fast-reasoning",
 		"AI_GATEWAY_URL": "https://gateway.ai.cloudflare.com/v1/37d5ea9be13559a1ea8f5a46068eac99/watchlist-dev",
 		"GEMINI_MODEL": "gemini-3.8-flash",
 		"RESEARCH_SHADOW": "false",

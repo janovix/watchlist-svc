@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bindings } from "../../src/index";
 import { performSearch } from "../../src/lib/search-core";
 import { QUERY_SOURCE } from "../../src/lib/query-source";
-import { generateCacheKey, writeCache } from "../../src/lib/search-query-utils";
+import {
+	generateCacheKey,
+	buildResearchCacheSuffix,
+	writeCache,
+} from "../../src/lib/search-query-utils";
 import {
 	generateSyncCacheKey,
 	writeSyncCache,
@@ -112,8 +116,11 @@ describe("performSearch — L1 sync cache & AML Grok cache hits", () => {
 			sat69b: [],
 		});
 
-		const pepCacheSuffix = ["person"].filter(Boolean).join(":");
-		const pepAiKey = generateCacheKey("pep_ai:v2", query, pepCacheSuffix);
+		const pepAiKey = generateCacheKey(
+			"pep_ai:v2",
+			query,
+			buildResearchCacheSuffix("grok", "person"),
+		);
 		await writeCache(env.PEP_CACHE!, pepAiKey, {
 			probability: 0.91,
 			summary: { es: "x", en: "y" },

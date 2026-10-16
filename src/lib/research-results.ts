@@ -7,8 +7,10 @@ import {
 	runWatchlistContainerFailurePipeline,
 	runWatchlistContainerSuccessPipeline,
 } from "./container-callback-pipeline";
+import type { ResearchProviderName } from "./research-provider";
 import {
 	ADVERSE_MEDIA_CACHE_PREFIX,
+	buildResearchCacheSuffix,
 	generateCacheKey,
 	getAdverseMediaResearchCacheTtlSeconds,
 	getPepAiResearchCacheTtlSeconds,
@@ -28,6 +30,7 @@ export async function completePepAiResearch(
 		entityType: string;
 		birthdate?: string;
 		country?: string;
+		provider: ResearchProviderName;
 		probability: number;
 		summary: { es: string; en: string };
 		sources: string[];
@@ -41,13 +44,15 @@ export async function completePepAiResearch(
 		params.searchId,
 	);
 	const cacheOn = await isGlobalCacheEnabled(env, { environment: flagEnv });
-	const pepSuffix = [params.entityType, params.birthdate, params.country]
-		.filter(Boolean)
-		.join(":");
 	const cacheKey = generateCacheKey(
 		PEP_AI_CACHE_PREFIX,
 		params.query,
-		pepSuffix.length > 0 ? pepSuffix : undefined,
+		buildResearchCacheSuffix(
+			params.provider,
+			params.entityType,
+			params.birthdate,
+			params.country,
+		),
 	);
 
 	const cachePayload = {
@@ -136,6 +141,7 @@ export async function completeAdverseMediaResearch(
 		searchId: string;
 		query: string;
 		entityType: string;
+		provider: ResearchProviderName;
 		risk_level: "none" | "low" | "medium" | "high";
 		findings: { es: string; en: string };
 		sources: string[];
@@ -152,7 +158,7 @@ export async function completeAdverseMediaResearch(
 	const cacheKey = generateCacheKey(
 		ADVERSE_MEDIA_CACHE_PREFIX,
 		params.query,
-		params.entityType,
+		buildResearchCacheSuffix(params.provider, params.entityType),
 	);
 
 	const cachePayload = {

@@ -7,6 +7,7 @@ import { createPrismaClient } from "./prisma";
 import {
 	checkAndUpdateQueryCompletion,
 	ADVERSE_MEDIA_CACHE_PREFIX,
+	buildResearchCacheSuffix,
 	generateCacheKey,
 	PEP_AI_CACHE_PREFIX,
 	readCache,
@@ -857,7 +858,7 @@ export async function performSearch(
 	const researchProvider = await resolveResearchProvider(env, organizationId);
 
 	// ===================================================================
-	// PEP AI web research (Gemini + Search Grounding or legacy Grok containers)
+	// PEP AI web research (Gemini + Search Grounding, or Grok via the research queue)
 	// ===================================================================
 	let pepAiSearch:
 		| {
@@ -883,13 +884,15 @@ export async function performSearch(
 			let cachedPepAi: unknown = null;
 			if (globalCacheEnabled && env.PEP_CACHE) {
 				try {
-					const pepCacheSuffix = [entityType, birthDate, countries?.[0]]
-						.filter(Boolean)
-						.join(":");
 					const cacheKey = generateCacheKey(
 						PEP_AI_CACHE_PREFIX,
 						query,
-						pepCacheSuffix || undefined,
+						buildResearchCacheSuffix(
+							researchProvider,
+							entityType,
+							birthDate,
+							countries?.[0],
+						),
 					);
 					cachedPepAi = await readCache(env.PEP_CACHE, cacheKey);
 					if (cachedPepAi) {
@@ -966,6 +969,7 @@ export async function performSearch(
 									entityType,
 									birthdate: birthDate,
 									country: countries?.[0],
+									provider: "gemini",
 									probability: geminiResult.probability,
 									summary: geminiResult.summary,
 									sources: geminiResult.sources,
@@ -1000,58 +1004,65 @@ export async function performSearch(
 							}
 						})(),
 					);
-				} else if (env.THREAD_SVC) {
-					const baseUrl = getCallbackUrl(env.ENVIRONMENT);
-					const callbackUrl = baseUrl + "/internal/grok-pep";
-					const progressCallbackUrl = baseUrl + "/internal/grok-pep/progress";
-
-					const threadPayload = {
-						task_type: "pep_grok",
-						job_params: {
-							query: query,
-							callback_url: callbackUrl,
-							progress_callback_url: progressCallbackUrl,
-							search_id: pepAiSearchId,
+				} else {
+					pepAiSearch = {
+						searchId: pepAiSearchId,
+						status: "pending",
+						result: null,
+					};
+					try {
+						const researchQueue = env.WATCHLIST_RESEARCH_QUEUE;
+						if (!researchQueue) {
+							throw new Error("WATCHLIST_RESEARCH_QUEUE is not configured");
+						}
+						const job: WatchlistResearchJob = {
+							kind: "grok_pep",
+							searchId: pepAiSearchId,
+							query,
+							entityType,
 							birthdate: birthDate,
 							country: countries?.[0],
-						},
-						metadata: {
-							source: "watchlist-svc",
-							triggered_by: "search",
-							needs_grok_key: true,
-							...(env.GROK_API_KEY && {
-								env: { GROK_API_KEY: env.GROK_API_KEY },
-							}),
-						},
-					};
-
-					try {
-						await env.THREAD_SVC.createThread(threadPayload);
-						pepAiSearch = {
-							searchId: pepAiSearchId,
-							status: "pending",
-							result: null,
+							organizationId,
+							environment,
 						};
-					} catch (threadError) {
+						await researchQueue.send(job);
+						console.log("[SearchCore] Enqueued Grok PEP research", {
+							searchId: pepAiSearchId,
+							model: env.GROK_MODEL,
+							environment,
+						});
+						executionCtx.waitUntil(
+							broadcastPepEvent(env, pepAiSearchId, "pep_grok_progress", {
+								phase: "queued",
+								message: "PEP research queued...",
+								progress: 0.1,
+							}).catch((err) =>
+								console.error(
+									"[SearchCore] Grok PEP queued broadcast failed:",
+									err,
+								),
+							),
+						);
+					} catch (queueError) {
+						const msg =
+							queueError instanceof Error
+								? queueError.message
+								: String(queueError);
 						console.error(
-							`[SearchCore] Error creating Grok PEP thread:`,
-							threadError,
+							"[SearchCore] Failed to enqueue Grok PEP research:",
+							queueError,
 						);
 						pepAiSearch = {
 							searchId: pepAiSearchId,
 							status: "failed",
-							result: null,
+							result: { error: msg },
 						};
+						await failPepAiResearch(env, {
+							searchId: pepAiSearchId,
+							error: msg,
+							logPrefix: "[SearchCore/Grok PEP]",
+						});
 					}
-				} else {
-					console.warn(
-						"[SearchCore] PEP AI skipped: provider=grok but THREAD_SVC missing",
-					);
-					pepAiSearch = {
-						searchId: pepAiSearchId,
-						status: "failed",
-						result: null,
-					};
 				}
 			}
 		} catch (error) {
@@ -1067,7 +1078,7 @@ export async function performSearch(
 	}
 
 	// ===================================================================
-	// Adverse media web research (Gemini + Search Grounding or legacy Grok containers)
+	// Adverse media web research (Gemini + Search Grounding, or Grok via the research queue)
 	// ===================================================================
 	let adverseMediaSearch:
 		| {
@@ -1099,7 +1110,7 @@ export async function performSearch(
 					const cacheKey = generateCacheKey(
 						ADVERSE_MEDIA_CACHE_PREFIX,
 						query,
-						entityType,
+						buildResearchCacheSuffix(researchProvider, entityType),
 					);
 					cachedAdverseMedia = await readCache(env.PEP_CACHE, cacheKey);
 					if (cachedAdverseMedia) {
@@ -1217,60 +1228,71 @@ export async function performSearch(
 							logPrefix: "[SearchCore/Gemini adverse]",
 						});
 					}
-				} else if (env.THREAD_SVC) {
-					const baseUrl = getCallbackUrl(env.ENVIRONMENT);
-					const callbackUrl = baseUrl + "/internal/adverse-media";
-					const progressCallbackUrl =
-						baseUrl + "/internal/adverse-media/progress";
-
-					const threadPayload = {
-						task_type: "adverse_media_grok",
-						job_params: {
-							query: query,
-							callback_url: callbackUrl,
-							progress_callback_url: progressCallbackUrl,
-							search_id: adverseMediaSearchId,
-							entity_type: entityType,
+				} else {
+					adverseMediaSearch = {
+						searchId: adverseMediaSearchId,
+						status: "pending",
+						result: null,
+					};
+					try {
+						const researchQueue = env.WATCHLIST_RESEARCH_QUEUE;
+						if (!researchQueue) {
+							throw new Error("WATCHLIST_RESEARCH_QUEUE is not configured");
+						}
+						const job: WatchlistResearchJob = {
+							kind: "grok_adverse_media",
+							searchId: adverseMediaSearchId,
+							query,
+							entityType,
 							birthdate: birthDate,
 							country: countries?.[0],
-						},
-						metadata: {
-							source: "watchlist-svc",
-							triggered_by: "search",
-							needs_grok_key: true,
-							...(env.GROK_API_KEY && {
-								env: { GROK_API_KEY: env.GROK_API_KEY },
-							}),
-						},
-					};
-
-					try {
-						await env.THREAD_SVC.createThread(threadPayload);
-						adverseMediaSearch = {
-							searchId: adverseMediaSearchId,
-							status: "pending",
-							result: null,
+							organizationId,
+							environment,
 						};
-					} catch (threadError) {
+						await researchQueue.send(job);
+						console.log("[SearchCore] Enqueued Grok adverse media research", {
+							searchId: adverseMediaSearchId,
+							entityType,
+							model: env.GROK_MODEL,
+							environment,
+						});
+						executionCtx.waitUntil(
+							broadcastPepEvent(
+								env,
+								adverseMediaSearchId,
+								"adverse_media_progress",
+								{
+									phase: "queued",
+									message: "Adverse media research queued...",
+									progress: 0.1,
+								},
+							).catch((err) =>
+								console.error(
+									"[SearchCore] Grok adverse media queued broadcast failed:",
+									err,
+								),
+							),
+						);
+					} catch (queueError) {
+						const msg =
+							queueError instanceof Error
+								? queueError.message
+								: String(queueError);
 						console.error(
-							`[SearchCore] Error creating adverse media thread:`,
-							threadError,
+							"[SearchCore] Failed to enqueue Grok adverse media research:",
+							queueError,
 						);
 						adverseMediaSearch = {
 							searchId: adverseMediaSearchId,
 							status: "failed",
-							result: null,
+							result: { error: msg },
 						};
+						await failAdverseMediaResearch(env, {
+							searchId: adverseMediaSearchId,
+							error: msg,
+							logPrefix: "[SearchCore/Grok adverse]",
+						});
 					}
-				} else {
-					console.warn(
-						"[SearchCore] Adverse media failed: provider=grok but THREAD_SVC missing",
-					);
-					adverseMediaSearch = {
-						searchId: adverseMediaSearchId,
-						status: "failed",
-						result: null,
-					};
 				}
 			}
 		} catch (error) {

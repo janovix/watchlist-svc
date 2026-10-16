@@ -67,6 +67,7 @@ export class InternalAdverseMediaResultsEndpoint extends OpenAPIRoute {
 			searchId: body.search_id,
 			query: body.query,
 			entityType: body.entity_type,
+			provider: "grok",
 			risk_level: body.risk_level,
 			findings: body.findings,
 			sources: body.sources,

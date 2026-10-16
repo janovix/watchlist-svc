@@ -72,6 +72,7 @@ export class InternalGrokPepResultsEndpoint extends OpenAPIRoute {
 			entityType: body.entity_type ?? "person",
 			birthdate: body.birthdate,
 			country: body.country,
+			provider: "grok",
 			probability: body.probability,
 			summary: body.summary,
 			sources: body.sources,

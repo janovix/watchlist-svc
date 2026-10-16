@@ -5,12 +5,16 @@ import { createPrismaClient } from "../../src/lib/prisma";
 import { performSearch } from "../../src/lib/search-core";
 import { QUERY_SOURCE } from "../../src/lib/query-source";
 import {
+	processWatchlistResearchBatch,
 	processWatchlistResearchMessage,
 	type WatchlistResearchJob,
 } from "../../src/lib/research-queue";
 import { WATCHLIST_EMBEDDING_MODEL } from "../../src/lib/embedding-config";
 import { normalizeIdentifier } from "../../src/lib/matching-utils";
-import { generateCacheKey } from "../../src/lib/search-query-utils";
+import {
+	generateCacheKey,
+	buildResearchCacheSuffix,
+} from "../../src/lib/search-query-utils";
 import { generateSyncCacheKey } from "../../src/lib/watchlist-cache";
 import type {
 	EmbeddingsAdapter,
@@ -61,9 +65,10 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 		} as unknown as Message<WatchlistResearchJob>;
 	}
 
-	async function createPendingAdverseMediaSearch(
+	async function createPendingResearchSearch(
 		searchId: string,
 		query: string,
+		statuses: { pepAiStatus: string; adverseMediaStatus: string },
 	): Promise<void> {
 		await prisma.searchQuery.create({
 			data: {
@@ -79,9 +84,31 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 				sat69bStatus: "completed",
 				unStatus: "completed",
 				pepOfficialStatus: "skipped",
-				pepAiStatus: "skipped",
-				adverseMediaStatus: "pending",
+				pepAiStatus: statuses.pepAiStatus,
+				adverseMediaStatus: statuses.adverseMediaStatus,
 			},
+		});
+	}
+
+	async function createPendingAdverseMediaSearch(
+		searchId: string,
+		query: string,
+	): Promise<void> {
+		await createPendingResearchSearch(searchId, query, {
+			pepAiStatus: "skipped",
+			adverseMediaStatus: "pending",
+		});
+	}
+
+	function grokResponses(text: string): Response {
+		return Response.json({
+			output: [
+				{
+					type: "message",
+					role: "assistant",
+					content: [{ type: "output_text", text }],
+				},
+			],
 		});
 	}
 
@@ -644,7 +671,11 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 			JSON.stringify({ officials: [{ name: query }] }),
 		);
 		await env.PEP_CACHE.put(
-			generateCacheKey("pep_ai:v2", query, "person:1980-01-01:MX"),
+			generateCacheKey(
+				"pep_ai:v2",
+				query,
+				buildResearchCacheSuffix("grok", "person", "1980-01-01", "MX"),
+			),
 			JSON.stringify({
 				probability: 0.8,
 				summary: { es: "si", en: "yes" },
@@ -652,7 +683,11 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 			}),
 		);
 		await env.PEP_CACHE.put(
-			generateCacheKey("adverse_media:v2", query, "person"),
+			generateCacheKey(
+				"adverse_media:v2",
+				query,
+				buildResearchCacheSuffix("grok", "person"),
+			),
 			JSON.stringify({
 				risk_level: "high",
 				findings: { es: "riesgo", en: "risk" },
@@ -887,24 +922,151 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 		expect(row?.adverseMediaResult).toContain("Gemini network down");
 	});
 
-	it("uses Grok THREAD_SVC branches for PEP AI and adverse media", async () => {
-		const createThread = vi.fn(async () => ({ id: "thread-ok" }));
+	it("queue consumer completes Grok PEP and adverse-media research", async () => {
+		const pepSearchId = crypto.randomUUID();
+		const adverseSearchId = crypto.randomUUID();
+		const pepQuery = `Adapter Grok PEP ${crypto.randomUUID()}`;
+		const adverseQuery = `Adapter Grok Adverse ${crypto.randomUUID()}`;
+		await createPendingResearchSearch(pepSearchId, pepQuery, {
+			pepAiStatus: "pending",
+			adverseMediaStatus: "skipped",
+		});
+		await createPendingResearchSearch(adverseSearchId, adverseQuery, {
+			pepAiStatus: "skipped",
+			adverseMediaStatus: "pending",
+		});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+				const body = JSON.parse(String(init?.body)) as {
+					input?: Array<{ content?: string }>;
+				};
+				const userText = body.input?.[1]?.content ?? "";
+				if (userText.includes("politically exposed")) {
+					return grokResponses(
+						JSON.stringify({
+							probability: 0.81,
+							summary: { es: "Senador", en: "Senator" },
+							sources: ["https://news.example/pep"],
+						}),
+					);
+				}
+				return grokResponses(
+					JSON.stringify({
+						risk_level: "medium",
+						findings: { es: "Investigacion", en: "Investigation" },
+						sources: ["https://news.example/adverse"],
+					}),
+				);
+			}),
+		);
+
+		const researchEnv = mergeTestBindingsWithGlobalCacheFlag(
+			env as unknown as Bindings,
+			false,
+			{
+				PEP_EVENTS_DO: undefined,
+				GROK_API_KEY: "test-grok-key",
+			} as unknown as Partial<Bindings>,
+		);
+		await processWatchlistResearchBatch(
+			{
+				messages: [
+					makeResearchMessage({
+						kind: "grok_pep",
+						searchId: pepSearchId,
+						query: pepQuery,
+						entityType: "person",
+						organizationId: "org-research-queue",
+						environment: "production",
+					}),
+					makeResearchMessage({
+						kind: "grok_adverse_media",
+						searchId: adverseSearchId,
+						query: adverseQuery,
+						entityType: "person",
+						organizationId: "org-research-queue",
+						environment: "production",
+					}),
+				],
+				queue: "watchlist-research",
+				ackAll: () => {},
+				retryAll: () => {},
+			},
+			researchEnv,
+		);
+
+		const pepRow = await prisma.searchQuery.findUnique({
+			where: { id: pepSearchId },
+		});
+		const adverseRow = await prisma.searchQuery.findUnique({
+			where: { id: adverseSearchId },
+		});
+		expect(pepRow?.pepAiStatus).toBe("completed");
+		expect(pepRow?.pepAiResult).toContain("Senator");
+		expect(adverseRow?.adverseMediaStatus).toBe("completed");
+		expect(adverseRow?.adverseMediaRiskLevel).toBe("medium");
+		expect(adverseRow?.adverseMediaHasRisk).toBe(true);
+	});
+
+	it("queue consumer persists a final Grok PEP failure", async () => {
+		const searchId = crypto.randomUUID();
+		const query = `Adapter Grok PEP Failure ${crypto.randomUUID()}`;
+		await createPendingResearchSearch(searchId, query, {
+			pepAiStatus: "pending",
+			adverseMediaStatus: "skipped",
+		});
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => {
+				throw new Error("xAI network down");
+			}),
+		);
+
+		await processWatchlistResearchMessage(
+			makeResearchMessage(
+				{
+					kind: "grok_pep",
+					searchId,
+					query,
+					entityType: "person",
+					organizationId: "org-research-queue",
+					environment: "production",
+				},
+				{ attempts: 3 },
+			),
+			mergeTestBindingsWithGlobalCacheFlag(env as unknown as Bindings, false, {
+				PEP_EVENTS_DO: undefined,
+				GROK_API_KEY: "test-grok-key",
+			} as unknown as Partial<Bindings>),
+		);
+
+		const row = await prisma.searchQuery.findUnique({
+			where: { id: searchId },
+		});
+		expect(row?.pepAiStatus).toBe("failed");
+		expect(row?.pepAiResult).toContain("xAI network down");
+	});
+
+	it("enqueues Grok PEP and adverse media research", async () => {
+		const send = vi.fn(async (_job: WatchlistResearchJob) => undefined);
 		const result = await performSearch({
 			env: mergeTestBindingsWithGlobalCacheFlag(
 				env as unknown as Bindings,
 				false,
 				{
 					RESEARCH_PROVIDER: "grok",
-					THREAD_SVC: {
-						createThread,
-					} as unknown as Bindings["THREAD_SVC"],
+					WATCHLIST_RESEARCH_QUEUE: {
+						send,
+					} as unknown as Queue<WatchlistResearchJob>,
+					PEP_EVENTS_DO: undefined,
 					PEP_SEARCH_ENABLED: "false",
 					PEP_GROK_ENABLED: "true",
 					ADVERSE_MEDIA_ENABLED: "true",
 				} as unknown as Partial<Bindings>,
 			),
 			executionCtx: { waitUntil: vi.fn() } as unknown as ExecutionContext,
-			organizationId: "org-grok-thread",
+			organizationId: "org-grok-queue",
 			userId: "user-adapter",
 			source: QUERY_SOURCE.WATCHLIST_QUERY,
 			query: `Adapter Grok ${crypto.randomUUID()}`,
@@ -920,12 +1082,16 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 
 		expect(result.pepAiSearch?.status).toBe("pending");
 		expect(result.adverseMediaSearch?.status).toBe("pending");
-		expect(createThread).toHaveBeenCalledTimes(2);
+		expect(send).toHaveBeenCalledTimes(2);
+		expect(send.mock.calls.map((call) => call[0].kind)).toEqual([
+			"grok_pep",
+			"grok_adverse_media",
+		]);
 	});
 
-	it("marks Grok THREAD_SVC failures without failing the whole search", async () => {
-		const createThread = vi.fn(async () => {
-			throw new Error("thread down");
+	it("marks Grok queue failures without failing the whole search", async () => {
+		const send = vi.fn(async () => {
+			throw new Error("queue down");
 		});
 		const result = await performSearch({
 			env: mergeTestBindingsWithGlobalCacheFlag(
@@ -933,16 +1099,17 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 				false,
 				{
 					RESEARCH_PROVIDER: "grok",
-					THREAD_SVC: {
-						createThread,
-					} as unknown as Bindings["THREAD_SVC"],
+					WATCHLIST_RESEARCH_QUEUE: {
+						send,
+					} as unknown as Queue<WatchlistResearchJob>,
+					PEP_EVENTS_DO: undefined,
 					PEP_SEARCH_ENABLED: "false",
 					PEP_GROK_ENABLED: "true",
 					ADVERSE_MEDIA_ENABLED: "true",
 				} as unknown as Partial<Bindings>,
 			),
 			executionCtx: { waitUntil: vi.fn() } as unknown as ExecutionContext,
-			organizationId: "org-grok-thread-fail",
+			organizationId: "org-grok-queue-fail",
 			userId: "user-adapter",
 			source: QUERY_SOURCE.WATCHLIST_QUERY,
 			query: `Adapter Grok Failure ${crypto.randomUUID()}`,
@@ -958,6 +1125,7 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 
 		expect(result.pepAiSearch?.status).toBe("failed");
 		expect(result.adverseMediaSearch?.status).toBe("failed");
+		expect(result.ofac).toBeDefined();
 	});
 
 	it("skips PEP AI for non-person entity types", async () => {

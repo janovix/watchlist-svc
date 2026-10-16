@@ -28,6 +28,19 @@ export const PEP_AI_CACHE_PREFIX = "pep_ai:v2";
  */
 export const ADVERSE_MEDIA_CACHE_PREFIX = "adverse_media:v2";
 
+/**
+ * Cache suffix that includes the research provider so a Gemini result is not
+ * reused as a Grok result, or the reverse.
+ */
+export function buildResearchCacheSuffix(
+	provider: string,
+	...parts: Array<string | undefined | null>
+): string {
+	return [provider, ...parts]
+		.filter((part): part is string => typeof part === "string" && part !== "")
+		.join(":");
+}
+
 export type PepAiCachePayload = {
 	probability: number;
 	summary: { es: string; en: string };

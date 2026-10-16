@@ -117,9 +117,11 @@ export type Bindings = Env & {
 	 */
 	INTERNAL_SECRET?: string;
 	/**
-	 * Grok API key (legacy `researchProvider=grok` + thread-svc containers only).
+	 * xAI API key for in-worker Grok PEP and adverse-media research.
 	 */
 	GROK_API_KEY?: string;
+	/** Override Grok model id (default grok-4-1-fast-reasoning). */
+	GROK_MODEL?: string;
 	/** Base URL for Cloudflare AI Gateway (no trailing slash). See docs/GEMINI_AI_GATEWAY.md */
 	AI_GATEWAY_URL?: string;
 	/** Cloudflare AI Gateway authentication token (secret). Required when Authenticated Gateway is enabled. */
@@ -132,7 +134,7 @@ export type Bindings = Env & {
 	RESEARCH_PROVIDER?: string;
 	/** When true, sampled structured logs for dashboards (see research-shadow.ts). */
 	RESEARCH_SHADOW?: string;
-	/** Durable queue for Gemini watchlist research jobs. */
+	/** Durable queue for Gemini and Grok watchlist research jobs. */
 	WATCHLIST_RESEARCH_QUEUE?: Queue<WatchlistResearchJob>;
 	/**
 	 * R2 bucket for storing uploaded watchlist files (XML, etc.)

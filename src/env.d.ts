@@ -15,6 +15,8 @@ declare namespace Cloudflare {
 			) => Promise<{ data: number[][] }>;
 		};
 		GROK_API_KEY?: string;
+		/** Override Grok model id (default grok-4-1-fast-reasoning). */
+		GROK_MODEL?: string;
 		/**
 		 * Sentry DSN for error tracking.
 		 * If not set, Sentry will be disabled.
