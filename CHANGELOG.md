@@ -1,3 +1,10 @@
+# [1.11.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.11.0-rc.4...v1.11.0-rc.5) (2026-10-16)
+
+
+### Features
+
+* enhance gemini-research with adverse risk classification and source evidence matching functions ([718ac7c](https://github.com/janovix/watchlist-svc/commit/718ac7c5e90d7f607986d020cf8612faa02cb2d0))
+
 # [1.11.0-rc.4](https://github.com/janovix/watchlist-svc/compare/v1.11.0-rc.3...v1.11.0-rc.4) (2026-10-16)
 
 
