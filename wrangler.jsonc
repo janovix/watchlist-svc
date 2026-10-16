@@ -99,7 +99,7 @@
 		"ENVIRONMENT": "dev",
 		"TRUSTED_ORIGINS": "*.janovix.workers.dev,http://localhost:*",
 		"AUTH_JWKS_CACHE_TTL": "3600",
-		"CACHE_ENABLED": "false",
+		"CACHE_ENABLED": "true",
 		"PEP_SEARCH_ENABLED": "false",
 		"PEP_GROK_ENABLED": "true",
 		"ADVERSE_MEDIA_ENABLED": "true",
