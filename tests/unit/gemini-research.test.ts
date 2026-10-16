@@ -7,6 +7,8 @@ import {
 	parsePepType,
 	runGeminiAdverseMediaResearch,
 	runGeminiPepResearch,
+	sourceEvidenceMatchesQuery,
+	parseAdverseRiskLevel,
 } from "../../src/lib/gemini-research";
 
 type TestGroundingChunk = {
@@ -22,6 +24,19 @@ const DEFAULT_GROUNDING_CHUNKS: TestGroundingChunk[] = [
 		title: "news.example",
 	},
 ];
+
+function riskLevelResponse(level: string): Response {
+	return geminiResponse(JSON.stringify({ risk_level: level }), []);
+}
+
+function namedChunks(name: string): TestGroundingChunk[] {
+	return [
+		{
+			uri: "https://vertex.example/redirect/a#section",
+			title: name,
+		},
+	];
+}
 
 function geminiEnv(overrides: Partial<Bindings> = {}): Bindings {
 	return {
@@ -155,6 +170,7 @@ describe("gemini-research", () => {
 				summary: { es: "Si", en: "Yes" },
 				sources: ["https://news.example/a", "https://ungrounded.example/story"],
 			}),
+			namedChunks("Jane Public"),
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -198,6 +214,7 @@ describe("gemini-research", () => {
 					summary: { es: "PEP por parentesco", en: "PEP by family tie" },
 					sources: ["https://news.example/a"],
 				}),
+				namedChunks("Ricardo Salinas Pliego"),
 			),
 		);
 
@@ -219,6 +236,7 @@ describe("gemini-research", () => {
 					summary: { es: "Presidenta", en: "President" },
 					sources: ["https://news.example/a"],
 				}),
+				namedChunks("Claudia Sheinbaum"),
 			),
 		);
 
@@ -239,6 +257,7 @@ describe("gemini-research", () => {
 					summary: { es: "Asociado", en: "Associate" },
 					sources: ["https://news.example/a"],
 				}),
+				namedChunks("Business Associate"),
 			),
 			geminiResponse(
 				JSON.stringify({
@@ -247,6 +266,7 @@ describe("gemini-research", () => {
 					summary: { es: "Asesor", en: "Advisor" },
 					sources: ["https://news.example/a"],
 				}),
+				namedChunks("Advisory Council Member"),
 			),
 		]);
 		vi.stubGlobal("fetch", fetchMock);
@@ -272,6 +292,7 @@ describe("gemini-research", () => {
 					summary: { es: "Sin tipo", en: "No type" },
 					sources: ["https://news.example/a"],
 				}),
+				namedChunks("Missing Pep Type"),
 			),
 			geminiResponse(
 				JSON.stringify({
@@ -280,6 +301,7 @@ describe("gemini-research", () => {
 					summary: { es: "Tipo invalido", en: "Invalid type" },
 					sources: ["https://news.example/a"],
 				}),
+				namedChunks("Invalid Pep Type"),
 			),
 		]);
 		vi.stubGlobal("fetch", fetchMock);
@@ -337,14 +359,18 @@ describe("gemini-research", () => {
 					findings: { es: "Hallazgo", en: "Finding" },
 					sources: ["https://news.example/a"],
 				}),
+				namedChunks("Jane Public"),
 			),
+			riskLevelResponse("medium"),
 			geminiResponse(
 				JSON.stringify({
 					risk_level: "high",
 					findings: { es: "Empresa", en: "Company" },
 					sources: ["https://news.example/a"],
 				}),
+				namedChunks("Example SA"),
 			),
+			riskLevelResponse("high"),
 		]);
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -364,7 +390,7 @@ describe("gemini-research", () => {
 		expect(organization.risk_level).toBe("high");
 		expect(person.sources).toEqual(["https://news.example/article"]);
 		expect(organization.sources).toEqual(["https://news.example/article"]);
-		expect(fetchMock).toHaveBeenCalledTimes(4);
+		expect(fetchMock).toHaveBeenCalledTimes(6);
 	});
 
 	it("defaults invalid adverse risk and clears adverse findings without grounding chunks", async () => {
@@ -376,6 +402,7 @@ describe("gemini-research", () => {
 					sources: ["https://news.example/a"],
 				}),
 			),
+			riskLevelResponse("none"),
 			geminiResponse(
 				JSON.stringify({
 					risk_level: "high",
@@ -384,6 +411,7 @@ describe("gemini-research", () => {
 				}),
 				[],
 			),
+			riskLevelResponse("high"),
 		]);
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -412,6 +440,7 @@ describe("gemini-research", () => {
 					summary: { es: "Tal vez", en: "Maybe" },
 					sources: ["https://news.example/a"],
 				}),
+				namedChunks("Retry Person"),
 			),
 		]);
 		vi.stubGlobal("fetch", fetchMock);
@@ -477,14 +506,17 @@ describe("gemini-research", () => {
 	it("parses fenced JSON from Gemini text parts", async () => {
 		vi.stubGlobal(
 			"fetch",
-			mockGeminiAndRedirectFetch(`\`\`\`json
+			mockGeminiAndRedirectFetch(
+				`\`\`\`json
 {
   "probability": 0.2,
   "pep_type": "advisory_or_distant",
   "summary": { "es": "Bajo", "en": "Low" },
   "sources": ["https://news.example/a"]
 }
-\`\`\``),
+\`\`\``,
+				namedChunks("Fenced Person"),
+			),
 		);
 
 		const result = await runGeminiPepResearch(geminiEnv(), {
@@ -494,5 +526,156 @@ describe("gemini-research", () => {
 		expect(result.probability).toBe(0.2);
 		expect(result.pep_type).toBe("advisory_or_distant");
 		expect(result.summary.en).toBe("Low");
+	});
+
+	it("uses the classifier risk level when research labeled sanctions as none", async () => {
+		const fetchMock = mockGeminiSequenceAndRedirectFetch([
+			geminiResponse(
+				JSON.stringify({
+					risk_level: "none",
+					findings: {
+						es: "Gedo Hamdan Ahmed ha sido objeto de sanciones multilaterales de OFAC y del Consejo de Seguridad de la ONU.",
+						en: "Gedo Hamdan Ahmed is under OFAC and UN Security Council sanctions.",
+					},
+					sources: ["https://news.example/a"],
+				}),
+				namedChunks("Gedo Hamdan Ahmed"),
+			),
+			riskLevelResponse("high"),
+		]);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const result = await runGeminiAdverseMediaResearch(geminiEnv(), {
+			query: "Gedo Hamdan Ahmed",
+			entityType: "person",
+		});
+
+		expect(result.risk_level).toBe("high");
+		expect(result.findings.es).toContain("sanciones");
+		const classifierInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+		expect(JSON.parse(String(classifierInit.body))).not.toHaveProperty("tools");
+	});
+
+	it("parses adverse risk labels from the model", () => {
+		expect(parseAdverseRiskLevel("HIGH")).toBe("high");
+		expect(parseAdverseRiskLevel("Alto")).toBe("high");
+		expect(parseAdverseRiskLevel("severe")).toBe("none");
+	});
+	it("matches a person only when source text contains their given name and surnames", () => {
+		const lazzeri =
+			"Roberto Lazzeri Montaño was confirmed as Ambassador of Mexico to the United States";
+		expect(
+			sourceEvidenceMatchesQuery("Rodrigo Ignacio Spesia Ruiz", lazzeri),
+		).toBe(false);
+		expect(
+			sourceEvidenceMatchesQuery(
+				"Rodrigo Ignacio Spesia Ruiz",
+				"Rodrigo Ignacio Spesia Ruiz es una persona políticamente expuesta",
+			),
+		).toBe(true);
+		expect(
+			sourceEvidenceMatchesQuery(
+				"Joaquin Guzman Perez",
+				"Joaquin Guzman Loera",
+			),
+		).toBe(false);
+		expect(
+			sourceEvidenceMatchesQuery(
+				"Joaquin Guzman",
+				"Joaquin Archivaldo Guzman Loera",
+			),
+		).toBe(true);
+		expect(
+			sourceEvidenceMatchesQuery(
+				"Fernando Calatayud Solis",
+				"Alexis Calatayud",
+			),
+		).toBe(false);
+	});
+
+	it("drops a PEP hit when the cited page is about someone else", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (...args: Parameters<typeof fetch>): Promise<Response> => {
+				const url = requestUrl(args[0]);
+				const method = (args[1]?.method ?? "GET").toUpperCase();
+				if (url === GEMINI_URL) {
+					return geminiResponse(
+						JSON.stringify({
+							probability: 0.95,
+							pep_type: "direct_current",
+							summary: {
+								es: "Rodrigo Ignacio Spesia Ruiz es embajador de México. En noviembre de 2020 se unió a la Secretaría de Hacienda.",
+								en: "Rodrigo Ignacio Spesia Ruiz is the ambassador of Mexico.",
+							},
+							sources: ["https://embamex.sre.gob.mx/ambassador"],
+						}),
+						[
+							{
+								uri: "https://vertex.example/redirect/a#section",
+								title: "Roberto Lazzeri Montaño",
+							},
+						],
+					);
+				}
+				if (method === "HEAD") {
+					return redirectResponse("https://embamex.sre.gob.mx/ambassador");
+				}
+				return new Response(
+					"<html><p>Roberto Lazzeri Montaño was confirmed by the Senate as Ambassador Extraordinary and Plenipotentiary of Mexico to the United States.</p></html>",
+					{ status: 200, headers: { "content-type": "text/html" } },
+				);
+			}),
+		);
+
+		const result = await runGeminiPepResearch(geminiEnv(), {
+			query: "Rodrigo Ignacio Spesia Ruiz",
+		});
+
+		expect(result.probability).toBe(0);
+		expect(result.pep_type).toBe("none");
+		expect(result.summary).toEqual({ es: "", en: "" });
+		expect(result.sources).toEqual([]);
+	});
+
+	it("keeps a PEP hit when the page body names the queried person", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (...args: Parameters<typeof fetch>): Promise<Response> => {
+				const url = requestUrl(args[0]);
+				const method = (args[1]?.method ?? "GET").toUpperCase();
+				if (url === GEMINI_URL) {
+					return geminiResponse(
+						JSON.stringify({
+							probability: 0.9,
+							pep_type: "direct_current",
+							summary: { es: "Presidenta", en: "President" },
+							sources: ["https://news.example/a"],
+						}),
+						[
+							{
+								uri: "https://vertex.example/redirect/a#section",
+								title: "The President",
+							},
+						],
+					);
+				}
+				if (method === "HEAD") {
+					return redirectResponse("https://news.example/article");
+				}
+				return new Response(
+					"<p>Claudia Sheinbaum took office as president of Mexico.</p>",
+					{ status: 200, headers: { "content-type": "text/html" } },
+				);
+			}),
+		);
+
+		const result = await runGeminiPepResearch(geminiEnv(), {
+			query: "Claudia Sheinbaum",
+		});
+
+		expect(result.probability).toBe(0.9);
+		expect(result.pep_type).toBe("direct_current");
+		expect(result.sources).toEqual(["https://news.example/article"]);
 	});
 });

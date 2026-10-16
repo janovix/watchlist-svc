@@ -91,6 +91,16 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 			vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
 				const url = String(input);
 				if (url.includes(":generateContent")) {
+					const requestBody = typeof init?.body === "string" ? init.body : "";
+					const userText =
+						(
+							JSON.parse(requestBody) as {
+								contents?: Array<{ parts?: Array<{ text?: string }> }>;
+							}
+						).contents?.[0]?.parts?.[0]?.text ?? "";
+					const named = userText.match(
+						/involving (?:the organization )?([^\n.]+)/,
+					);
 					return Response.json({
 						candidates: [
 							{
@@ -113,7 +123,7 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 										{
 											web: {
 												uri: "https://vertex.example/redirect",
-												title: "news.example",
+												title: named?.[1] ?? "news.example",
 											},
 										},
 									],

@@ -4,11 +4,35 @@
  */
 
 import type { Bindings } from "../index";
+import { normalizeName } from "./matching-utils";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const REQUEST_TIMEOUT_MS = 90_000;
 const REDIRECT_RESOLVE_TIMEOUT_MS = 5_000;
+const SOURCE_TEXT_TIMEOUT_MS = 5_000;
 const MAX_CHUNKS_TO_RESOLVE = 10;
+const MAX_SOURCE_PAGES_TO_READ = 3;
+const MAX_SOURCE_TEXT_CHARS = 20_000;
+
+/** Spanish/Portuguese particles that are not identity tokens. */
+const NAME_PARTICLES = new Set([
+	"de",
+	"del",
+	"la",
+	"las",
+	"los",
+	"y",
+	"e",
+	"da",
+	"das",
+	"do",
+	"dos",
+	"van",
+	"von",
+	"di",
+	"san",
+	"santa",
+]);
 
 export type PepType =
 	| "direct_current"
@@ -146,6 +170,7 @@ Respond ONLY with a single JSON object (no markdown, no code fences) using this 
   "sources": ["<URL 1>", "<URL 2>", ...]
 }
 Use "none" only when you find no credible adverse media. Use "high" for confirmed serious criminal convictions, sanctions, money laundering, corruption, fraud, terrorism, drug trafficking, or major regulatory/legal actions.
+risk_level must match the findings. If the findings describe sanctions, criminal convictions, terrorism, atrocities, or money laundering, risk_level MUST be "high". Never return "none" together with those facts.
 CRITICAL - Identity Matching Rules:
 - You MUST only report findings that pertain to the EXACT person queried.
 - The queried name may appear in different word orders (for example, "LOERA GUZMAN JOAQUIN" = "JOAQUIN GUZMAN LOERA") or as a shorter subset of a longer legal name (for example, "JOAQUIN GUZMAN" may match "JOAQUIN ARCHIVALDO GUZMAN LOERA").
@@ -166,6 +191,7 @@ Respond ONLY with a single JSON object (no markdown, no code fences) using this 
   "sources": ["<URL 1>", "<URL 2>", ...]
 }
 Use "none" only when you find no credible adverse media. Use "high" for confirmed sanctions, major regulatory actions, serious criminal allegations or convictions, money laundering, corruption, fraud, terrorism, tax evasion, or other severe legal proceedings.
+risk_level must match the findings. If the findings describe sanctions, criminal convictions, terrorism, atrocities, or money laundering, risk_level MUST be "high". Never return "none" together with those facts.
 `.trim();
 
 export function normalizeCitationUrl(raw: string): string {
@@ -257,6 +283,134 @@ export async function resolveGroundingSources(
 	return sources;
 }
 
+const ADVERSE_RISK_ALIASES: Record<
+	string,
+	AdverseMediaGeminiResult["risk_level"]
+> = {
+	none: "none",
+	ninguno: "none",
+	ninguna: "none",
+	low: "low",
+	bajo: "low",
+	baja: "low",
+	medium: "medium",
+	medio: "medium",
+	media: "medium",
+	moderate: "medium",
+	moderado: "medium",
+	moderada: "medium",
+	high: "high",
+	alto: "high",
+	alta: "high",
+};
+
+const ADVERSE_RISK_CLASSIFIER = `
+You assign one adverse-media risk level to findings that were already written.
+Do not search. Do not rewrite the findings.
+Respond ONLY with a single JSON object: {"risk_level":"none"|"low"|"medium"|"high"}
+- "none": the findings state that there is no credible adverse media.
+- "low": minor, unconfirmed, or old reputational mentions.
+- "medium": credible allegations, investigations, or lawsuits.
+- "high": confirmed sanctions, criminal convictions, terrorism, atrocities, money laundering, corruption, fraud, drug trafficking, or a major regulatory or legal action.
+If the findings describe any high fact, return "high".
+`.trim();
+
+export function parseAdverseRiskLevel(
+	raw: unknown,
+): AdverseMediaGeminiResult["risk_level"] {
+	const value = String(raw ?? "")
+		.trim()
+		.toLowerCase();
+	return ADVERSE_RISK_ALIASES[value] ?? "none";
+}
+
+/**
+ * True when source text names the queried person.
+ * Every surname token must appear, plus at least one given name.
+ * The model summary is not evidence: Gemini copies the query name onto other people's biographies.
+ */
+export function sourceEvidenceMatchesQuery(
+	query: string,
+	evidence: string,
+): boolean {
+	const tokens = normalizeName(query)
+		.toLowerCase()
+		.split(" ")
+		.filter((token) => token.length >= 2 && !NAME_PARTICLES.has(token));
+	if (tokens.length === 0) return false;
+
+	const normalizedEvidence = normalizeName(evidence).toLowerCase();
+	const contains = (token: string): boolean =>
+		new RegExp(`(?:^|[^a-z0-9])${token}(?:[^a-z0-9]|$)`).test(
+			normalizedEvidence,
+		);
+
+	if (tokens.length === 1) return contains(tokens[0]);
+
+	const surnames =
+		tokens.length >= 3 ? tokens.slice(-2) : [tokens[tokens.length - 1]];
+	const given = tokens.slice(0, tokens.length - surnames.length);
+	return given.some(contains) && surnames.every(contains);
+}
+
+function htmlToText(html: string): string {
+	return html
+		.replace(/<script[\s\S]*?<\/script>/gi, " ")
+		.replace(/<style[\s\S]*?<\/style>/gi, " ")
+		.replace(/<[^>]+>/g, " ")
+		.replace(/&[a-z]+;/gi, " ")
+		.replace(/&#\d+;/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+async function fetchSourceText(url: string): Promise<string> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), SOURCE_TEXT_TIMEOUT_MS);
+	try {
+		const res = await fetch(url, {
+			method: "GET",
+			redirect: "follow",
+			signal: controller.signal,
+			headers: { Accept: "text/html,text/plain,application/xhtml+xml" },
+		});
+		if (!res.ok) return "";
+		const contentType = res.headers.get("content-type") ?? "";
+		if (
+			contentType !== "" &&
+			!/text\/|application\/xhtml|application\/json/i.test(contentType)
+		) {
+			return "";
+		}
+		const raw = await res.text();
+		return htmlToText(raw).slice(0, MAX_SOURCE_TEXT_CHARS);
+	} catch {
+		return "";
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/** Titles first. Page bodies are read only when titles do not already name the subject. */
+async function loadSourceEvidence(
+	query: string,
+	chunks: GroundingChunkSource[],
+	resolvedSources: string[],
+): Promise<string> {
+	const titleEvidence = chunks
+		.map((chunk) => chunk.title)
+		.filter((title) => title.trim() !== "")
+		.join("\n");
+	if (sourceEvidenceMatchesQuery(query, titleEvidence)) return titleEvidence;
+
+	const pages = await Promise.all(
+		chunks
+			.slice(0, MAX_SOURCE_PAGES_TO_READ)
+			.map((chunk) => fetchSourceText(chunk.uri)),
+	);
+	return [titleEvidence, resolvedSources.join("\n"), ...pages].join("\n");
+}
+
 function parseJsonObject(text: string): Record<string, unknown> {
 	const trimmed = text.trim();
 	try {
@@ -322,11 +476,12 @@ async function generateStructured(
 	env: Bindings,
 	systemInstruction: string,
 	userText: string,
+	options: { search: boolean } = { search: true },
 ): Promise<{
 	parsed: Record<string, unknown>;
 	groundingChunks: GroundingChunkSource[];
 }> {
-	const body = {
+	const body: Record<string, unknown> = {
 		systemInstruction: {
 			parts: [{ text: systemInstruction }],
 		},
@@ -336,13 +491,15 @@ async function generateStructured(
 				parts: [{ text: userText }],
 			},
 		],
-		tools: [{ google_search: {} }],
 		generationConfig: {
 			temperature: 0.2,
 			thinkingConfig: { thinkingBudget: 0 },
 		},
 		safetySettings: SAFETY_SETTINGS,
 	};
+	if (options.search) {
+		body.tools = [{ google_search: {} }];
+	}
 
 	let res = await postGemini(env, body);
 	if (res.status === 429 || res.status >= 500) {
@@ -372,6 +529,21 @@ async function generateStructured(
 	const groundingChunks = extractGroundingChunks(first);
 	const parsed = parseJsonObject(text);
 	return { parsed, groundingChunks };
+}
+
+/** Scores findings only. Search and identity stay on the research call. */
+async function classifyAdverseRisk(
+	env: Bindings,
+	es: string,
+	en: string,
+): Promise<AdverseMediaGeminiResult["risk_level"]> {
+	const { parsed } = await generateStructured(
+		env,
+		ADVERSE_RISK_CLASSIFIER,
+		`Spanish findings:\n${es}\n\nEnglish findings:\n${en}`,
+		{ search: false },
+	);
+	return parseAdverseRiskLevel(parsed.risk_level ?? parsed.riskLevel);
 }
 
 /**
@@ -434,17 +606,40 @@ export async function runGeminiPepResearch(
 	}
 
 	const summary = parsed.summary as Record<string, unknown> | undefined;
-	const es = typeof summary?.es === "string" ? summary.es : "";
-	const en = typeof summary?.en === "string" ? summary.en : "";
-	const sources = await resolveGroundingSources(groundingChunks);
+	let es = typeof summary?.es === "string" ? summary.es : "";
+	let en = typeof summary?.en === "string" ? summary.en : "";
+	let sources = await resolveGroundingSources(groundingChunks);
+	let confirmedType = pep_type;
 	if (groundingChunks.length === 0 && probability > 0) {
 		console.warn(
 			"[GeminiResearch] PEP: no grounding chunks returned; forcing probability to 0",
 		);
 		probability = 0;
 	}
+	if (probability > 0) {
+		const evidence = await loadSourceEvidence(
+			params.query,
+			groundingChunks,
+			sources,
+		);
+		if (!sourceEvidenceMatchesQuery(params.query, evidence)) {
+			console.warn(
+				`[GeminiResearch] PEP: sources do not name "${params.query}"; forcing probability to 0`,
+			);
+			probability = 0;
+			confirmedType = "none";
+			es = "";
+			en = "";
+			sources = [];
+		}
+	}
 
-	return { probability, pep_type, summary: { es, en }, sources };
+	return {
+		probability,
+		pep_type: confirmedType,
+		summary: { es, en },
+		sources,
+	};
 }
 
 export async function runGeminiAdverseMediaResearch(
@@ -485,21 +680,50 @@ export async function runGeminiAdverseMediaResearch(
 		userParts.join("\n"),
 	);
 
-	const rlRaw = parsed.risk_level;
-	const allowedRl = new Set(["none", "low", "medium", "high"]);
-	let risk_level = allowedRl.has(String(rlRaw))
-		? (String(rlRaw) as AdverseMediaGeminiResult["risk_level"])
-		: "none";
+	const rlRaw = parsed.risk_level ?? parsed.riskLevel;
+	let risk_level = parseAdverseRiskLevel(rlRaw);
 
 	const findings = parsed.findings as Record<string, unknown> | undefined;
-	const es = typeof findings?.es === "string" ? findings.es : "";
-	const en = typeof findings?.en === "string" ? findings.en : "";
-	const sources = await resolveGroundingSources(groundingChunks);
+	let es = typeof findings?.es === "string" ? findings.es : "";
+	let en = typeof findings?.en === "string" ? findings.en : "";
+	if (es.trim() !== "" || en.trim() !== "") {
+		try {
+			const classified = await classifyAdverseRisk(env, es, en);
+			if (classified !== risk_level) {
+				console.warn(
+					`[GeminiResearch] Adverse media: classifier set risk_level ${classified} (research returned ${String(rlRaw)})`,
+				);
+			}
+			risk_level = classified;
+		} catch (error) {
+			console.warn(
+				"[GeminiResearch] Adverse media: risk classifier failed; keeping the research risk_level",
+				error,
+			);
+		}
+	}
+	let sources = await resolveGroundingSources(groundingChunks);
 	if (groundingChunks.length === 0 && risk_level !== "none") {
 		console.warn(
 			"[GeminiResearch] Adverse media: no grounding chunks returned; forcing risk_level to none",
 		);
 		risk_level = "none";
+	}
+	if (risk_level !== "none") {
+		const evidence = await loadSourceEvidence(
+			params.query,
+			groundingChunks,
+			sources,
+		);
+		if (!sourceEvidenceMatchesQuery(params.query, evidence)) {
+			console.warn(
+				`[GeminiResearch] Adverse media: sources do not name "${params.query}"; forcing risk_level to none`,
+			);
+			risk_level = "none";
+			es = "";
+			en = "";
+			sources = [];
+		}
 	}
 
 	return { risk_level, findings: { es, en }, sources };
