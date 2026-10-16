@@ -113,7 +113,7 @@ describe("performSearch — L1 sync cache & AML Grok cache hits", () => {
 		});
 
 		const pepCacheSuffix = ["person"].filter(Boolean).join(":");
-		const pepAiKey = generateCacheKey("pep_ai", query, pepCacheSuffix);
+		const pepAiKey = generateCacheKey("pep_ai:v2", query, pepCacheSuffix);
 		await writeCache(env.PEP_CACHE!, pepAiKey, {
 			probability: 0.91,
 			summary: { es: "x", en: "y" },

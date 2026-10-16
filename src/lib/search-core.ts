@@ -6,7 +6,9 @@ import { ApiException } from "chanfana";
 import { createPrismaClient } from "./prisma";
 import {
 	checkAndUpdateQueryCompletion,
+	ADVERSE_MEDIA_CACHE_PREFIX,
 	generateCacheKey,
+	PEP_AI_CACHE_PREFIX,
 	readCache,
 } from "./search-query-utils";
 import {
@@ -885,7 +887,7 @@ export async function performSearch(
 						.filter(Boolean)
 						.join(":");
 					const cacheKey = generateCacheKey(
-						"pep_ai",
+						PEP_AI_CACHE_PREFIX,
 						query,
 						pepCacheSuffix || undefined,
 					);
@@ -1094,7 +1096,11 @@ export async function performSearch(
 			let cachedAdverseMedia: unknown = null;
 			if (globalCacheEnabled && env.PEP_CACHE) {
 				try {
-					const cacheKey = generateCacheKey("adverse_media", query, entityType);
+					const cacheKey = generateCacheKey(
+						ADVERSE_MEDIA_CACHE_PREFIX,
+						query,
+						entityType,
+					);
 					cachedAdverseMedia = await readCache(env.PEP_CACHE, cacheKey);
 					if (cachedAdverseMedia) {
 						console.log(

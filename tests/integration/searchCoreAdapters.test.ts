@@ -644,7 +644,7 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 			JSON.stringify({ officials: [{ name: query }] }),
 		);
 		await env.PEP_CACHE.put(
-			generateCacheKey("pep_ai", query, "person:1980-01-01:MX"),
+			generateCacheKey("pep_ai:v2", query, "person:1980-01-01:MX"),
 			JSON.stringify({
 				probability: 0.8,
 				summary: { es: "si", en: "yes" },
@@ -652,7 +652,7 @@ describe("performSearch — injected embeddings / vector adapters", () => {
 			}),
 		);
 		await env.PEP_CACHE.put(
-			generateCacheKey("adverse_media", query, "person"),
+			generateCacheKey("adverse_media:v2", query, "person"),
 			JSON.stringify({
 				risk_level: "high",
 				findings: { es: "riesgo", en: "risk" },

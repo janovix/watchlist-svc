@@ -353,7 +353,7 @@ describe("Internal UNSC Endpoints", () => {
 
 		it("should handle batch with multiple records (sub-batching)", async () => {
 			// Create 3 simple records to test sub-batching without hitting D1 limits
-			// SUB_BATCH_SIZE = 8, each record has 17 fields = 136 params per sub-batch (well under D1's 999 limit)
+			// SUB_BATCH_SIZE = 6, each record binds 15 values = 90 params (D1 cap is 100)
 			const records = Array.from({ length: 3 }, (_, i) => ({
 				id: `5${String(i).padStart(3, "0")}`,
 				party_type: "Individual" as const,

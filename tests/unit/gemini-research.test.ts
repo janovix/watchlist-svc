@@ -261,12 +261,26 @@ describe("gemini-research", () => {
 			),
 			geminiResponse(
 				JSON.stringify({
+					probability: 0.9,
+					pep_type: "associate",
+				}),
+				[],
+			),
+			geminiResponse(
+				JSON.stringify({
 					probability: 0.8,
 					pep_type: "advisory_or_distant",
 					summary: { es: "Asesor", en: "Advisor" },
 					sources: ["https://news.example/a"],
 				}),
 				namedChunks("Advisory Council Member"),
+			),
+			geminiResponse(
+				JSON.stringify({
+					probability: 0.8,
+					pep_type: "advisory_or_distant",
+				}),
+				[],
 			),
 		]);
 		vi.stubGlobal("fetch", fetchMock);
@@ -294,6 +308,7 @@ describe("gemini-research", () => {
 				}),
 				namedChunks("Missing Pep Type"),
 			),
+			geminiResponse(JSON.stringify({ probability: 0.9 }), []),
 			geminiResponse(
 				JSON.stringify({
 					probability: 0.9,
@@ -302,6 +317,10 @@ describe("gemini-research", () => {
 					sources: ["https://news.example/a"],
 				}),
 				namedChunks("Invalid Pep Type"),
+			),
+			geminiResponse(
+				JSON.stringify({ probability: 0.9, pep_type: "invalid_type" }),
+				[],
 			),
 		]);
 		vi.stubGlobal("fetch", fetchMock);
@@ -442,6 +461,13 @@ describe("gemini-research", () => {
 				}),
 				namedChunks("Retry Person"),
 			),
+			geminiResponse(
+				JSON.stringify({
+					pep_type: "related_family",
+					probability: 0.4,
+				}),
+				[],
+			),
 		]);
 		vi.stubGlobal("fetch", fetchMock);
 
@@ -452,7 +478,7 @@ describe("gemini-research", () => {
 		const result = await pending;
 
 		expect(result.probability).toBe(0.4);
-		expect(fetchMock).toHaveBeenCalledTimes(3);
+		expect(fetchMock).toHaveBeenCalledTimes(4);
 	});
 
 	it("throws for non-OK Gemini responses and malformed successful payloads", async () => {
@@ -552,14 +578,143 @@ describe("gemini-research", () => {
 
 		expect(result.risk_level).toBe("high");
 		expect(result.findings.es).toContain("sanciones");
-		const classifierInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
-		expect(JSON.parse(String(classifierInit.body))).not.toHaveProperty("tools");
+		const classifierCall = fetchMock.mock.calls.find((call) => {
+			const init = call[1] as RequestInit | undefined;
+			if (!init?.body) return false;
+			const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+			return "responseJsonSchema" in ((body.generationConfig as object) ?? {});
+		});
+		const classifierBody = JSON.parse(
+			String((classifierCall?.[1] as RequestInit).body),
+		) as Record<string, unknown>;
+		expect(classifierBody).not.toHaveProperty("tools");
+		expect(classifierBody.generationConfig).toEqual(
+			expect.objectContaining({
+				responseMimeType: "application/json",
+				responseJsonSchema: expect.objectContaining({
+					required: ["risk_level"],
+				}),
+			}),
+		);
 	});
 
 	it("parses adverse risk labels from the model", () => {
 		expect(parseAdverseRiskLevel("HIGH")).toBe("high");
 		expect(parseAdverseRiskLevel("Alto")).toBe("high");
 		expect(parseAdverseRiskLevel("severe")).toBe("none");
+	});
+
+	it("raises a zero PEP score when the classifier says the summary is a current PEP", async () => {
+		vi.stubGlobal(
+			"fetch",
+			mockGeminiSequenceAndRedirectFetch([
+				geminiResponse(
+					JSON.stringify({
+						probability: 0,
+						pep_type: "none",
+						summary: {
+							es: "Gedo Hamdan Ahmed califica como Persona Políticamente Expuesta.",
+							en: "Gedo Hamdan Ahmed qualifies as a politically exposed person.",
+						},
+						sources: ["https://news.example/a"],
+					}),
+					namedChunks("Gedo Hamdan Ahmed"),
+				),
+				geminiResponse(
+					JSON.stringify({
+						pep_type: "direct_current",
+						probability: 0,
+					}),
+					[],
+				),
+			]),
+		);
+
+		const result = await runGeminiPepResearch(geminiEnv(), {
+			query: "Gedo Hamdan Ahmed",
+		});
+
+		expect(result.pep_type).toBe("direct_current");
+		expect(result.probability).toBe(0.85);
+	});
+
+	it("fails the screening when the risk classifier cannot return JSON", async () => {
+		vi.stubGlobal(
+			"fetch",
+			mockGeminiSequenceAndRedirectFetch([
+				geminiResponse(
+					JSON.stringify({
+						risk_level: "none",
+						findings: {
+							es: "Gedo Hamdan Ahmed sancionado por OFAC.",
+							en: "Gedo Hamdan Ahmed is sanctioned by OFAC.",
+						},
+						sources: ["https://news.example/a"],
+					}),
+					namedChunks("Gedo Hamdan Ahmed"),
+				),
+				geminiResponse("not json", []),
+				geminiResponse("still not json", []),
+			]),
+		);
+
+		await expect(
+			runGeminiAdverseMediaResearch(geminiEnv(), {
+				query: "Gedo Hamdan Ahmed",
+				entityType: "person",
+			}),
+		).rejects.toThrow("Gemini returned non-JSON text");
+	});
+
+	it("reads the JSON part when Gemini also returns a thought part", async () => {
+		vi.stubGlobal(
+			"fetch",
+			mockGeminiSequenceAndRedirectFetch([
+				new Response(
+					JSON.stringify({
+						candidates: [
+							{
+								content: {
+									parts: [
+										{ thought: true, text: "checking sanctions" },
+										{
+											text: JSON.stringify({
+												risk_level: "none",
+												findings: {
+													es: "Gedo Hamdan Ahmed sancionado por OFAC.",
+													en: "sanctioned by OFAC",
+												},
+												sources: [],
+											}),
+										},
+									],
+								},
+								groundingMetadata: {
+									groundingChunks: [
+										{
+											web: {
+												uri: "https://vertex.example/redirect/a#section",
+												title: "Gedo Hamdan Ahmed",
+											},
+										},
+									],
+								},
+							},
+						],
+					}),
+					{ status: 200 },
+				),
+				riskLevelResponse("high"),
+			]),
+		);
+
+		const result = await runGeminiAdverseMediaResearch(geminiEnv(), {
+			query: "Gedo Hamdan Ahmed",
+			entityType: "person",
+		});
+
+		expect(result.risk_level).toBe("high");
+		expect(result.findings.es).toContain("OFAC");
 	});
 	it("matches a person only when source text contains their given name and surnames", () => {
 		const lazzeri =

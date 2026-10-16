@@ -18,6 +18,16 @@ export const RESEARCH_CACHE_TTL_SECONDS_NEGATIVE = 30 * 24 * 60 * 60;
 /** KV TTL when a hit or elevated risk is present (7 days, seconds). */
 export const RESEARCH_CACHE_TTL_SECONDS_POSITIVE = 7 * 24 * 60 * 60;
 
+/**
+ * Bump when PEP scoring changes so previously cached probabilities are not reused.
+ */
+export const PEP_AI_CACHE_PREFIX = "pep_ai:v2";
+
+/**
+ * Bump when adverse-media scoring changes so previously cached risk levels are not reused.
+ */
+export const ADVERSE_MEDIA_CACHE_PREFIX = "adverse_media:v2";
+
 export type PepAiCachePayload = {
 	probability: number;
 	summary: { es: string; en: string };

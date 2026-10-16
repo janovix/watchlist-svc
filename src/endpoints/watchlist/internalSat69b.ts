@@ -224,12 +224,12 @@ export class InternalSat69bBatchEndpoint extends OpenAPIRoute {
 		const errors: string[] = [];
 		let inserted = 0;
 
-		// Use raw D1 for bulk insert performance
-		// D1 has a limit on SQL parameters (~100), so we chunk into sub-batches of 5 records
-		// 5 records × 23 fields = 115 parameters (safely under the limit)
+		// Use raw D1 for bulk insert performance.
+		// D1 allows at most 100 bound parameters per query.
+		// 4 records × 23 fields = 92 parameters (5 × 23 = 115 exceeds the cap).
 		const db = c.env.DB;
 		const now = new Date().toISOString();
-		const SUB_BATCH_SIZE = 5;
+		const SUB_BATCH_SIZE = 4;
 
 		// Split records into sub-batches for efficient bulk inserts
 		for (let i = 0; i < records.length; i += SUB_BATCH_SIZE) {

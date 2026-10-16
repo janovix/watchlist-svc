@@ -215,10 +215,10 @@ export class InternalUnscBatchEndpoint extends OpenAPIRoute {
 		const errors: string[] = [];
 		let inserted = 0;
 
-		// Insert records in sub-batches to avoid SQL parameter limits
-		// D1 has a limit of ~999 parameters per statement
-		// Each record has 15 fields, so batch size of 8 = 120 parameters
-		const SUB_BATCH_SIZE = 8;
+		// Insert records in sub-batches to avoid SQL parameter limits.
+		// D1 allows at most 100 bound parameters per query.
+		// Each record binds 15 values (timestamps are SQL literals), so 6 × 15 = 90.
+		const SUB_BATCH_SIZE = 6;
 
 		for (let i = 0; i < records.length; i += SUB_BATCH_SIZE) {
 			const subBatch = records.slice(i, i + SUB_BATCH_SIZE);

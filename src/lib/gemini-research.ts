@@ -69,6 +69,16 @@ const PEP_TYPE_PROBABILITY_CAPS: Record<PepType, number> = {
 	none: 0,
 };
 
+/** Lower bound of each rubric band. A classified PEP cannot sit at 0. */
+const PEP_TYPE_PROBABILITY_FLOORS: Record<PepType, number> = {
+	direct_current: 0.85,
+	direct_former: 0.65,
+	related_family: 0.4,
+	associate: 0.3,
+	advisory_or_distant: 0.15,
+	none: 0,
+};
+
 export function parsePepType(raw: unknown): PepType {
 	const value = String(raw ?? "").trim();
 	if (PEP_TYPE_VALUES.has(value)) {
@@ -84,6 +94,20 @@ export function clampPepProbability(
 	const cap = PEP_TYPE_PROBABILITY_CAPS[pepType];
 	if (pepType === "none") return 0;
 	return Math.min(cap, Math.max(0, probability));
+}
+
+/** Pull a classifier score into the rubric band for its pep_type. */
+export function scorePepClassification(
+	pepType: PepType,
+	probability: number,
+): number {
+	const value = Number.isFinite(probability) ? probability : 0;
+	const bounded = Math.min(1, Math.max(0, value));
+	const floored =
+		pepType === "none"
+			? 0
+			: Math.max(PEP_TYPE_PROBABILITY_FLOORS[pepType], bounded);
+	return clampPepProbability(pepType, floored);
 }
 
 /** Matches adverse_media_grok JSON contract. */
@@ -472,15 +496,93 @@ async function postGemini(
 	}
 }
 
+const PEP_SCORE_CLASSIFIER = `
+You score whether the person described in the summary is a politically exposed person.
+Do not search. Do not rewrite the summary.
+Use the summary's own conclusion.
+Respond ONLY with JSON: {"pep_type":"...","probability":0}
+pep_type is one of: direct_current, direct_former, related_family, associate, advisory_or_distant, none.
+Probability bands:
+- direct_current 0.85-1
+- direct_former 0.65-0.85
+- related_family 0.40-0.65
+- associate 0.30-0.55
+- advisory_or_distant 0.15-0.35
+- none 0
+If the summary says the person is a PEP, pep_type must not be "none" and probability must not be 0.
+`.trim();
+
+const ADVERSE_RISK_SCHEMA: Record<string, unknown> = {
+	type: "object",
+	properties: {
+		risk_level: {
+			type: "string",
+			enum: ["none", "low", "medium", "high"],
+		},
+	},
+	required: ["risk_level"],
+};
+
+const PEP_SCORE_SCHEMA: Record<string, unknown> = {
+	type: "object",
+	properties: {
+		pep_type: {
+			type: "string",
+			enum: [
+				"direct_current",
+				"direct_former",
+				"related_family",
+				"associate",
+				"advisory_or_distant",
+				"none",
+			],
+		},
+		probability: { type: "number", minimum: 0, maximum: 1 },
+	},
+	required: ["pep_type", "probability"],
+};
+
+function candidateText(candidate: Record<string, unknown>): string {
+	const content = candidate.content as Record<string, unknown> | undefined;
+	const parts = content?.parts;
+	if (!Array.isArray(parts)) {
+		throw new Error("Gemini candidate missing text part");
+	}
+	const texts: string[] = [];
+	for (const part of parts) {
+		if (!part || typeof part !== "object") continue;
+		const record = part as Record<string, unknown>;
+		if (record.thought === true) continue;
+		if (typeof record.text === "string" && record.text.trim() !== "") {
+			texts.push(record.text);
+		}
+	}
+	if (texts.length === 0) {
+		throw new Error("Gemini candidate missing text part");
+	}
+	return texts.join("\n");
+}
+
 async function generateStructured(
 	env: Bindings,
 	systemInstruction: string,
 	userText: string,
-	options: { search: boolean } = { search: true },
+	options: {
+		search?: boolean;
+		responseJsonSchema?: Record<string, unknown>;
+	} = {},
 ): Promise<{
 	parsed: Record<string, unknown>;
 	groundingChunks: GroundingChunkSource[];
 }> {
+	const generationConfig: Record<string, unknown> = {
+		temperature: 0.2,
+		thinkingConfig: { thinkingBudget: 0 },
+	};
+	if (options.responseJsonSchema) {
+		generationConfig.responseMimeType = "application/json";
+		generationConfig.responseJsonSchema = options.responseJsonSchema;
+	}
 	const body: Record<string, unknown> = {
 		systemInstruction: {
 			parts: [{ text: systemInstruction }],
@@ -491,13 +593,10 @@ async function generateStructured(
 				parts: [{ text: userText }],
 			},
 		],
-		generationConfig: {
-			temperature: 0.2,
-			thinkingConfig: { thinkingBudget: 0 },
-		},
+		generationConfig,
 		safetySettings: SAFETY_SETTINGS,
 	};
-	if (options.search) {
+	if (options.search !== false) {
 		body.tools = [{ google_search: {} }];
 	}
 
@@ -518,17 +617,23 @@ async function generateStructured(
 		throw new Error("Gemini returned no candidates");
 	}
 
-	const content = first.content as Record<string, unknown> | undefined;
-	const parts = content?.parts as unknown[] | undefined;
-	const textPart = parts?.[0] as Record<string, unknown> | undefined;
-	const text = textPart?.text;
-	if (typeof text !== "string") {
-		throw new Error("Gemini candidate missing text part");
-	}
+	const text = candidateText(first);
 
 	const groundingChunks = extractGroundingChunks(first);
 	const parsed = parseJsonObject(text);
 	return { parsed, groundingChunks };
+}
+
+async function withOneRetry<T>(
+	label: string,
+	fn: () => Promise<T>,
+): Promise<T> {
+	try {
+		return await fn();
+	} catch (error) {
+		console.warn(`[GeminiResearch] ${label} failed; retrying once`, error);
+		return await fn();
+	}
 }
 
 /** Scores findings only. Search and identity stay on the research call. */
@@ -537,13 +642,36 @@ async function classifyAdverseRisk(
 	es: string,
 	en: string,
 ): Promise<AdverseMediaGeminiResult["risk_level"]> {
-	const { parsed } = await generateStructured(
-		env,
-		ADVERSE_RISK_CLASSIFIER,
-		`Spanish findings:\n${es}\n\nEnglish findings:\n${en}`,
-		{ search: false },
+	const { parsed } = await withOneRetry("Adverse media classifier", () =>
+		generateStructured(
+			env,
+			ADVERSE_RISK_CLASSIFIER,
+			`Spanish findings:\n${es}\n\nEnglish findings:\n${en}`,
+			{ search: false, responseJsonSchema: ADVERSE_RISK_SCHEMA },
+		),
 	);
 	return parseAdverseRiskLevel(parsed.risk_level ?? parsed.riskLevel);
+}
+
+async function classifyPep(
+	env: Bindings,
+	es: string,
+	en: string,
+): Promise<{ pep_type: PepType; probability: number }> {
+	const { parsed } = await withOneRetry("PEP classifier", () =>
+		generateStructured(
+			env,
+			PEP_SCORE_CLASSIFIER,
+			`Spanish summary:\n${es}\n\nEnglish summary:\n${en}`,
+			{ search: false, responseJsonSchema: PEP_SCORE_SCHEMA },
+		),
+	);
+	const pep_type = parsePepType(parsed.pep_type);
+	const probability = scorePepClassification(
+		pep_type,
+		Number(parsed.probability),
+	);
+	return { pep_type, probability };
 }
 
 /**
@@ -615,8 +743,7 @@ export async function runGeminiPepResearch(
 			"[GeminiResearch] PEP: no grounding chunks returned; forcing probability to 0",
 		);
 		probability = 0;
-	}
-	if (probability > 0) {
+	} else if (groundingChunks.length > 0) {
 		const evidence = await loadSourceEvidence(
 			params.query,
 			groundingChunks,
@@ -631,6 +758,18 @@ export async function runGeminiPepResearch(
 			es = "";
 			en = "";
 			sources = [];
+		} else if (es.trim() !== "" || en.trim() !== "") {
+			const classified = await classifyPep(env, es, en);
+			if (
+				classified.probability !== probability ||
+				classified.pep_type !== confirmedType
+			) {
+				console.warn(
+					`[GeminiResearch] PEP: classifier set ${classified.pep_type} ${classified.probability} (research returned ${confirmedType} ${probability})`,
+				);
+			}
+			confirmedType = classified.pep_type;
+			probability = classified.probability;
 		}
 	}
 
@@ -686,30 +825,15 @@ export async function runGeminiAdverseMediaResearch(
 	const findings = parsed.findings as Record<string, unknown> | undefined;
 	let es = typeof findings?.es === "string" ? findings.es : "";
 	let en = typeof findings?.en === "string" ? findings.en : "";
-	if (es.trim() !== "" || en.trim() !== "") {
-		try {
-			const classified = await classifyAdverseRisk(env, es, en);
-			if (classified !== risk_level) {
-				console.warn(
-					`[GeminiResearch] Adverse media: classifier set risk_level ${classified} (research returned ${String(rlRaw)})`,
-				);
-			}
-			risk_level = classified;
-		} catch (error) {
-			console.warn(
-				"[GeminiResearch] Adverse media: risk classifier failed; keeping the research risk_level",
-				error,
-			);
-		}
-	}
 	let sources = await resolveGroundingSources(groundingChunks);
-	if (groundingChunks.length === 0 && risk_level !== "none") {
-		console.warn(
-			"[GeminiResearch] Adverse media: no grounding chunks returned; forcing risk_level to none",
-		);
-		risk_level = "none";
-	}
-	if (risk_level !== "none") {
+	if (groundingChunks.length === 0) {
+		if (risk_level !== "none") {
+			console.warn(
+				"[GeminiResearch] Adverse media: no grounding chunks returned; forcing risk_level to none",
+			);
+			risk_level = "none";
+		}
+	} else if (es.trim() !== "" || en.trim() !== "") {
 		const evidence = await loadSourceEvidence(
 			params.query,
 			groundingChunks,
@@ -723,6 +847,14 @@ export async function runGeminiAdverseMediaResearch(
 			es = "";
 			en = "";
 			sources = [];
+		} else {
+			const classified = await classifyAdverseRisk(env, es, en);
+			if (classified !== risk_level) {
+				console.warn(
+					`[GeminiResearch] Adverse media: classifier set risk_level ${classified} (research returned ${String(rlRaw)})`,
+				);
+			}
+			risk_level = classified;
 		}
 	}
 

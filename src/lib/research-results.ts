@@ -8,9 +8,11 @@ import {
 	runWatchlistContainerSuccessPipeline,
 } from "./container-callback-pipeline";
 import {
+	ADVERSE_MEDIA_CACHE_PREFIX,
 	generateCacheKey,
 	getAdverseMediaResearchCacheTtlSeconds,
 	getPepAiResearchCacheTtlSeconds,
+	PEP_AI_CACHE_PREFIX,
 } from "./search-query-utils";
 import {
 	isGlobalCacheEnabled,
@@ -43,7 +45,7 @@ export async function completePepAiResearch(
 		.filter(Boolean)
 		.join(":");
 	const cacheKey = generateCacheKey(
-		"pep_ai",
+		PEP_AI_CACHE_PREFIX,
 		params.query,
 		pepSuffix.length > 0 ? pepSuffix : undefined,
 	);
@@ -148,7 +150,7 @@ export async function completeAdverseMediaResearch(
 	);
 	const cacheOn = await isGlobalCacheEnabled(env, { environment: flagEnv });
 	const cacheKey = generateCacheKey(
-		"adverse_media",
+		ADVERSE_MEDIA_CACHE_PREFIX,
 		params.query,
 		params.entityType,
 	);
