@@ -1,3 +1,10 @@
+# [1.11.0-rc.6](https://github.com/janovix/watchlist-svc/compare/v1.11.0-rc.5...v1.11.0-rc.6) (2026-10-16)
+
+
+### Features
+
+* run Grok screening through the xAI API ([19980af](https://github.com/janovix/watchlist-svc/commit/19980af19de4135d94f0e2cae7f0e11bc68d175e))
+
 # [1.11.0-rc.5](https://github.com/janovix/watchlist-svc/compare/v1.11.0-rc.4...v1.11.0-rc.5) (2026-10-16)
 
 
